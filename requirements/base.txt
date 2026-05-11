@@ -1,0 +1,27 @@
+django>=5.2,<5.3
+djangorestframework
+django-cors-headers
+django-filter
+djangorestframework-simplejwt
+django-cacheops
+django-fernet-fields
+django-safedelete
+django-treebeard
+drf-spectacular
+python-json-logger
+psutil
+zeep
+spyne
+lxml
+gmssl
+ntplib
+django-channels
+django-redis
+channels-redis
+apscheduler
+psycopg[binary]
+gunicorn
+uvicorn[standard]
+python-decouple
+# django-environ 需要安装
+django-environ
