@@ -33,3 +33,13 @@ Thumbs.db
 
 # Docker
 docker-compose.yml
+
+# Claude
+.claude/
+
+# Frontend build
+adminx-ui/node_modules/
+adminx-ui/dist/
+adminx-ui/dist-ssr/
+adminx-ui/.eslintcache
+adminx-ui/*.timestamp-*-*.mjs

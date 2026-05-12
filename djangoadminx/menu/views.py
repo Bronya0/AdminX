@@ -14,6 +14,13 @@ class MenuViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     search_fields = ["name", "code"]
     ordering_fields = ["sort_order", "name"]
+    pagination_class = None  # 菜单是树形数据，不分页
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            from .serializers import MenuFlatSerializer
+            return MenuFlatSerializer
+        return MenuSerializer
 
     def perform_create(self, serializer):
         parent_id = self.request.data.get("parent")

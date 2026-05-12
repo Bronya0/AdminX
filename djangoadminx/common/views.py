@@ -15,13 +15,14 @@ def health_check(request):
     """健康检查"""
     import psutil
 
-    return JsonResponse({
+    data = {
         "status": "ok",
         "cpu_percent": psutil.cpu_percent(interval=1),
         "memory": psutil.virtual_memory()._asdict(),
         "disk": psutil.disk_usage("/")._asdict(),
         "network": psutil.net_io_counters()._asdict(),
-    })
+    }
+    return JsonResponse({"code": 200, "msg": "success", "data": data})
 
 
 @require_GET

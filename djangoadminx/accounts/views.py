@@ -159,23 +159,26 @@ class UserViewSet(viewsets.ModelViewSet):
         """当前用户信息 + 权限 + 菜单"""
         user = request.user
         perms = user.get_all_permissions()
-        menus = []
         if user.is_superuser:
             from djangoadminx.menu.models import Menu
-            menus = Menu.objects.filter(is_active=True).order_by("sort_order").values()
+            menus_qs = Menu.objects.filter(is_active=True).order_by("sort_order")
         else:
             from djangoadminx.menu.models import Menu
             role_ids = user.roles.values_list("id", flat=True)
-            menus = Menu.objects.filter(
+            menus_qs = Menu.objects.filter(
                 is_active=True, roles__id__in=role_ids
-            ).distinct().order_by("sort_order").values()
+            ).distinct().order_by("sort_order")
+
+        from djangoadminx.menu.serializers import MenuFlatSerializer
+        menu_ser = MenuFlatSerializer(menus_qs, many=True)
+
         return Response({
             "code": 200,
             "msg": "success",
             "data": {
                 "user": UserSerializer(user).data,
                 "permissions": list(perms),
-                "menus": list(menus),
+                "menus": menu_ser.data,
             },
         })
 
@@ -194,6 +197,7 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PermissionSerializer
     search_fields = ["name", "codename"]
     ordering_fields = ["content_type__name"]
+    pagination_class = None  # 权限是有限数据集，不分页
 
 
 class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
