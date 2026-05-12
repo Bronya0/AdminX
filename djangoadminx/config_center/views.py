@@ -34,3 +34,9 @@ class ConfigViewSet(mixins.CreateModelMixin,
 
         data = Config.get_by_group(group)
         return Response({"code": 200, "msg": "success", "data": data})
+
+    @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
+    def groups(self, request):
+        """获取所有分组列表"""
+        groups = Config.objects.values_list("group", flat=True).distinct().order_by("group")
+        return Response({"code": 200, "msg": "success", "data": list(groups)})

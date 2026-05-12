@@ -26,4 +26,8 @@ export const configApi = {
   // 按分组获取配置
   getConfigsByGroup: (group: string): Promise<Record<string, any>> =>
     request.get('/config/by_group/', { params: { group } }),
+
+  // 获取所有分组列表
+  getGroups: (): Promise<string[]> =>
+    request.get('/config/groups/'),
 }

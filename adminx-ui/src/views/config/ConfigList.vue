@@ -18,9 +18,7 @@
             allow-clear
             style="width: 150px"
           >
-            <a-select-option value="default">默认</a-select-option>
-            <a-select-option value="system">系统</a-select-option>
-            <a-select-option value="theme">主题</a-select-option>
+            <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item>
@@ -207,6 +205,18 @@ const searchForm = reactive({
   group: '',
 })
 
+// 分组选项（动态加载）
+const groupOptions = ref<string[]>([])
+
+const loadGroups = async () => {
+  try {
+    const res = await configApi.getGroups()
+    groupOptions.value = res
+  } catch {
+    console.warn('加载分组列表失败')
+  }
+}
+
 // 弹窗状态
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -374,6 +384,7 @@ const handleModalCancel = () => {
 
 onMounted(() => {
   loadData()
+  loadGroups()
 })
 </script>
 

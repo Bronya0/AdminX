@@ -67,39 +67,25 @@ const router = createRouter({
               component: MenuList,
               meta: { title: '菜单管理', permission: 'menu:menu:list' },
             },
+            {
+              path: 'resources',
+              name: 'system-resources',
+              component: SystemMonitor,
+              meta: { title: '系统资源', permission: 'monitor:view' },
+            },
+            {
+              path: 'components',
+              name: 'system-components',
+              component: ComponentStatus,
+              meta: { title: '组件管理', permission: 'monitor:view' },
+            },
           ],
         },
         {
           path: 'config',
           name: 'config',
-          meta: { title: '配置中心', icon: 'AppstoreOutlined' },
-          children: [
-            {
-              path: 'list',
-              name: 'config-list',
-              component: ConfigList,
-              meta: { title: '配置管理', permission: 'config_center:config:list' },
-            },
-          ],
-        },
-        {
-          path: 'monitor',
-          name: 'monitor',
-          meta: { title: '系统监控', icon: 'MonitorOutlined' },
-          children: [
-            {
-              path: 'resources',
-              name: 'monitor-resources',
-              component: SystemMonitor,
-              meta: { title: '资源监控', permission: 'monitor:view' },
-            },
-            {
-              path: 'components',
-              name: 'monitor-components',
-              component: ComponentStatus,
-              meta: { title: '组件管理', permission: 'monitor:view' },
-            },
-          ],
+          component: ConfigList,
+          meta: { title: '配置中心', icon: 'AppstoreOutlined', permission: 'config_center:config:list' },
         },
         {
           path: 'cluster',

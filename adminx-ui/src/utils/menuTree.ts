@@ -117,6 +117,25 @@ export function menusToTreeData(
   }))
 }
 
+// 默认图标映射（数据库存的是短名如 "User"、"Settings"，ant-design 用全名 "UserOutlined"）
+const defaultIcons: Record<string, string> = {
+  '系统管理': 'SettingOutlined',
+  '角色管理': 'SafetyOutlined',
+  '菜单管理': 'MenuOutlined',
+  '用户管理': 'TeamOutlined',
+  '配置管理': 'AppstoreOutlined',
+  '配置中心': 'AppstoreOutlined',
+  '集群管理': 'ClusterOutlined',
+  '节点管理': 'HddOutlined',
+  '系统资源': 'MonitorOutlined',
+  '系统监控': 'MonitorOutlined',
+  '组件管理': 'AppstoreOutlined',
+  '定时任务': 'ClockCircleOutlined',
+  '接口管理': 'CloudOutlined',
+  'WebService 配置': 'CloudOutlined',
+  '服务配置': 'CloudOutlined',
+}
+
 /**
  * 将 Menu[] 树转换为 SidebarItem[]（用于 AdminLayout menu 渲染），
  * 同时过滤掉无权限、隐藏的菜单。
@@ -128,18 +147,25 @@ export function menusToSidebarItems(
   const result: SidebarItem[] = []
 
   for (const menu of menus) {
-    if (!menu.is_visible || !menu.is_active) continue
-    if (menu.permission_code && !hasPermission(menu.permission_code)) continue
+    if (!menu.is_visible || !menu.is_active) {
+      continue
+    }
+    if (menu.permission_code && !hasPermission(menu.permission_code)) {
+      continue
+    }
 
     let children: SidebarItem[] | undefined
     if (menu.children && menu.children.length > 0) {
       children = menusToSidebarItems(menu.children, hasPermission)
     }
 
+    // 优先使用默认图标映射，否则用数据库图标名，最后兜底
+    const iconName = defaultIcons[menu.name] || menu.icon || 'FileOutlined'
+
     const item: SidebarItem = {
       key: menu.path,
       title: menu.name,
-      icon: menu.icon || undefined,
+      icon: iconName,
     }
 
     if (children && children.length > 0) {
@@ -153,9 +179,47 @@ export function menusToSidebarItems(
 }
 
 /**
- * 递归过滤树节点，保留标题包含搜索文本的节点。
- * 如果父节点的任一子节点匹配，父节点也会保留。
+ * 将 Vue Router 路由配置递归转换为 SidebarItem[]，
+ * 同时根据权限过滤。这样侧边栏和路由结构保持完全一致。
  */
+export function routesToSidebar(
+  routes: any[],
+  hasPermission: (code: string) => boolean,
+  parentPath = '',
+): SidebarItem[] {
+  const result: SidebarItem[] = []
+
+  for (const route of routes) {
+    const meta = route.meta || {}
+
+    // 跳过没有 title 的路由（布局容器、重定向等）
+    if (!meta.title) continue
+
+    // 权限检查
+    const perm = meta.permission as string | undefined
+    if (perm && !hasPermission(perm)) continue
+
+    // 构建完整路径
+    const fullPath = parentPath ? `${parentPath}/${route.path}` : `/${route.path}`
+
+    const item: SidebarItem = {
+      key: fullPath.replace(/\/+/g, '/'),
+      title: meta.title,
+      icon: defaultIcons[meta.title] || meta.icon || 'FileOutlined',
+    }
+
+    if (route.children && route.children.length > 0) {
+      const children = routesToSidebar(route.children, hasPermission, item.key)
+      if (children.length > 0) {
+        item.children = children
+      }
+    }
+
+    result.push(item)
+  }
+
+  return result
+}
 export function filterTreeBySearch(
   tree: any[],
   searchText: string,

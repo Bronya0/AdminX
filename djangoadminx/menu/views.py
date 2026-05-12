@@ -30,9 +30,17 @@ class MenuViewSet(viewsets.ModelViewSet):
         else:
             serializer.save(sort_order=Menu.get_root_nodes().count() + 1)
 
-    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def tree(self, request):
-        """菜单树 — 用于动态路由加载"""
+        """菜单树 — 用于菜单管理页面（管理员能看到所有菜单）"""
+        # 管理员能看到所有菜单，包括隐藏和禁用的
+        menus = Menu.get_root_nodes()
+        ser = MenuTreeSerializer(menus, many=True)
+        return Response({"code": 200, "msg": "success", "data": ser.data})
+
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def user_tree(self, request):
+        """用户菜单树 — 用于前端动态路由加载（根据权限过滤）"""
         user = request.user
         if user.is_superuser:
             menus = Menu.get_root_nodes().filter(is_active=True, is_visible=True)

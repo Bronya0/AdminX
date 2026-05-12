@@ -179,7 +179,7 @@ import {
   BulbFilled,
   DownOutlined,
 } from '@ant-design/icons-vue'
-import { flatMenusToTreeByDepth, menusToSidebarItems } from '@/utils/menuTree'
+import { flatMenusToTreeByDepth, routesToSidebar } from '@/utils/menuTree'
 import BreadcrumbNav from '@/components/BreadcrumbNav.vue'
 import SideBar from './SideBar.vue'
 import TopNav from './TopNav.vue'
@@ -208,11 +208,26 @@ const currentColor = ref(userStore.theme.primaryColor || '#1890ff')
 
 const username = computed(() => userStore.username || '未登录')
 
-// 构建动态菜单树
+// 构建动态菜单树（从路由配置构建，和路由结构完全一致）
 const sidebarMenus = computed<SidebarItem[]>(() => {
-  if (!userStore.menus || userStore.menus.length === 0) return []
-  const tree = flatMenusToTreeByDepth(userStore.menus)
-  return menusToSidebarItems(tree, (code: string) => userStore.hasPermission(code))
+  // 从 router 配置中提取 AdminLayout 的子路由
+  const childRoutes = router.options.routes.find(r => r.path === '/')?.children || []
+  const items = routesToSidebar(childRoutes, (code: string) => userStore.hasPermission(code))
+
+  // 确保仪表盘在第一位
+  const dashboardIdx = items.findIndex(m => m.key === '/dashboard')
+  if (dashboardIdx > 0) {
+    const [dash] = items.splice(dashboardIdx, 1)
+    items.unshift(dash)
+  } else if (dashboardIdx === -1) {
+    items.unshift({
+      key: '/dashboard',
+      title: '仪表盘',
+      icon: 'DashboardOutlined',
+    })
+  }
+
+  return items
 })
 
 // MIX 布局的一级菜单
