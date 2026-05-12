@@ -231,6 +231,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # 密码策略（可选开关）
 PASSWORD_POLICY_ENABLED = env.bool("PASSWORD_POLICY_ENABLED", default=False)
 
+# 验证码（可选开关）
+CAPTCHA_ENABLED = env.bool("CAPTCHA_ENABLED", default=False)
+
 # CAS 单点登录（可选）
 # CAS_SERVER_URL = "https://cas.example.com/cas/"
 CAS_SERVER_URL = env("CAS_SERVER_URL", default=None)

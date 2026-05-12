@@ -14,6 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import LoginLock, Role, User, UserLoginLog
+from ..captcha.views import verify_captcha
 from .serializers import (
     LoginLogSerializer,
     LoginSerializer,
@@ -79,6 +80,16 @@ class LoginView(TokenObtainPairView):
 
         username = ser.validated_data["username"]
         password = ser.validated_data["password"]
+
+        # 验证码校验（可选）
+        if getattr(settings, "CAPTCHA_ENABLED", False):
+            captcha_id = ser.validated_data.get("captcha_id", "")
+            captcha_text = ser.validated_data.get("captcha_text", "")
+            if not verify_captcha(captcha_id, captcha_text):
+                _record_login_log(None, request, False, "验证码错误")
+                return Response({
+                    "code": 400, "msg": "验证码错误或已过期",
+                }, status=200)
 
         # 检查锁定
         remaining = _check_login_lock(username)

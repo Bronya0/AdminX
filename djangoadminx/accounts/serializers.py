@@ -66,7 +66,8 @@ class PermissionSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
-    captcha = serializers.CharField(required=False)
+    captcha_id = serializers.CharField(required=False, allow_blank=True, default="")
+    captcha_text = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class LoginLogSerializer(serializers.ModelSerializer):

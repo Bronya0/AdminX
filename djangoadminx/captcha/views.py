@@ -8,6 +8,7 @@ from django.core.cache import cache
 from django.http import HttpResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 
 logger = logging.getLogger("djangoadminx.captcha")
 
@@ -61,3 +62,17 @@ def verify_captcha(captcha_id, captcha_text):
         cache.delete(key)
         return True
     return False
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def captcha_verify(request):
+    """验证验证码 — 前端在登录前先调此接口校验"""
+    captcha_id = request.data.get("captcha_id", "")
+    captcha_text = request.data.get("captcha_text", "")
+    ok = verify_captcha(captcha_id, captcha_text)
+    return Response({
+        "code": 200 if ok else 400,
+        "msg": "验证码正确" if ok else "验证码错误或已过期",
+        "data": {"verified": ok},
+    })
