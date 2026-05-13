@@ -2,8 +2,8 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-title">
-        <h1>AdminX</h1>
-        <p>企业级 Django Admin 框架</p>
+        <h1>{{ siteName }}</h1>
+        <p>{{ siteDesc }}</p>
       </div>
 
       <a-form
@@ -77,6 +77,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { commonApi } from '@/api/common'
 import { captchaApi } from '@/api/auth'
 
 const router = useRouter()
@@ -89,6 +90,8 @@ const captchaEnabled = ref(false)
 const captchaSvg = ref('')
 const captchaId = ref('')
 const formRef = ref()
+const siteName = ref('DjangoAdminX')
+const siteDesc = ref('企业级 Django Admin 框架')
 
 // 表单状态
 const formState = reactive({
@@ -148,7 +151,15 @@ const forgotPassword = () => {
   message.info('请联系管理员重置密码')
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 获取站点名称
+  try {
+    const res = await commonApi.getSiteInfo()
+    siteName.value = res.site_name
+    siteDesc.value = res.site_desc
+  } catch (e) {
+    // 使用默认值
+  }
   // 检查是否需要验证码（从配置读取）
   // captchaEnabled.value = true
   // if (captchaEnabled.value) {

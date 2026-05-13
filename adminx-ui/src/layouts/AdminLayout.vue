@@ -342,6 +342,20 @@ onMounted(() => {
   currentDark.value = isDark.value
   currentColor.value = userStore.theme.primaryColor || '#1890ff'
 })
+
+// 颜色选择器实时生效
+watch(currentColor, (val) => {
+  if (val) userStore.setPrimaryColor(val)
+})
+
+// 打开设置弹窗时同步当前值
+watch(showLayoutSettings, (val) => {
+  if (val) {
+    currentLayout.value = layout.value
+    currentDark.value = isDark.value
+    currentColor.value = userStore.theme.primaryColor || '#1890ff'
+  }
+})
 </script>
 
 <style scoped>

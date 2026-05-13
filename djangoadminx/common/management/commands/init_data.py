@@ -156,7 +156,9 @@ DEFAULT_CONFIGS = [
     {"key": "LOGIN_MAX_ATTEMPTS", "value": "5", "value_type": "int", "desc": "登录最大失败次数", "group": "security"},
     {"key": "LOGIN_LOCK_DURATION", "value": "15", "value_type": "int", "desc": "登录锁定时长（分钟）", "group": "security"},
     {"key": "SITE_NAME", "value": "DjangoAdminX", "value_type": "string", "desc": "站点名称", "group": "site"},
+    {"key": "SITE_DESC", "value": "企业级 Django Admin 框架", "value_type": "string", "desc": "站点描述", "group": "site"},
     {"key": "SITE_LOGO", "value": "", "value_type": "string", "desc": "站点 Logo URL", "group": "site"},
+    {"key": "SITE_THEME_COLOR", "value": "#1890ff", "value_type": "string", "desc": "站点主题色", "group": "site"},
 ]
 
 

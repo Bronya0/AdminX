@@ -1,7 +1,19 @@
 import { request } from '@/utils/request'
 
+// Site info
+export interface SiteInfo {
+  site_name: string
+  site_desc: string
+  site_logo: string
+  site_theme_color: string
+}
+
 // 组件监控 API
 export const commonApi = {
+  // 站点信息
+  getSiteInfo: (): Promise<SiteInfo> =>
+    request.get('/common/site-info/'),
+
   // 健康检查
   health: (): Promise<{
     status: string

@@ -2,7 +2,7 @@
   <div class="top-nav" :class="{ 'mix-mode': isMix }">
     <div class="top-nav-logo" v-if="showLogo">
       <DashboardOutlined style="font-size: 28px; color: #1890ff" />
-      <span v-if="!isMix">AdminX</span>
+      <span v-if="!isMix">{{ userStore.siteName }}</span>
     </div>
     <a-menu
       :selectedKeys="selectedKeys"
@@ -38,9 +38,11 @@
 <script setup lang="ts">
 import { DashboardOutlined } from '@ant-design/icons-vue'
 import { resolveIcon } from '@/utils/iconResolver'
+import { useUserStore } from '@/stores/user'
 import type { SidebarItem } from '@/types'
 
 const getIcon = resolveIcon
+const userStore = useUserStore()
 
 const props = defineProps<{
   menus: SidebarItem[]

@@ -2,7 +2,7 @@
   <div class="admin-sider" :class="{ collapsed }">
     <div class="logo" v-if="showLogo">
       <DashboardOutlined style="font-size: 32px; color: #1890ff" v-if="!collapsed" />
-      <span v-if="!collapsed" style="margin-left: 12px">AdminX</span>
+      <span v-if="!collapsed" style="margin-left: 12px">{{ userStore.siteName }}</span>
       <DashboardOutlined style="font-size: 24px; color: #1890ff" v-else />
     </div>
     <a-menu
@@ -41,9 +41,11 @@
 <script setup lang="ts">
 import { DashboardOutlined } from '@ant-design/icons-vue'
 import { resolveIcon } from '@/utils/iconResolver'
+import { useUserStore } from '@/stores/user'
 import type { SidebarItem } from '@/types'
 
 const getIcon = resolveIcon
+const userStore = useUserStore()
 
 const props = defineProps<{
   menus: SidebarItem[]

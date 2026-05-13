@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
+import { commonApi } from '@/api/common'
 import type { User, UserInfo, ThemeConfig, Menu } from '@/types'
 
 // 默认主题配置
@@ -25,6 +26,9 @@ export const useUserStore = defineStore(
     const permissions = ref<string[]>([])
     const menus = ref<Menu[]>([])
     const theme = ref<ThemeConfig>({ ...defaultTheme })
+    const siteName = ref<string>('DjangoAdminX')
+    const siteDesc = ref<string>('企业级 Django Admin 框架')
+    const siteLogo = ref<string>('')
 
     // Getters
     const isLoggedIn = computed(() => !!token.value)
@@ -70,6 +74,22 @@ export const useUserStore = defineStore(
       return res
     }
 
+    const fetchSiteInfo = async () => {
+      try {
+        const res = await commonApi.getSiteInfo()
+        siteName.value = res.site_name
+        siteDesc.value = res.site_desc
+        siteLogo.value = res.site_logo
+        // 从配置中心同步主题色
+        if (res.site_theme_color) {
+          theme.value.primaryColor = res.site_theme_color
+          document.documentElement.style.setProperty('--primary-color', res.site_theme_color)
+        }
+      } catch (e) {
+        // 使用默认值
+      }
+    }
+
     const logout = async () => {
       if (refreshToken.value) {
         try {
@@ -95,8 +115,7 @@ export const useUserStore = defineStore(
 
     const setPrimaryColor = (color: string) => {
       theme.value.primaryColor = color
-      // 更新 CSS 变量
-      document.documentElement.style.setProperty('--ant-primary-color', color)
+      document.documentElement.style.setProperty('--primary-color', color)
     }
 
     const toggleDarkMode = () => {
@@ -115,6 +134,9 @@ export const useUserStore = defineStore(
       permissions,
       menus,
       theme,
+      siteName,
+      siteDesc,
+      siteLogo,
       isLoggedIn,
       username,
       avatar,
@@ -123,6 +145,7 @@ export const useUserStore = defineStore(
       setUserInfo,
       login,
       fetchUserInfo,
+      fetchSiteInfo,
       logout,
       updateTheme,
       toggleCollapsed,

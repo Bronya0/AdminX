@@ -11,6 +11,23 @@ from rest_framework.permissions import AllowAny
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def site_info(request):
+    """站点信息（公开）— 供前端登录页/顶栏/侧栏使用"""
+    from djangoadminx.config_center.models import Config
+    return JsonResponse({
+        "code": 200,
+        "msg": "success",
+        "data": {
+            "site_name": Config.get_value("SITE_NAME", default="DjangoAdminX"),
+            "site_desc": Config.get_value("SITE_DESC", default="企业级 Django Admin 框架"),
+            "site_logo": Config.get_value("SITE_LOGO", default=""),
+            "site_theme_color": Config.get_value("SITE_THEME_COLOR", default="#1890ff"),
+        },
+    })
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def health_check(request):
     """健康检查"""
     import psutil

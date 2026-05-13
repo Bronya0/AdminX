@@ -149,6 +149,7 @@ router.beforeEach(async (to, from, next) => {
   if (!userStore.user || !userStore.menus || userStore.menus.length === 0) {
     try {
       await userStore.fetchUserInfo()
+      userStore.fetchSiteInfo()
     } catch (e) {
       message.error('获取用户信息失败')
       userStore.logout()

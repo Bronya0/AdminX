@@ -1,17 +1,27 @@
 <template>
-  <router-view />
+  <a-config-provider :theme="antTheme">
+    <router-view />
+  </a-config-provider>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { theme } from 'ant-design-vue'
 
 const userStore = useUserStore()
 
+const antTheme = computed(() => ({
+  algorithm: userStore.theme.isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+  token: {
+    colorPrimary: userStore.theme.primaryColor,
+  },
+}))
+
 onMounted(() => {
-  // 初始化主题颜色
-  if (userStore.theme.primaryColor) {
-    document.documentElement.style.setProperty('--ant-primary-color', userStore.theme.primaryColor)
+  // 初始化暗色模式
+  if (userStore.theme.isDark) {
+    document.documentElement.classList.add('dark')
   }
 })
 </script>
