@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
+from djangoadminx.audit.mixins import AuditLogMixin
 from .models import JobLog, ScheduleJob, WebService, WebServiceLog
 from .serializers import (
     JobLogSerializer,
@@ -18,7 +19,7 @@ from .serializers import (
 logger = logging.getLogger("djangoadminx.webservice")
 
 
-class WebServiceViewSet(viewsets.ModelViewSet):
+class WebServiceViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """WebService 配置 CRUD"""
     queryset = WebService.objects.all()
     serializer_class = WebServiceSerializer
@@ -61,7 +62,7 @@ class WebServiceViewSet(viewsets.ModelViewSet):
             return Response({"code": 500, "msg": str(e)}, status=200)
 
 
-class ScheduleJobViewSet(viewsets.ModelViewSet):
+class ScheduleJobViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """定时任务 CRUD"""
     queryset = ScheduleJob.objects.all()
     serializer_class = ScheduleJobSerializer
@@ -71,12 +72,25 @@ class ScheduleJobViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def run_once(self, request, pk=None):
-        """立即执行一次"""
+        """立即执行一次（同时写入执行日志）"""
+        from django.utils import timezone
+        from .models import JobLog
+
         job = self.get_object()
+        started_at = timezone.now()
+        log = JobLog.objects.create(job=job, status="running", started_at=started_at)
         try:
             result = job.execute()
-            return Response({"code": 200, "msg": "success", "data": {"result": str(result)}})
+            log.status = "success"
+            log.result = str(result)[:500] if result is not None else "ok"
+            log.finished_at = timezone.now()
+            log.save()
+            return Response({"code": 200, "msg": "success", "data": {"result": log.result}})
         except Exception as e:
+            log.status = "failed"
+            log.result = str(e)[:500]
+            log.finished_at = timezone.now()
+            log.save()
             return Response({"code": 500, "msg": str(e)}, status=200)
 
     @action(detail=False, methods=["get"])
@@ -84,18 +98,27 @@ class ScheduleJobViewSet(viewsets.ModelViewSet):
         """调度器状态"""
         try:
             from djangoadminx.common.scheduler import scheduler_manager
-            jobs = scheduler_manager.scheduler.get_jobs()
+            sched = scheduler_manager.scheduler
+            running = sched.running if hasattr(sched, 'running') else False
+            try:
+                jobs = sched.get_jobs()
+                job_list = []
+                for j in jobs:
+                    next_run = str(j.next_run_time) if j.next_run_time else None
+                    job_list.append({"id": j.id, "name": j.name, "next_run": next_run})
+            except Exception:
+                job_list = []
             return Response({
                 "code": 200,
                 "msg": "success",
                 "data": {
-                    "running": scheduler_manager.scheduler.running,
-                    "job_count": len(jobs),
-                    "jobs": [{"id": j.id, "name": j.name, "next_run": str(j.next_run_time)} for j in jobs],
+                    "running": running,
+                    "job_count": len(job_list),
+                    "jobs": job_list,
                 },
             })
         except Exception as e:
-            return Response({"code": 500, "msg": str(e)}, status=200)
+            return Response({"code": 200, "msg": "success", "data": {"running": False, "job_count": 0, "jobs": []}})
 
     @action(detail=False, methods=["post"])
     def reload(self, request):

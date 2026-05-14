@@ -203,15 +203,38 @@ export interface WebService {
 export interface ScheduleJob {
   id: string
   name: string
+  command_type: 'python' | 'shell'
   handler: string
+  command: string
   trigger_type: 'cron' | 'interval' | 'date'
   trigger_config: string
   args: string
   kwargs: string
   webservice: string | null
   is_active: boolean
+  last_run: { status: string; result: string; started_at: string; finished_at: string } | null
   created_at: string
   updated_at: string
+}
+
+export interface JobLog {
+  id: string
+  job: string
+  job_name: string
+  status: 'running' | 'success' | 'failed'
+  result: string
+  started_at: string
+  finished_at: string | null
+}
+
+// 通知
+export interface Notification {
+  id: string
+  title: string
+  content: string
+  notification_type: 'info' | 'success' | 'warning' | 'error'
+  is_read: boolean
+  created_at: string
 }
 
 // 审计日志

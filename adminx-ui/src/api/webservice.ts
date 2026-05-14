@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { WebService, ScheduleJob, PaginatedResponse } from '@/types'
+import type { WebService, ScheduleJob, JobLog, PaginatedResponse } from '@/types'
 
 // WebService 管理 API
 export const webserviceApi = {
@@ -61,4 +61,10 @@ export const scheduleJobApi = {
   // 重载所有任务
   reloadJobs: (): Promise<void> =>
     request.post('/webservice/jobs/reload/'),
+}
+
+// 任务日志 API
+export const jobLogApi = {
+  list: (params?: { page?: number; size?: number; job?: string }): Promise<PaginatedResponse<JobLog>> =>
+    request.get('/webservice/job-logs/', { params }),
 }

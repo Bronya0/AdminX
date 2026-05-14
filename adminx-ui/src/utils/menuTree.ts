@@ -131,9 +131,10 @@ const defaultIcons: Record<string, string> = {
   '系统监控': 'MonitorOutlined',
   '组件管理': 'AppstoreOutlined',
   '定时任务': 'ClockCircleOutlined',
-  '接口管理': 'CloudOutlined',
-  'WebService 配置': 'CloudOutlined',
-  '服务配置': 'CloudOutlined',
+  '通知中心': 'BellOutlined',
+  '安全审计': 'SafetyOutlined',
+  '操作审计': 'FileSearchOutlined',
+  '登录日志': 'LoginOutlined',
 }
 
 /**

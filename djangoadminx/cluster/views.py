@@ -3,11 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
+from djangoadminx.audit.mixins import AuditLogMixin
 from .models import ClusterNode
 from .serializers import ClusterNodeSerializer
 
 
-class ClusterNodeViewSet(viewsets.ModelViewSet):
+class ClusterNodeViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """集群节点 CRUD"""
     queryset = ClusterNode.objects.all()
     serializer_class = ClusterNodeSerializer

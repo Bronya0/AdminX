@@ -156,6 +156,8 @@
         <p v-if="currentLayout === 'mix'" style="font-size: 12px; color: #666;">一级菜单在顶部，子菜单在左侧侧边栏</p>
       </div>
     </a-modal>
+    <!-- 空闲超时检测 -->
+    <IdleWatcher />
   </div>
 </template>
 
@@ -164,6 +166,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { message, Modal } from 'ant-design-vue'
+import IdleWatcher from '@/components/IdleWatcher.vue'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,

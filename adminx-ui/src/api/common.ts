@@ -6,6 +6,7 @@ export interface SiteInfo {
   site_desc: string
   site_logo: string
   site_theme_color: string
+  idle_timeout: number
 }
 
 // 组件监控 API

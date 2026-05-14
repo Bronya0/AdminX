@@ -85,7 +85,7 @@ export const permissionApi = {
 // 登录日志 API
 export const loginLogApi = {
   // 获取登录日志列表
-  getLoginLogs: (params?: { page?: number }): Promise<PaginatedResponse<LoginLog>> =>
+  getLoginLogs: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<LoginLog>> =>
     request.get('/accounts/login-logs/', { params }),
 }
 

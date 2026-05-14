@@ -20,9 +20,15 @@ import SystemMonitor from '@/views/monitor/SystemMonitor.vue'
 import ComponentStatus from '@/views/monitor/ComponentStatus.vue'
 import ClusterNodes from '@/views/cluster/ClusterNodes.vue'
 
-// WebService
-import WebServiceConfig from '@/views/webservice/WebServiceConfig.vue'
-import ScheduleJob from '@/views/webservice/ScheduleJob.vue'
+// 通知中心
+import NotificationCenter from '@/views/notification/NotificationCenter.vue'
+
+// 定时任务
+import ScheduleJobList from '@/views/scheduler/ScheduleJobList.vue'
+
+// 审计
+import AuditLogList from '@/views/audit/AuditLogList.vue'
+import LoginLogList from '@/views/audit/LoginLogList.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -68,6 +74,12 @@ const router = createRouter({
               meta: { title: '菜单管理', permission: 'menu:menu:list' },
             },
             {
+              path: 'config',
+              name: 'system-config',
+              component: ConfigList,
+              meta: { title: '配置中心', icon: 'AppstoreOutlined', permission: 'config_center:config:list' },
+            },
+            {
               path: 'resources',
               name: 'system-resources',
               component: SystemMonitor,
@@ -79,43 +91,42 @@ const router = createRouter({
               component: ComponentStatus,
               meta: { title: '组件管理', permission: 'monitor:view' },
             },
-          ],
-        },
-        {
-          path: 'config',
-          name: 'config',
-          component: ConfigList,
-          meta: { title: '配置中心', icon: 'AppstoreOutlined', permission: 'config_center:config:list' },
-        },
-        {
-          path: 'cluster',
-          name: 'cluster',
-          meta: { title: '集群管理', icon: 'ClusterOutlined' },
-          children: [
             {
               path: 'nodes',
-              name: 'cluster-nodes',
+              name: 'system-nodes',
               component: ClusterNodes,
               meta: { title: '节点管理', permission: 'cluster:clusternode:list' },
             },
-          ],
-        },
-        {
-          path: 'webservice',
-          name: 'webservice',
-          meta: { title: 'WebService', icon: 'CloudOutlined' },
-          children: [
             {
-              path: 'config',
-              name: 'webservice-config',
-              component: WebServiceConfig,
-              meta: { title: '服务配置', permission: 'webservice:config:list' },
+              path: 'scheduler',
+              name: 'system-scheduler',
+              component: ScheduleJobList,
+              meta: { title: '定时任务', icon: 'ClockCircleOutlined', permission: 'webservice:schedulejob:list' },
             },
             {
-              path: 'job',
-              name: 'webservice-job',
-              component: ScheduleJob,
-              meta: { title: '定时任务', permission: 'webservice:job:list' },
+              path: 'notification',
+              name: 'system-notification',
+              component: NotificationCenter,
+              meta: { title: '通知中心', icon: 'BellOutlined', permission: 'notification:notification:list' },
+            },
+            {
+              path: 'audit',
+              name: 'system-audit',
+              meta: { title: '安全审计', icon: 'SafetyOutlined' },
+              children: [
+                {
+                  path: 'log',
+                  name: 'system-audit-log',
+                  component: AuditLogList,
+                  meta: { title: '操作审计', permission: 'audit:auditlog:list' },
+                },
+                {
+                  path: 'login-log',
+                  name: 'system-audit-login-log',
+                  component: LoginLogList,
+                  meta: { title: '登录日志', permission: 'accounts:userloginlog:list' },
+                },
+              ],
             },
           ],
         },

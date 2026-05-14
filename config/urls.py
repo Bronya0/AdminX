@@ -15,6 +15,7 @@ api_patterns = [
     path("policy/", include("djangoadminx.policy.urls")),
     path("captcha/", include("djangoadminx.captcha.urls")),
     path("data/", include("djangoadminx.data_center.urls")),
+    path("notification/", include("djangoadminx.notification.urls")),
     # 业务应用
     path("demo/", include("apps.demo_blog.urls")),
 ]

@@ -3,11 +3,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from djangoadminx.audit.mixins import AuditLogMixin
 from .models import Config
 from .serializers import ConfigSerializer
 
 
-class ConfigViewSet(mixins.CreateModelMixin,
+class ConfigViewSet(AuditLogMixin,
+                    mixins.CreateModelMixin,
                     mixins.UpdateModelMixin,
                     mixins.DestroyModelMixin,
                     viewsets.ReadOnlyModelViewSet):

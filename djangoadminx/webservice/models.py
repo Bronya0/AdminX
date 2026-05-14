@@ -45,8 +45,13 @@ class ScheduleJob(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField("任务名称", max_length=128)
-    handler = models.CharField("处理函数", max_length=255,
+    command_type = models.CharField("命令类型", max_length=20,
+                                    choices=[("python", "Python 函数"), ("shell", "Shell 命令")],
+                                    default="python")
+    handler = models.CharField("处理函数", max_length=255, blank=True, default="",
                                help_text="如 djangoadminx.webservice.tasks.sync_data")
+    command = models.TextField("Shell 命令", blank=True, default="",
+                               help_text="command_type=shell 时，要执行的命令或脚本")
     trigger_type = models.CharField("触发类型", max_length=20,
                                     choices=[("cron", "Cron"), ("interval", "间隔"), ("date", "指定时间")],
                                     default="interval")
@@ -71,8 +76,30 @@ class ScheduleJob(models.Model):
         return self.name
 
     def execute(self):
-        """执行任务 — 按 handler 路径动态导入并调用"""
+        """执行任务 — Python 函数或 Shell 命令"""
         import importlib
+        import subprocess
+
+        if self.command_type == "shell":
+            if not self.command:
+                raise ValueError("Shell 命令为空")
+            result = subprocess.run(
+                self.command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=3600,
+            )
+            output = ""
+            if result.stdout:
+                output += f"[stdout]\n{result.stdout}"
+            if result.stderr:
+                output += f"[stderr]\n{result.stderr}"
+            if result.returncode != 0:
+                raise RuntimeError(f"命令退出码 {result.returncode}\n{output}")
+            return output.strip() or f"完成 (exit=0)"
+
+        # Python 函数
         module_path, func_name = self.handler.rsplit(".", 1)
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)

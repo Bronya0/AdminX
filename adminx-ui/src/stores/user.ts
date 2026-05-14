@@ -29,6 +29,7 @@ export const useUserStore = defineStore(
     const siteName = ref<string>('DjangoAdminX')
     const siteDesc = ref<string>('企业级 Django Admin 框架')
     const siteLogo = ref<string>('')
+    const idleTimeout = ref<number>(30) // 会话空闲超时（分钟），0=不超时
 
     // Getters
     const isLoggedIn = computed(() => !!token.value)
@@ -80,6 +81,7 @@ export const useUserStore = defineStore(
         siteName.value = res.site_name
         siteDesc.value = res.site_desc
         siteLogo.value = res.site_logo
+        idleTimeout.value = res.idle_timeout ?? 30
         // 从配置中心同步主题色
         if (res.site_theme_color) {
           theme.value.primaryColor = res.site_theme_color
@@ -137,6 +139,7 @@ export const useUserStore = defineStore(
       siteName,
       siteDesc,
       siteLogo,
+      idleTimeout,
       isLoggedIn,
       username,
       avatar,

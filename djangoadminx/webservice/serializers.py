@@ -21,10 +21,31 @@ class WebServiceSerializer(serializers.ModelSerializer):
 
 
 class ScheduleJobSerializer(serializers.ModelSerializer):
+    last_run = serializers.SerializerMethodField()
+
     class Meta:
         model = ScheduleJob
         fields = "__all__"
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        if attrs.get("command_type") == "python" and not attrs.get("handler"):
+            raise serializers.ValidationError({"handler": "Python 类型任务必须填写处理函数"})
+        if attrs.get("command_type") == "shell" and not attrs.get("command"):
+            raise serializers.ValidationError({"command": "Shell 类型任务必须填写命令"})
+        return attrs
+
+    @staticmethod
+    def get_last_run(obj):
+        last = JobLog.objects.filter(job=obj).first()
+        if last:
+            return {
+                "status": last.status,
+                "result": last.result[:200] if last.result else "",
+                "started_at": last.started_at,
+                "finished_at": last.finished_at,
+            }
+        return None
 
 
 class JobLogSerializer(serializers.ModelSerializer):

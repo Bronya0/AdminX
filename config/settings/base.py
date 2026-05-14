@@ -64,6 +64,7 @@ LOCAL_APPS = [
     "djangoadminx.policy",
     "djangoadminx.captcha",
     "djangoadminx.data_center",
+    "djangoadminx.notification",
     # 业务应用
     "apps.demo_blog",
 ]

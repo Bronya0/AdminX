@@ -3,11 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from djangoadminx.audit.mixins import AuditLogMixin
 from .models import Menu
 from .serializers import MenuSerializer, MenuTreeSerializer
 
 
-class MenuViewSet(viewsets.ModelViewSet):
+class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """菜单 CRUD"""
     queryset = Menu.objects.all()
     serializer_class = MenuSerializer
@@ -26,9 +27,10 @@ class MenuViewSet(viewsets.ModelViewSet):
         parent_id = self.request.data.get("parent")
         if parent_id:
             parent = Menu.objects.get(id=parent_id)
-            serializer.save(sort_order=parent.get_children_count() + 1)
+            instance = serializer.save(sort_order=parent.get_children_count() + 1)
         else:
-            serializer.save(sort_order=Menu.get_root_nodes().count() + 1)
+            instance = serializer.save(sort_order=Menu.get_root_nodes().count() + 1)
+        self._log_audit_create(instance)
 
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def tree(self, request):

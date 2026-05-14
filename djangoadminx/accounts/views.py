@@ -13,8 +13,9 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from djangoadminx.audit.mixins import AuditLogMixin
 from .models import LoginLock, Role, User, UserLoginLog
-from ..captcha.views import verify_captcha
+from djangoadminx.captcha.views import verify_captcha
 from .serializers import (
     LoginLogSerializer,
     LoginSerializer,
@@ -143,7 +144,7 @@ class LogoutView(APIView):
         return Response({"code": 200, "msg": "success"})
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """用户 CRUD"""
     queryset = User.objects.all()
     search_fields = ["username", "email", "phone"]
@@ -183,7 +184,7 @@ class UserViewSet(viewsets.ModelViewSet):
         })
 
 
-class RoleViewSet(viewsets.ModelViewSet):
+class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """角色 CRUD"""
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
@@ -204,5 +205,6 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
     """登录日志"""
     queryset = UserLoginLog.objects.all()
     serializer_class = LoginLogSerializer
+    search_fields = ["username", "ip", "message"]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
