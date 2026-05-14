@@ -14,26 +14,7 @@
       @select="handleMenuClick"
       @openChange="handleOpenChange"
     >
-      <template v-for="item in menus" :key="item.key">
-        <a-sub-menu v-if="item.children && item.children.length" :key="item.key">
-          <template #icon>
-            <component :is="getIcon(item.icon)" />
-          </template>
-          <template #title>{{ item.title }}</template>
-          <a-menu-item v-for="child in item.children" :key="child.key">
-            <template #icon>
-              <component :is="getIcon(child.icon)" />
-            </template>
-            {{ child.title }}
-          </a-menu-item>
-        </a-sub-menu>
-        <a-menu-item v-else :key="item.key">
-          <template #icon>
-            <component :is="getIcon(item.icon)" />
-          </template>
-          {{ item.title }}
-        </a-menu-item>
-      </template>
+      <SidebarMenuItem v-for="item in menus" :key="item.key" :item="item" :getIcon="getIcon" />
     </a-menu>
   </div>
 </template>
@@ -42,12 +23,13 @@
 import { DashboardOutlined } from '@ant-design/icons-vue'
 import { resolveIcon } from '@/utils/iconResolver'
 import { useUserStore } from '@/stores/user'
+import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import type { SidebarItem } from '@/types'
 
 const getIcon = resolveIcon
 const userStore = useUserStore()
 
-const props = defineProps<{
+defineProps<{
   menus: SidebarItem[]
   collapsed: boolean
   selectedKeys: string[]
@@ -80,12 +62,10 @@ const handleOpenChange = (keys: string[]) => {
   overflow-x: hidden;
   transition: all 0.2s;
 }
-
 .admin-sider.collapsed {
   width: 80px;
   min-width: 80px;
 }
-
 .logo {
   height: 64px;
   display: flex;
