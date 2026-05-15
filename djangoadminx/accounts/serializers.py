@@ -10,15 +10,16 @@ class UserSerializer(serializers.ModelSerializer):
         many=True, slug_field="code", queryset=Role.objects.all(), required=False
     )
     role_names = serializers.SerializerMethodField()
+    is_online = serializers.ReadOnlyField()
 
     class Meta:
         model = User
         fields = [
-            "id", "username", "phone", "email", "avatar",
+            "id", "username", "phone", "email", "avatar", "desc",
             "is_active", "is_superuser", "roles", "role_names",
-            "date_joined", "last_login",
+            "date_joined", "last_login", "last_activity", "is_online",
         ]
-        read_only_fields = ["id", "date_joined", "last_login"]
+        read_only_fields = ["id", "date_joined", "last_login", "last_activity", "is_online"]
 
     def get_role_names(self, obj):
         return [r.name for r in obj.roles.all()]
@@ -32,7 +33,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "password", "phone", "email", "avatar", "is_active", "roles"]
+        fields = ["id", "username", "password", "phone", "email", "avatar", "desc", "is_active", "roles"]
 
     def create(self, validated_data):
         roles = validated_data.pop("roles", [])

@@ -14,6 +14,9 @@ const defaultTheme: ThemeConfig = {
   showBreadcrumb: true,
   showTabs: true,
   showFooter: true,
+  showVersion: true,
+  borderRadius: 6,
+  fontSize: 14,
 }
 
 export const useUserStore = defineStore(
@@ -30,6 +33,7 @@ export const useUserStore = defineStore(
     const siteDesc = ref<string>('企业级 Django Admin 框架')
     const siteLogo = ref<string>('')
     const idleTimeout = ref<number>(30) // 会话空闲超时（分钟），0=不超时
+    const appVersion = ref<string>('1.0.0')
 
     // Getters
     const isLoggedIn = computed(() => !!token.value)
@@ -82,11 +86,8 @@ export const useUserStore = defineStore(
         siteDesc.value = res.site_desc
         siteLogo.value = res.site_logo
         idleTimeout.value = res.idle_timeout ?? 30
-        // 从配置中心同步主题色
-        if (res.site_theme_color) {
-          theme.value.primaryColor = res.site_theme_color
-          document.documentElement.style.setProperty('--primary-color', res.site_theme_color)
-        }
+        appVersion.value = res.app_version || '1.0.0'
+        // 注：主题色/布局等由前端主题设置页面管理，不再从配置中心同步
       } catch (e) {
         // 使用默认值
       }
@@ -140,6 +141,7 @@ export const useUserStore = defineStore(
       siteDesc,
       siteLogo,
       idleTimeout,
+      appVersion,
       isLoggedIn,
       username,
       avatar,
@@ -159,7 +161,7 @@ export const useUserStore = defineStore(
   {
     persist: {
       key: 'user-store',
-      pick: ['token', 'refreshToken', 'theme'],
+      pick: ['token', 'refreshToken', 'theme', 'appVersion'],
     },
   }
 )

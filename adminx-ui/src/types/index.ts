@@ -22,8 +22,11 @@ export interface User {
   email: string
   phone: string
   avatar: string
+  desc?: string
   is_active: boolean
   is_superuser?: boolean
+  is_online?: boolean
+  last_activity?: string | null
   roles: string[]
   role_names: string[]
   date_joined: string
@@ -284,4 +287,7 @@ export interface ThemeConfig {
   showBreadcrumb: boolean
   showTabs: boolean
   showFooter: boolean
+  showVersion: boolean
+  borderRadius: number
+  fontSize: number
 }

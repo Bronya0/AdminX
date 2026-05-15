@@ -32,7 +32,7 @@ staticfiles/
 Thumbs.db
 
 # Docker
-docker-compose.yml
+deploy/docker-compose.yml
 
 # Claude
 .claude/

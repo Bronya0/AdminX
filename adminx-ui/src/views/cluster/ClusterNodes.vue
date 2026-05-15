@@ -313,6 +313,7 @@ const loadData = async () => {
     // 加载列表
     const res = await clusterApi.getNodes({
       page: pagination.current,
+      size: pagination.pageSize,
       search: searchForm.search,
     })
     tableData.value = res.results

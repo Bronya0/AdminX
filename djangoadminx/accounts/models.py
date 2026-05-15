@@ -1,7 +1,9 @@
 import uuid
+from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser, UserManager as BaseUserManager
 from django.db import models
+from django.utils import timezone
 from safedelete.managers import SafeDeleteManager
 from safedelete.models import SafeDeleteModel, SOFT_DELETE
 
@@ -27,6 +29,8 @@ class User(SafeDeleteModel, AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone = models.CharField("手机号", max_length=20, blank=True, default="")
     avatar = models.URLField("头像", blank=True, default="")
+    desc = models.TextField("描述", blank=True, default="")
+    last_activity = models.DateTimeField("最后活动时间", null=True, blank=True)
     roles = models.ManyToManyField(
         "Role",
         verbose_name="角色",
@@ -41,6 +45,13 @@ class User(SafeDeleteModel, AbstractUser):
 
     def __str__(self):
         return self.username or self.email
+
+    @property
+    def is_online(self):
+        """在线判定：最后活动时间在 5 分钟以内"""
+        if not self.last_activity:
+            return False
+        return self.last_activity >= timezone.now() - timedelta(minutes=5)
 
 
 class Role(models.Model):

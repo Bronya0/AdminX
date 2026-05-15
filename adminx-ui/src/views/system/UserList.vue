@@ -42,6 +42,14 @@
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'online'">
+            <a-tooltip :title="record.last_activity ? `最后活动: ${formatDateTime(record.last_activity)}` : '暂无活动记录'">
+              <a-badge
+                :status="record.is_online ? 'processing' : 'default'"
+                :text="record.is_online ? '在线' : '离线'"
+              />
+            </a-tooltip>
+          </template>
           <template v-if="column.key === 'is_active'">
             <a-tag :color="record.is_active ? 'success' : 'error'">
               {{ record.is_active ? '启用' : '禁用' }}
@@ -110,6 +118,9 @@
         <a-form-item label="手机号" name="phone">
           <a-input v-model:value="formState.phone" placeholder="请输入手机号" />
         </a-form-item>
+        <a-form-item label="描述" name="desc">
+          <a-textarea v-model:value="formState.desc" placeholder="请输入描述（可选）" :rows="2" />
+        </a-form-item>
         <a-form-item label="角色" name="roles">
           <a-select
             v-model:value="formState.roles"
@@ -161,6 +172,7 @@ import {
 } from '@ant-design/icons-vue'
 import { userApi } from '@/api/auth'
 import { roleApi } from '@/api/auth'
+import { formatDateTime } from '@/utils/format'
 import type { User, Role } from '@/types'
 
 // 表格列定义
@@ -168,9 +180,11 @@ const columns = [
   { title: '用户名', dataIndex: 'username', key: 'username' },
   { title: '邮箱', dataIndex: 'email', key: 'email' },
   { title: '手机号', dataIndex: 'phone', key: 'phone' },
+  { title: '描述', dataIndex: 'desc', key: 'desc', ellipsis: true },
   { title: '角色', key: 'roles' },
+  { title: '在线状态', key: 'online', width: 110 },
   { title: '状态', key: 'is_active' },
-  { title: '最后登录', dataIndex: 'last_login', key: 'last_login' },
+  { title: '最后登录', dataIndex: 'last_login', key: 'last_login', customRender: ({ text }: any) => formatDateTime(text) },
   { title: '操作', key: 'action', width: 250 },
 ]
 
@@ -204,6 +218,7 @@ const formState = reactive({
   password: '',
   email: '',
   phone: '',
+  desc: '',
   roles: [] as string[],
   is_active: true,
 })
@@ -226,6 +241,7 @@ const loadData = async () => {
   try {
     const res = await userApi.getUsers({
       page: pagination.current,
+      size: pagination.pageSize,
       search: searchForm.search,
     })
     tableData.value = res.results
@@ -277,6 +293,7 @@ const handleAdd = () => {
     password: '',
     email: '',
     phone: '',
+    desc: '',
     roles: [],
     is_active: true,
   })
@@ -292,6 +309,7 @@ const handleEdit = (record: User) => {
     username: record.username,
     email: record.email,
     phone: record.phone,
+    desc: record.desc || '',
     roles: record.roles,
     is_active: record.is_active,
   })

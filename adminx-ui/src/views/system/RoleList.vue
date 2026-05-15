@@ -175,7 +175,24 @@ import { roleApi, permissionApi } from '@/api/auth'
 import { menuApi } from '@/api/menu'
 import { menusToTreeData } from '@/utils/menuTree'
 import { filterTreeBySearch } from '@/utils/menuTree'
+import { formatDateTime } from '@/utils/format'
 import type { Role, Permission } from '@/types'
+
+/** 将 Django 自动生成的 "Can add xxx" 等权限名翻译为中文 */
+function translatePermissionName(name: string): string {
+  const map: Record<string, string> = {
+    'Can add ': '添加 ',
+    'Can change ': '修改 ',
+    'Can delete ': '删除 ',
+    'Can view ': '查看 ',
+  }
+  for (const [en, zh] of Object.entries(map)) {
+    if (name.startsWith(en)) {
+      return name.replace(en, zh)
+    }
+  }
+  return name
+}
 
 // 表格列定义
 const columns = [
@@ -183,7 +200,7 @@ const columns = [
   { title: '角色编码', dataIndex: 'code', key: 'code' },
   { title: '描述', dataIndex: 'desc', key: 'desc', ellipsis: true },
   { title: '状态', key: 'is_active' },
-  { title: '创建时间', dataIndex: 'created_at', key: 'created_at' },
+  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', customRender: ({ text }: any) => formatDateTime(text) },
   { title: '操作', key: 'action', width: 250 },
 ]
 
@@ -237,7 +254,7 @@ const filteredMenuTreeData = ref<any[]>([])
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await roleApi.getRoles({ page: pagination.current, search: searchForm.search })
+    const res = await roleApi.getRoles({ page: pagination.current, size: pagination.pageSize, search: searchForm.search })
     tableData.value = res.results
     pagination.total = res.count
   } finally {
@@ -254,7 +271,7 @@ const loadPermissions = async () => {
     perms.forEach((perm: Permission) => {
       const group = perm.content_type_name || '其他'
       if (!grouped[group]) grouped[group] = []
-      grouped[group].push({ title: perm.name, key: perm.codename, value: perm.codename })
+      grouped[group].push({ title: translatePermissionName(perm.name), key: perm.codename, value: perm.codename })
     })
     originalPermissionTreeData.value = Object.entries(grouped).map(([key, children]) => ({
       title: key,

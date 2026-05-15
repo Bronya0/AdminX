@@ -95,38 +95,46 @@ class ScheduleJobViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def status(self, request):
-        """调度器状态"""
+        """调度器状态（通过心跳检测独立调度器进程是否存活）"""
         try:
             from djangoadminx.common.scheduler import scheduler_manager
-            sched = scheduler_manager.scheduler
-            running = sched.running if hasattr(sched, 'running') else False
+            from .models import ScheduleJob
+
+            running = scheduler_manager.is_alive()
+            # 从数据库统计活跃任务数（独立于 APScheduler 进程）
+            job_count = ScheduleJob.objects.filter(is_active=True).count()
+
+            # 只有当调度器恰好在同一进程中运行时，才返回详细任务列表
+            job_list = []
             try:
-                jobs = sched.get_jobs()
-                job_list = []
-                for j in jobs:
-                    next_run = str(j.next_run_time) if j.next_run_time else None
-                    job_list.append({"id": j.id, "name": j.name, "next_run": next_run})
+                sched = scheduler_manager._scheduler
+                if sched and sched.running:
+                    for j in sched.get_jobs():
+                        next_run = str(j.next_run_time) if j.next_run_time else None
+                        job_list.append({"id": j.id, "name": j.name, "next_run": next_run})
             except Exception:
-                job_list = []
+                pass
+
             return Response({
                 "code": 200,
                 "msg": "success",
                 "data": {
                     "running": running,
-                    "job_count": len(job_list),
+                    "job_count": job_count,
                     "jobs": job_list,
                 },
             })
         except Exception as e:
+            logger.warning(f"获取调度器状态异常: {e}")
             return Response({"code": 200, "msg": "success", "data": {"running": False, "job_count": 0, "jobs": []}})
 
     @action(detail=False, methods=["post"])
     def reload(self, request):
-        """全量重载任务"""
+        """通知调度器进程全量重载"""
         try:
             from djangoadminx.common.scheduler import scheduler_manager
-            scheduler_manager.reload_all()
-            return Response({"code": 200, "msg": "success"})
+            scheduler_manager.notify_reload()
+            return Response({"code": 200, "msg": "已通知调度器重载"})
         except Exception as e:
             return Response({"code": 500, "msg": str(e)}, status=200)
 
@@ -136,6 +144,7 @@ class JobLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = JobLog.objects.select_related("job").all()
     serializer_class = JobLogSerializer
     ordering = ["-started_at"]
+    filterset_fields = ["job"]
 
 
 class WebServiceLogViewSet(viewsets.ReadOnlyModelViewSet):

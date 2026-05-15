@@ -16,6 +16,11 @@
     >
       <SidebarMenuItem v-for="item in menus" :key="item.key" :item="item" :getIcon="getIcon" />
     </a-menu>
+
+    <!-- 版本信息 -->
+    <div v-if="showVersion && !collapsed" class="sider-version">
+      v{{ userStore.appVersion }}
+    </div>
   </div>
 </template>
 
@@ -35,6 +40,7 @@ defineProps<{
   selectedKeys: string[]
   openKeys: string[]
   showLogo?: boolean
+  showVersion?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -75,5 +81,22 @@ const handleOpenChange = (keys: string[]) => {
   font-size: 20px;
   font-weight: bold;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.admin-sider {
+  display: flex;
+  flex-direction: column;
+}
+.admin-sider :deep(.ant-menu) {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.sider-version {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 </style>

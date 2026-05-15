@@ -24,7 +24,7 @@ cd adminx-ui && npm run type-check      # Vue/TS type checking
 
 # Production
 bash start-linux.sh                     # Gunicorn deployment (Linux)
-scripts\start-win.bat                   # Dev startup (Windows)
+start-win.bat                           # Dev startup (Windows)
 ```
 
 ## Project Structure
@@ -57,7 +57,7 @@ DjangoAdminX/
 │       └── layouts/       #   AdminLayout (sidebar, header, tabs)
 ├── config/
 │   └── settings/          # base.py / dev.py / prod.py
-└── requirements/          # base.txt / dev.txt / prod.txt
+└── requirements.txt
 ```
 
 ## Architecture & Key Patterns
@@ -90,8 +90,12 @@ DjangoAdminX/
 
 ### Scheduler
 - APScheduler runs as standalone process (`python manage.py run_scheduler`).
-- Job definitions stored in DB (`ScheduleJob` model), signals trigger reload on CRUD.
-- Supports `cron` / `interval` / `date` triggers.
+- Job definitions stored in DB (`ScheduleJob` model), supports `cron` / `interval` / `date` triggers.
+- **Cross-process communication via database** (no Redis dependency):
+  - **Heartbeat**: scheduler process updates `SchedulerHeartbeat.last_heartbeat` every 10s via `update_or_create`; web workers check via `is_alive()` (30s timeout threshold).
+  - **Reload notifications**: CRUD signals + reload button set `SchedulerHeartbeat.reload_pending=True`; scheduler process polls every 10s and calls `reload_all()`.
+  - See [`SchedulerManager`](djangoadminx/common/scheduler.py) and [`SchedulerHeartbeat`](djangoadminx/webservice/models.py) for implementation.
+- **Anti-pattern (fixed)**: Before this approach, signals and reload called `reload_job()`/`reload_all()` directly on `SchedulerManager` singleton — this only affected the calling process (one Gunicorn worker) and was silently ignored by the actual scheduler process. **Never rely on in-process state for cross-process coordination.**
 
 ### Redis Tooling (apps/common/redis_utils.py)
 - `CacheProxy` — auto-serializing cache.
@@ -131,5 +135,50 @@ DjangoAdminX/
 
 Roles and their permission/menu bindings are initialized in `init_data.py`. Run `python manage.py init_data` to apply.
 
+### Multi-Process Architecture Awareness
+
+This project uses **Gunicorn multi-worker** for HTTP + **separate scheduler process** (`run_scheduler`). Each is a distinct OS process with independent memory space.
+
+**Key implications:**
+
+1. **Python singletons are per-process.** Module-level singletons (e.g., `SchedulerManager`, APScheduler's `BackgroundScheduler`) exist independently in every process. Modifying one does NOT affect others.
+2. **Signals are per-process.** Django signals fire in the process that handles the request. Signal handlers that modify in-memory state (e.g., `scheduler_manager.reload_job()`) have no effect on other processes.
+3. **Cross-process coordination requires shared storage.** Use the database for cross-process communication (not cache/Redis):
+   - **Status detection**: `SchedulerHeartbeat.last_heartbeat` written by scheduler process, checked by web workers via `is_alive()`.
+   - **Notifications**: `SchedulerHeartbeat.reload_pending` set by web workers (CRUD signals + reload button), polled by scheduler process.
+   - **Distributed locks**: use `RedisProxy().lock()` from `apps/common/redis_utils.py` (Redis only, optional).
+4. **LocMemCache is per-process.** Django's `LocMemCache` is not shared between processes. Only `RedisCache` provides cross-process cache sharing. **Use DB instead of cache for any cross-process data that must work without Redis.**
+5. **CacheOps** is automatically disabled when Redis is unavailable (`CACHEOPS_REDIS = None`).
+6. **Never rely on in-process state for cross-process coordination.** If you need to communicate between processes, use the database (or Redis for performance-sensitive scenarios).
+
+**Pattern to follow** (see SchedulerManager and SchedulerHeartbeat for reference):
+```
+# Web process: write notification to DB
+MyModel.objects.update_or_create(id=FIXED_ID, defaults={"flag": True})
+
+# Worker process: poll DB and consume
+if MyModel.objects.filter(id=FIXED_ID, flag=True).exists():
+    do_work()
+    MyModel.objects.filter(id=FIXED_ID).update(flag=False)
+```
 ### Menu Model Note
 `Menu.path` field conflicts with treebeard MP_Node's internal `path` field. The tree structure is rebuilt on the frontend from flat menu data (by path prefix matching in `menuTree.ts`), so treebeard's tree operations (`add_root`, `add_child`) are not used. Menu creation in `init_data.py` uses direct ORM with manually set `depth`/`numchild` values.
+
+### Spyne / SOAP Compatibility (Python 3.13+)
+
+spyne 2.14.0 bundles six 1.14.0, whose `_SixMetaPathImporter` only implements the deprecated `find_module`/`load_module` (PEP 302). Python 3.13+ ignores `find_module` in favor of `find_spec` (PEP 451), causing `from spyne.util.six.moves.collections_abc import MutableSet` to fail.
+
+**Fix**: `djangoadminx/common/spyne_compat.py` pre-loads spyne's bundled `six.py`, patches `_SixMetaPathImporter` with a `find_spec` method, and pre-registers known `six.moves.*` modules in `sys.modules`.
+
+**Critical**: Every Django entry point MUST import this module **before** any spyne code loads:
+
+```python
+# manage.py / wsgi.py / asgi.py — top of the file
+import djangoadminx.common.spyne_compat  # noqa: F401
+```
+
+**Troubleshooting**: If you see `ImportError: cannot import name 'Application' from 'spyne'`, the compat module's stub package cleanup failed (empty `spyne`/`spyne.util` in `sys.modules`). Check `spyne_compat.apply()` step 3b.
+
+### note
+- 禁止修改虚拟环境源码
+- 

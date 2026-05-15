@@ -272,6 +272,7 @@ const loadData = async () => {
   try {
     const res = await configApi.getConfigs({
       page: pagination.current,
+      size: pagination.pageSize,
       search: searchForm.search,
       group: searchForm.group,
     })

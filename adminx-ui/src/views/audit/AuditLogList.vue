@@ -61,6 +61,7 @@
 import { ref, onMounted } from 'vue'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { auditApi } from '@/api/audit'
+import { formatDateTime } from '@/utils/format'
 import type { AuditLog } from '@/types'
 
 const columns = [
@@ -69,7 +70,7 @@ const columns = [
   { title: '模型', dataIndex: 'model_name', key: 'model_name', width: 150 },
   { title: '对象', dataIndex: 'object_repr', key: 'object_repr', width: 200 },
   { title: '变更摘要', dataIndex: 'diff_summary', key: 'diff_summary', ellipsis: true },
-  { title: '操作时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
+  { title: '操作时间', dataIndex: 'created_at', key: 'created_at', width: 180, customRender: ({ text }: any) => formatDateTime(text) },
 ]
 
 const actionLabel = (action: string) =>

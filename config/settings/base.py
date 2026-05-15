@@ -83,6 +83,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # 自定义中间件
     "djangoadminx.common.middleware.RequestContextMiddleware",
+    "djangoadminx.common.middleware.UserActivityMiddleware",
     "djangoadminx.common.middleware.RequestLogMiddleware",
     "djangoadminx.common.middleware.IPBlockMiddleware",
 ]

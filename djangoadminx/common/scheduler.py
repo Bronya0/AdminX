@@ -6,13 +6,13 @@ APScheduler 管理 — 通过独立进程运行 (python manage.py run_scheduler)
   - Job 定义存储在数据库，CRUD 后自动重载调度
   - 有 Redis 时用 RedisJobStore，无 Redis 时用 SQLite 兜底
   - 首次通过懒初始化，避免 Django 启动时连接 Redis
+  - 通过数据库心跳检测调度器进程存活状态（不依赖 Redis）
 """
 import json
 import logging
-from datetime import timedelta
-
+import uuid
 from apscheduler.executors.pool import ThreadPoolExecutor
-from apscheduler.jobstores.base import ConflictingIdError, JobLookupError
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -20,6 +20,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 from django.utils import timezone
 
 logger = logging.getLogger("djangoadminx.scheduler")
+
+# 心跳超时阈值（秒）：超过此时间未收到心跳视为调度器已停止
+SCHEDULER_HEARTBEAT_TTL = 30
+# 心跳记录固定 UUID（用于 update_or_create 单行记录）
+HEARTBEAT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 def _get_jobstore(redis_url=None):
@@ -94,6 +99,77 @@ class SchedulerManager:
         if self._scheduler and self._scheduler.running:
             self._scheduler.shutdown(wait=False)
             logger.info("APScheduler shutdown")
+        self.clear_heartbeat()
+
+    # ── 调度器进程心跳（数据库） ─────────────────────
+
+    @staticmethod
+    def _get_heartbeat_model():
+        """延迟导入避免循环依赖"""
+        from djangoadminx.webservice.models import SchedulerHeartbeat
+        return SchedulerHeartbeat
+
+    @staticmethod
+    def write_heartbeat():
+        """调度器进程写入心跳（供 web 进程检测存活）"""
+        try:
+            SchedulerHeartbeat = SchedulerManager._get_heartbeat_model()
+            SchedulerHeartbeat.objects.update_or_create(
+                id=HEARTBEAT_ID,
+                defaults={"last_heartbeat": timezone.now()},
+            )
+        except Exception:
+            pass
+
+    @staticmethod
+    def clear_heartbeat():
+        """调度器进程清除心跳记录"""
+        try:
+            SchedulerHeartbeat = SchedulerManager._get_heartbeat_model()
+            SchedulerHeartbeat.objects.filter(id=HEARTBEAT_ID).delete()
+        except Exception:
+            pass
+
+    @staticmethod
+    def is_alive():
+        """检查调度器进程是否存活（通过数据库心跳）"""
+        try:
+            SchedulerHeartbeat = SchedulerManager._get_heartbeat_model()
+            hb = SchedulerHeartbeat.objects.values("last_heartbeat").filter(id=HEARTBEAT_ID).first()
+            if hb and hb["last_heartbeat"]:
+                elapsed = (timezone.now() - hb["last_heartbeat"]).total_seconds()
+                return elapsed < SCHEDULER_HEARTBEAT_TTL
+            return False
+        except Exception:
+            return False
+
+    # ── 跨进程通知（数据库） ─────────────────────
+
+    @staticmethod
+    def notify_reload():
+        """通知调度器进程需要全量重载（web 进程 → 调度器进程）"""
+        try:
+            SchedulerHeartbeat = SchedulerManager._get_heartbeat_model()
+            SchedulerHeartbeat.objects.update_or_create(
+                id=HEARTBEAT_ID,
+                defaults={"reload_pending": True},
+            )
+        except Exception:
+            pass
+
+    def process_notifications(self):
+        """处理数据库通知（调度器进程主循环调用）"""
+        try:
+            if self._scheduler is None or not self._scheduler.running:
+                return
+            SchedulerHeartbeat = self._get_heartbeat_model()
+            hb = SchedulerHeartbeat.objects.filter(id=HEARTBEAT_ID, reload_pending=True).first()
+            if hb:
+                logger.info("收到全量重载通知，执行重载")
+                self.reload_all()
+                SchedulerHeartbeat.objects.filter(id=HEARTBEAT_ID).update(reload_pending=False)
+        except Exception:
+            pass
 
     def _load_jobs_from_db(self):
         """从数据库加载定时任务"""

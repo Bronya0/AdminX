@@ -8,6 +8,7 @@
 import logging
 import signal
 import sys
+import time
 
 from django.core.management.base import BaseCommand
 
@@ -41,9 +42,16 @@ class Command(BaseCommand):
             if os.fork():
                 sys.exit(0)
 
-        self.stdout.write(self.style.SUCCESS(f"[Scheduler] Running (PID: {scheduler_manager.scheduler._pid})"))
+        pid = scheduler_manager.scheduler._pid if hasattr(scheduler_manager.scheduler, '_pid') else 'N/A'
+        self.stdout.write(self.style.SUCCESS(f"[Scheduler] Running (PID: {pid})"))
 
-        # 保持进程存活
-        import time
+        # 保持进程存活，同时定期写入心跳 + 处理通知
+        scheduler_manager.write_heartbeat()
+        tick = 0
         while True:
             time.sleep(1)
+            tick += 1
+            if tick >= 10:  # 每 10 秒一次综合操作
+                scheduler_manager.write_heartbeat()
+                scheduler_manager.process_notifications()
+                tick = 0

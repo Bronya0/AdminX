@@ -27,7 +27,7 @@ DEFAULT_ROLES = [
     {"name": "普通用户", "code": "user", "desc": "普通用户，仅有基本查看权限"},
 ]
 
-# ========== 默认菜单树（全部归入系统管理一级菜单）==========
+# ========== 默认菜单树 ==========
 DEFAULT_MENUS = [
     {
         "code": "system",
@@ -39,7 +39,7 @@ DEFAULT_MENUS = [
         "children": [
             {"code": "system:user", "name": "用户管理", "icon": "User", "path": "/system/user", "component": "system/user/index", "permission_code": "accounts:user:list", "menu_type": "menu", "sort_order": 1},
             {"code": "system:role", "name": "角色管理", "icon": "Shield", "path": "/system/role", "component": "system/role/index", "permission_code": "accounts:role:list", "menu_type": "menu", "sort_order": 2},
-            {"code": "system:menu", "name": "菜单管理", "icon": "Menu", "path": "/system/menu", "component": "system/menu/index", "permission_code": "menu:list", "menu_type": "menu", "sort_order": 3},
+            {"code": "system:permission", "name": "权限管理", "icon": "Safety", "path": "/system/permissions", "component": "system/permissions/index", "menu_type": "menu", "sort_order": 3},
             {"code": "system:config", "name": "配置中心", "icon": "Setting", "path": "/system/config", "component": "config/list/index", "permission_code": "config_center:config:list", "menu_type": "menu", "sort_order": 4},
             {"code": "system:resource", "name": "系统资源", "icon": "Cpu", "path": "/system/resource", "component": "monitor/resource/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 5},
             {"code": "system:component", "name": "组件管理", "icon": "Appstore", "path": "/system/component", "component": "monitor/component/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 6},
@@ -48,10 +48,18 @@ DEFAULT_MENUS = [
             ]},
             {"code": "system:scheduler", "name": "定时任务", "icon": "ClockCircle", "path": "/system/scheduler", "component": "scheduler/index", "permission_code": "webservice:schedulejob:list", "menu_type": "menu", "sort_order": 8},
             {"code": "system:notification", "name": "通知中心", "icon": "Bell", "path": "/system/notification", "component": "notification/index", "permission_code": "notification:notification:list", "menu_type": "menu", "sort_order": 9},
-            {"code": "system:audit", "name": "安全审计", "icon": "Safety", "path": "/system/audit", "menu_type": "menu", "sort_order": 10, "children": [
-                {"code": "system:audit:log", "name": "操作审计", "icon": "FileSearch", "path": "/system/audit/log", "component": "audit/log/index", "permission_code": "audit:auditlog:list", "menu_type": "menu", "sort_order": 1},
-                {"code": "system:audit:login-log", "name": "登录日志", "icon": "Login", "path": "/system/audit/login-log", "component": "audit/login-log/index", "permission_code": "accounts:userloginlog:list", "menu_type": "menu", "sort_order": 2},
-            ]},
+        ],
+    },
+    {
+        "code": "audit",
+        "name": "安全审计",
+        "icon": "Safety",
+        "path": "/audit",
+        "menu_type": "menu",
+        "sort_order": 2,
+        "children": [
+            {"code": "audit:log", "name": "操作审计", "icon": "FileSearch", "path": "/audit/log", "component": "audit/log/index", "permission_code": "audit:auditlog:list", "menu_type": "menu", "sort_order": 1},
+            {"code": "audit:login-log", "name": "登录日志", "icon": "Login", "path": "/audit/login-log", "component": "audit/login-log/index", "permission_code": "accounts:userloginlog:list", "menu_type": "menu", "sort_order": 2},
         ],
     },
 ]
@@ -67,6 +75,10 @@ DEFAULT_CONFIGS = [
     {"key": "SITE_LOGO", "value": "", "value_type": "string", "desc": "站点 Logo URL", "group": "site"},
     {"key": "SITE_THEME_COLOR", "value": "#1890ff", "value_type": "string", "desc": "站点主题色", "group": "site"},
     {"key": "SESSION_IDLE_TIMEOUT", "value": "30", "value_type": "int", "desc": "登录后空闲超时（分钟）：用户无操作达此时长后自动登出，0=不超时", "group": "security"},
+    {"key": "APP_VERSION", "value": "1.0.0", "value_type": "string", "desc": "平台版本号", "group": "system"},
+    {"key": "NTP_SYNC_ENABLED", "value": "false", "value_type": "bool", "desc": "是否启用 NTP 时间同步", "group": "system"},
+    {"key": "NTP_SERVER", "value": "", "value_type": "string", "desc": "NTP 服务器地址（如 ntp.aliyun.com）", "group": "system"},
+    {"key": "NTP_SYNC_INTERVAL", "value": "60", "value_type": "int", "desc": "NTP 同步间隔（分钟）", "group": "system"},
 ]
 
 
@@ -196,9 +208,9 @@ class Command(BaseCommand):
             from djangoadminx.menu.models import Menu
             security_menus = Menu.objects.filter(
                 code__in=[
-                    "system:config", "system:resource", "system:cluster",
+                    "system:permission", "system:config", "system:resource", "system:cluster",
                     "system:cluster:nodes",
-                    "system:audit", "system:audit:log", "system:audit:login-log",
+                    "audit", "audit:log", "audit:login-log",
                 ]
             )
             security_role.menus.add(*security_menus)
@@ -208,7 +220,7 @@ class Command(BaseCommand):
         if audit_role:
             from djangoadminx.menu.models import Menu
             audit_menus = Menu.objects.filter(
-                code__in=["system:audit", "system:audit:log", "system:audit:login-log"]
+                code__in=["audit", "audit:log", "audit:login-log"]
             )
             audit_role.menus.add(*audit_menus)
             self.stdout.write(f"  审计管理员已绑定 {audit_menus.count()} 个菜单")

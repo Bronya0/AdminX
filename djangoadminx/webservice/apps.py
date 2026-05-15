@@ -11,17 +11,16 @@ class WebserviceConfig(AppConfig):
     verbose_name = "WebService 管理"
 
     def ready(self):
-        """注册信号 — 定时任务变更时通知 APScheduler"""
+        """注册信号 — 定时任务变更时通知调度器进程重载"""
         from .models import ScheduleJob
 
-        def reload_job_handler(sender, instance, **kwargs):
+        def notify_scheduler(sender, instance, **kwargs):
             try:
                 from djangoadminx.common.scheduler import scheduler_manager
-                job_id = str(getattr(instance, "id", instance.pk))
-                scheduler_manager.reload_job(job_id)
+                scheduler_manager.notify_reload()
             except Exception as e:
-                logger.warning(f"Scheduler reload failed: {e}")
+                logger.warning(f"通知调度器失败: {e}")
 
-        post_save.connect(reload_job_handler, sender=ScheduleJob, weak=False)
-        post_delete.connect(reload_job_handler, sender=ScheduleJob, weak=False)
-        logger.debug("Scheduler signals registered")
+        post_save.connect(notify_scheduler, sender=ScheduleJob, weak=False)
+        post_delete.connect(notify_scheduler, sender=ScheduleJob, weak=False)
+        logger.debug("Scheduler notification signals registered")

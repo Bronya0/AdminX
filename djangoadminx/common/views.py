@@ -23,6 +23,8 @@ def site_info(request):
             "site_logo": Config.get_value("SITE_LOGO", default=""),
             "site_theme_color": Config.get_value("SITE_THEME_COLOR", default="#1890ff"),
             "idle_timeout": Config.get_value("SESSION_IDLE_TIMEOUT", default=30),
+            "login_bg_image": Config.get_value("LOGIN_BG_IMAGE", default=""),
+            "app_version": Config.get_value("APP_VERSION", default="1.0.0"),
         },
     })
 
@@ -70,3 +72,31 @@ def log_tail(request):
         event_stream(),
         content_type="text/event-stream",
     )
+
+
+# ── NTP 时间同步 ──
+
+@api_view(["GET", "POST"])
+def ntp_sync(request):
+    """查询 NTP 状态 / 手动触发同步"""
+    from djangoadminx.common.ntp import sync_time
+    from djangoadminx.config_center.models import Config
+
+    server = Config.get_value("NTP_SERVER", default="")
+    enabled = Config.get_value("NTP_SYNC_ENABLED", default=False)
+
+    if not enabled or not server:
+        return JsonResponse({
+            "code": 200, "msg": "success",
+            "data": {"enabled": False, "server": server or "(未配置)"},
+        })
+
+    if request.method == "POST":
+        result = sync_time(server)
+        return JsonResponse({"code": 200, "msg": "success", "data": result})
+
+    # GET: 返回状态不真正同步（手动同步用 POST）
+    return JsonResponse({
+        "code": 200, "msg": "success",
+        "data": {"enabled": True, "server": server},
+    })

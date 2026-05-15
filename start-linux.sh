@@ -1,21 +1,33 @@
 #!/usr/bin/env bash
 # Linux 生产部署脚本 — gunicorn 模式
-# 使用方式: bash scripts/start-linux.sh
+# 使用方式: bash start-linux.sh
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 # 虚拟环境
 VENV=".venv"
 if [ ! -d "$VENV" ]; then
     echo "[ERROR] 虚拟环境不存在: $VENV"
-    echo "请先创建: python3 -m venv $VENV && source $VENV/bin/activate && pip install -r requirements/prod.txt"
+    echo "请先创建: python3 -m venv $VENV && source $VENV/bin/activate && pip install -r requirements.txt"
     exit 1
 fi
 source "$VENV/bin/activate"
 
 # 环境变量
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings.prod}"
+
+echo ">>> 确保日志目录存在..."
+mkdir -p logs
+
+echo ">>> 启动调度器进程（后台）..."
+if nohup python manage.py run_scheduler > logs/scheduler.log 2>&1 &
+then
+    SCHEDULER_PID=$!
+    echo "调度器已启动 (PID: $SCHEDULER_PID)"
+else
+    echo "[WARNING] 调度器启动失败，请检查 logs/scheduler.log"
+fi
 
 echo ">>> 执行数据库迁移..."
 python manage.py migrate --noinput

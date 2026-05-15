@@ -111,7 +111,7 @@
             <span v-else style="color: #ccc;">-</span>
           </template>
           <template v-if="column.key === 'last_time'">
-            <span style="font-size: 12px; color: #999;">{{ record.last_run ? formatTime(record.last_run.started_at) : '-' }}</span>
+            <span style="font-size: 12px; color: #999;">{{ record.last_run ? formatDateTime(record.last_run.started_at) : '-' }}</span>
           </template>
           <template v-if="column.key === 'action'">
             <a-space>
@@ -176,6 +176,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { scheduleJobApi, jobLogApi } from '@/api/webservice'
+import { formatDateTime } from '@/utils/format'
 import type { ScheduleJob, JobLog } from '@/types'
 
 // ── 搜索 ──
@@ -197,7 +198,7 @@ const logColumns = [
   { title: '状态', dataIndex: 'status', key: 'status', width: 65 },
   { title: '耗时', key: 'duration', width: 70 },
   { title: '结果', key: 'result' },
-  { title: '时间', dataIndex: 'started_at', key: 'started_at', width: 155 },
+  { title: '时间', dataIndex: 'started_at', key: 'started_at', width: 155, customRender: ({ text }: any) => formatDateTime(text) },
 ]
 
 const tableData = ref<ScheduleJob[]>([])
@@ -337,7 +338,6 @@ const formatTrigger = (job: ScheduleJob) => {
   return job.trigger_config
 }
 
-const formatTime = (t?: string) => t ? new Date(t).toLocaleString() : ''
 const formatDuration = (start: string, end: string) => {
   const ms = new Date(end).getTime() - new Date(start).getTime()
   if (ms < 1000) return `${ms}ms`

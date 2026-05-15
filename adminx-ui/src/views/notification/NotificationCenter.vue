@@ -38,7 +38,7 @@
                 </span>
               </template>
               <template #description>
-                <div style="color: #999; font-size: 12px;">{{ item.created_at }}</div>
+                <div style="color: #999; font-size: 12px;">{{ formatRelativeTime(item.created_at) }}</div>
                 <div v-if="item.content" style="margin-top: 4px; color: #666;">{{ item.content }}</div>
               </template>
             </a-list-item-meta>
@@ -64,6 +64,7 @@
 import { ref, onMounted } from 'vue'
 import { BellOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { notificationApi } from '@/api/notification'
+import { formatRelativeTime } from '@/utils/format'
 import type { Notification } from '@/types'
 import { message } from 'ant-design-vue'
 

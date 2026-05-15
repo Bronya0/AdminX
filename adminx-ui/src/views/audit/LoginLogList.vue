@@ -62,6 +62,7 @@
 import { ref, onMounted } from 'vue'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { loginLogApi } from '@/api/auth'
+import { formatDateTime } from '@/utils/format'
 import type { LoginLog } from '@/types'
 
 const columns = [
@@ -70,7 +71,7 @@ const columns = [
   { title: 'IP 地址', dataIndex: 'ip', key: 'ip', width: 140 },
   { title: '消息', dataIndex: 'message', key: 'message', width: 200 },
   { title: 'UA', dataIndex: 'user_agent', key: 'user_agent', ellipsis: true },
-  { title: '登录时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
+  { title: '登录时间', dataIndex: 'created_at', key: 'created_at', width: 180, customRender: ({ text }: any) => formatDateTime(text) },
 ]
 
 const searchForm = ref({ search: '', success: undefined as boolean | undefined })

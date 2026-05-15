@@ -32,7 +32,7 @@ export const authApi = {
 // 用户管理 API
 export const userApi = {
   // 获取用户列表
-  getUsers: (params?: { page?: number; search?: string }): Promise<PaginatedResponse<User>> =>
+  getUsers: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<User>> =>
     request.get('/accounts/users/', { params }),
 
   // 获取用户详情
@@ -55,7 +55,7 @@ export const userApi = {
 // 角色管理 API
 export const roleApi = {
   // 获取角色列表
-  getRoles: (params?: { page?: number; search?: string }): Promise<PaginatedResponse<Role>> =>
+  getRoles: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<Role>> =>
     request.get('/accounts/roles/', { params }),
 
   // 获取角色详情

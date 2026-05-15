@@ -36,7 +36,14 @@ apiClient.interceptors.response.use(
       return data
     }
 
-    // 业务错误
+    // 认证失败（token 过期/无效）→ 静默清理，由路由守卫统一引导到登录页
+    if (code === 401) {
+      const userStore = useUserStore()
+      userStore.logout()
+      return Promise.reject(new Error(msg || '认证失败'))
+    }
+
+    // 其他业务错误 — 仅显示一次通用提示
     message.error(msg || '请求失败')
     return Promise.reject(new Error(msg || '请求失败'))
   },

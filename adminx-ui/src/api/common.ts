@@ -7,6 +7,8 @@ export interface SiteInfo {
   site_logo: string
   site_theme_color: string
   idle_timeout: number
+  login_bg_image: string
+  app_version: string
 }
 
 // 组件监控 API
@@ -37,4 +39,11 @@ export const commonApi = {
   // 清理缓存
   cacheClear: (prefix?: string): Promise<{ cleared: number | string }> =>
     request.post('/common/cache/clear/', { prefix }),
+
+  // NTP 时间同步
+  ntpStatus: (): Promise<{ enabled: boolean; server: string }> =>
+    request.get('/common/ntp/sync/'),
+
+  ntpSync: (): Promise<{ success: boolean; server: string; offset?: number; error?: string }> =>
+    request.post('/common/ntp/sync/'),
 }

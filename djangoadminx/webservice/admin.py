@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import JobLog, ScheduleJob, WebService, WebServiceLog
+from .models import JobLog, ScheduleJob, SchedulerHeartbeat, WebService, WebServiceLog
 
 
 @admin.register(WebService)
@@ -22,6 +22,12 @@ class JobLogAdmin(admin.ModelAdmin):
     list_display = ["job", "status", "started_at", "finished_at"]
     list_filter = ["status"]
     readonly_fields = ["job", "status", "result", "started_at", "finished_at"]
+
+
+@admin.register(SchedulerHeartbeat)
+class SchedulerHeartbeatAdmin(admin.ModelAdmin):
+    list_display = ["id", "last_heartbeat", "reload_pending"]
+    readonly_fields = ["id", "last_heartbeat", "reload_pending"]
 
 
 @admin.register(WebServiceLog)

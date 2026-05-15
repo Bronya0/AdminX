@@ -126,6 +126,18 @@ class JobLog(models.Model):
         ordering = ["-started_at"]
 
 
+class SchedulerHeartbeat(models.Model):
+    """调度器进程心跳 — 跨进程检测调度器存活与通知重载（独立于 Redis）"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    last_heartbeat = models.DateTimeField("最后心跳", null=True, blank=True)
+    reload_pending = models.BooleanField("待重载", default=False)
+
+    class Meta:
+        verbose_name = "调度器心跳"
+        verbose_name_plural = "调度器心跳"
+
+
 class WebServiceLog(models.Model):
     """WebService 调用日志"""
 

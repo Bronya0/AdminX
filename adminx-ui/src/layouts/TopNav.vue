@@ -2,7 +2,7 @@
   <div class="top-nav" :class="{ 'mix-mode': isMix }">
     <div class="top-nav-logo" v-if="showLogo">
       <DashboardOutlined style="font-size: 28px; color: #1890ff" />
-      <span v-if="!isMix">{{ userStore.siteName }}</span>
+      <span>{{ userStore.siteName }}</span>
     </div>
     <a-menu
       :selectedKeys="selectedKeys"

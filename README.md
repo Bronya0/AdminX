@@ -70,7 +70,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # 安装依赖
-pip install -r requirements/dev.txt
+pip install -r requirements.txt
 
 # 复制环境变量
 cp .env.example .env
@@ -121,14 +121,19 @@ DjangoAdminX/
 │   ├── urls.py                    #   路由入口
 │   ├── wsgi.py                    #   WSGI（Gunicorn）
 │   └── asgi.py                    #   ASGI（Channels WebSocket）
-├── docker/
-│   └── Dockerfile
-├── nginx/
-│   └── nginx.conf
-├── requirements/
-│   ├── base.txt
-│   ├── dev.txt
-│   └── prod.txt
+├── deploy/
+│   ├── docker/
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   ├── djangoadminx-scheduler.service
+│   │   ├── djangoadminx.service
+│   │   └── supervisor.conf
+│   ├── nginx/
+│   │   └── nginx.conf
+│   └── docker-compose.yml
+├── start-linux.sh
+├── start-win.bat
+├── requirements.txt
 └── manage.py
 ```
 

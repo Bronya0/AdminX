@@ -6,6 +6,11 @@
   --header-height: 64px;
   --footer-height: 48px;
   --primary-color: #1890ff;
+
+  /* 布局背景色（供 scoped 样式通过 var() 读取） */
+  --admin-bg-header: #fff;
+  --admin-bg-content: #f0f2f5;
+  --admin-header-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 * {
@@ -105,20 +110,15 @@ html, body, #app {
 /* 暗黑模式 */
 .dark {
   color-scheme: dark;
+
+  --admin-bg-header: #1f1f1f;
+  --admin-bg-content: #141414;
+  --admin-header-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .dark body {
   background: #141414;
   color: #fff;
-}
-
-.dark .admin-layout-content {
-  background: #141414;
-}
-
-.dark .admin-layout-header {
-  background: #1f1f1f;
-  border-bottom: 1px solid #333;
 }
 
 /* 滚动条样式 */

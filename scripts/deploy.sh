@@ -42,7 +42,7 @@ echo ">>> 创建虚拟环境..."
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --quiet --upgrade pip
-pip install --quiet -r requirements/prod.txt
+pip install --quiet -r requirements.txt
 
 # ── 5. 环境变量 ──
 echo ""

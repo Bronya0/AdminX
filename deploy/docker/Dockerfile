@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev redis-tools && \
     rm -rf /var/lib/apt/lists/*
 
-COPY requirements/prod.txt /app/requirements/
-RUN pip install --no-cache-dir -r /app/requirements/prod.txt
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
@@ -19,7 +19,7 @@ RUN mkdir -p /app/logs /app/media /app/staticfiles
 
 EXPOSE 8000
 
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY deploy/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

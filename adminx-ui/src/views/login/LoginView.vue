@@ -1,5 +1,5 @@
 <template>
-  <div class="login-container">
+  <div class="login-container" :style="bgStyle">
     <div class="login-box">
       <div class="login-title">
         <h1>{{ siteName }}</h1>
@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, h, onMounted } from 'vue'
+import { ref, reactive, h, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons-vue'
@@ -92,6 +92,7 @@ const captchaId = ref('')
 const formRef = ref()
 const siteName = ref('DjangoAdminX')
 const siteDesc = ref('企业级 Django Admin 框架')
+const loginBgImage = ref('')
 
 // 表单状态
 const formState = reactive({
@@ -151,12 +152,26 @@ const forgotPassword = () => {
   message.info('请联系管理员重置密码')
 }
 
+// 计算背景样式
+const bgStyle = computed(() => {
+  if (loginBgImage.value) {
+    return {
+      background: `url(${loginBgImage.value}) center / cover no-repeat`,
+    }
+  }
+  // 为空时使用 CSS 中定义的默认渐变
+  return {}
+})
+
 onMounted(async () => {
-  // 获取站点名称
+  // 清除残留的旧 token，避免公共 API 携带过期令牌触发 401
+  userStore.token = ''
+  // 获取站点名称和背景图
   try {
     const res = await commonApi.getSiteInfo()
     siteName.value = res.site_name
     siteDesc.value = res.site_desc
+    loginBgImage.value = res.login_bg_image
   } catch (e) {
     // 使用默认值
   }

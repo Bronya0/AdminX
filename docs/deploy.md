@@ -99,7 +99,7 @@ sudo apt-get install -y python3-venv redis-server postgresql nginx supervisor
 # 2. 虚拟环境
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements/prod.txt
+pip install -r requirements.txt
 
 # 3. 配置 .env
 cp .env.example .env
@@ -111,7 +111,7 @@ python manage.py init_data
 python manage.py collectstatic --noinput
 
 # 5. 启动服务 (Supervisor)
-# 参考 docker/supervisor.conf 配置 gunicorn + scheduler
+# 参考 deploy/docker/supervisor.conf 配置 gunicorn + scheduler
 ```
 
 ---
@@ -133,7 +133,7 @@ Nginx (主) ─── 节点1 (gunicorn)
 
 ### Nginx 负载均衡配置
 
-编辑 `nginx/nginx.conf`，在 upstream 中列出所有节点:
+编辑 `deploy/nginx/nginx.conf`，在 upstream 中列出所有节点:
 
 ```nginx
 upstream django_backend {
@@ -155,7 +155,7 @@ upstream django_backend {
 # 每台节点:
 git clone https://github.com/Bronya0/DjangoAdminX.git
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements/prod.txt
+pip install -r requirements.txt
 
 # 迁移和静态文件只在主节点执行一次
 # python manage.py migrate

@@ -11,7 +11,7 @@ import LoginView from '@/views/login/LoginView.vue'
 // 系统管理
 import UserList from '@/views/system/UserList.vue'
 import RoleList from '@/views/system/RoleList.vue'
-import MenuList from '@/views/system/MenuList.vue'
+import PermissionList from '@/views/system/PermissionList.vue'
 import ConfigList from '@/views/config/ConfigList.vue'
 
 // 监控
@@ -22,6 +22,9 @@ import ClusterNodes from '@/views/cluster/ClusterNodes.vue'
 
 // 通知中心
 import NotificationCenter from '@/views/notification/NotificationCenter.vue'
+
+// 主题设置
+import ThemeSettings from '@/views/system/ThemeSettings.vue'
 
 // 定时任务
 import ScheduleJobList from '@/views/scheduler/ScheduleJobList.vue'
@@ -68,10 +71,10 @@ const router = createRouter({
               meta: { title: '角色管理', permission: 'accounts:role:list' },
             },
             {
-              path: 'menus',
-              name: 'menus',
-              component: MenuList,
-              meta: { title: '菜单管理', permission: 'menu:menu:list' },
+              path: 'permissions',
+              name: 'permissions',
+              component: PermissionList,
+              meta: { title: '权限管理', icon: 'SafetyOutlined' },
             },
             {
               path: 'config',
@@ -110,23 +113,29 @@ const router = createRouter({
               meta: { title: '通知中心', icon: 'BellOutlined', permission: 'notification:notification:list' },
             },
             {
-              path: 'audit',
-              name: 'system-audit',
-              meta: { title: '安全审计', icon: 'SafetyOutlined' },
-              children: [
-                {
-                  path: 'log',
-                  name: 'system-audit-log',
-                  component: AuditLogList,
-                  meta: { title: '操作审计', permission: 'audit:auditlog:list' },
-                },
-                {
-                  path: 'login-log',
-                  name: 'system-audit-login-log',
-                  component: LoginLogList,
-                  meta: { title: '登录日志', permission: 'accounts:userloginlog:list' },
-                },
-              ],
+              path: 'theme',
+              name: 'system-theme',
+              component: ThemeSettings,
+              meta: { title: '主题设置', icon: 'BgColorsOutlined' },
+            },
+          ],
+        },
+        {
+          path: 'audit',
+          name: 'audit',
+          meta: { title: '安全审计', icon: 'SafetyOutlined' },
+          children: [
+            {
+              path: 'log',
+              name: 'audit-log',
+              component: AuditLogList,
+              meta: { title: '操作审计', permission: 'audit:auditlog:list' },
+            },
+            {
+              path: 'login-log',
+              name: 'audit-login-log',
+              component: LoginLogList,
+              meta: { title: '登录日志', permission: 'accounts:userloginlog:list' },
             },
           ],
         },
@@ -160,7 +169,7 @@ router.beforeEach(async (to, from, next) => {
   if (!userStore.user || !userStore.menus || userStore.menus.length === 0) {
     try {
       await userStore.fetchUserInfo()
-      userStore.fetchSiteInfo()
+      await userStore.fetchSiteInfo()
     } catch (e) {
       message.error('获取用户信息失败')
       userStore.logout()

@@ -66,3 +66,33 @@ class IPBlockMiddleware:
             pass
 
         return self.get_response(request)
+
+
+class UserActivityMiddleware:
+    """更新已认证用户的最后活动时间 (用于在线状态判定)
+
+    防抖策略：距上次更新超过 60 秒才写入，避免每个请求都写库。
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return response
+
+        try:
+            from django.utils import timezone
+            now = timezone.now()
+            # 防抖：如果距上次更新 < 60 秒，跳过
+            last = getattr(user, 'last_activity', None)
+            if last is None or (now - last).total_seconds() >= 60:
+                from djangoadminx.accounts.models import User
+                User.objects.filter(pk=user.pk).update(last_activity=now)
+        except Exception:
+            pass
+
+        return response

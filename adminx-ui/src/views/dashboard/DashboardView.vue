@@ -191,6 +191,7 @@ import { monitorApi } from '@/api/monitor'
 import { clusterApi } from '@/api/cluster'
 import { userApi, roleApi, loginLogApi } from '@/api/auth'
 import { menuApi } from '@/api/menu'
+import { formatDateTime } from '@/utils/format'
 import type { LoginLog } from '@/types'
 
 // 统计数据
@@ -213,7 +214,7 @@ const logColumns = [
   { title: 'IP 地址', dataIndex: 'ip', key: 'ip' },
   { title: '状态', key: 'success' },
   { title: '消息', dataIndex: 'message', key: 'message', ellipsis: true },
-  { title: '时间', dataIndex: 'created_at', key: 'created_at' },
+  { title: '时间', dataIndex: 'created_at', key: 'created_at', customRender: ({ text }: any) => formatDateTime(text) },
 ]
 
 // 定时器
