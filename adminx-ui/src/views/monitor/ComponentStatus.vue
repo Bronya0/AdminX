@@ -61,7 +61,7 @@
               <span>在线: {{ clusterStats.online }} / {{ clusterStats.total }}</span>
             </div>
             <div class="component-meta">
-              <a-button type="link" size="small" @click="$router.push('/cluster/nodes')">管理节点</a-button>
+              <a-button type="link" size="small" @click="$router.push('/system/nodes')">管理节点</a-button>
             </div>
           </a-skeleton>
         </a-card>
