@@ -80,7 +80,7 @@ const router = createRouter({
               path: 'config',
               name: 'system-config',
               component: ConfigList,
-              meta: { title: '配置中心', icon: 'AppstoreOutlined', permission: 'config_center:config:list' },
+              meta: { title: '配置中心', icon: 'ControlOutlined', permission: 'config_center:config:list' },
             },
             {
               path: 'resources',
@@ -123,7 +123,7 @@ const router = createRouter({
         {
           path: 'audit',
           name: 'audit',
-          meta: { title: '安全审计', icon: 'SafetyOutlined' },
+          meta: { title: '安全审计', icon: 'AuditOutlined' },
           children: [
             {
               path: 'log',
