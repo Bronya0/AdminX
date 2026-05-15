@@ -231,7 +231,7 @@ const statCards = computed(() => [
   { key: 'users',  label: '用户总数',  value: stats.userCount,     icon: UserOutlined,    color: '#1890ff', path: '/system/users' },
   { key: 'roles',  label: '角色数量',  value: stats.roleCount,     icon: TeamOutlined,    color: '#722ed1', path: '/system/roles' },
   { key: 'nodes',  label: '在线节点',  value: stats.onlineNodes,   icon: ClusterOutlined,  color: '#52c41a', path: '/system/nodes' },
-  { key: 'menus',  label: '菜单总数',  value: stats.menuCount,     icon: MenuOutlined,    color: '#fa8c16', path: '/system/menus' },
+  { key: 'menus',  label: '菜单总数',  value: stats.menuCount,     icon: MenuOutlined,    color: '#fa8c16', path: '/system/permissions' },
 ])
 
 const clusterStatusList = computed(() => [
@@ -244,7 +244,6 @@ const clusterStatusList = computed(() => [
 const quickLinks = [
   { label: '用户管理',  path: '/system/users',       icon: UserOutlined,    color: '#1890ff', bg: '#e6f7ff' },
   { label: '角色管理',  path: '/system/roles',       icon: TeamOutlined,    color: '#722ed1', bg: '#f9f0ff' },
-  { label: '菜单管理',  path: '/system/menus',       icon: MenuOutlined,    color: '#13c2c2', bg: '#e6fffb' },
   { label: '节点管理',  path: '/system/nodes',       icon: ClusterOutlined, color: '#52c41a', bg: '#f6ffed' },
   { label: '资源监控',  path: '/system/resources',   icon: MonitorOutlined, color: '#fa8c16', bg: '#fff7e6' },
   { label: '配置中心',  path: '/system/config',      icon: SettingOutlined, color: '#eb2f96', bg: '#fff0f6' },

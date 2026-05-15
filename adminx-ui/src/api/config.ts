@@ -4,7 +4,7 @@ import type { Config, PaginatedResponse } from '@/types'
 // 配置中心 API
 export const configApi = {
   // 获取配置列表
-  getConfigs: (params?: { page?: number; size?: number; search?: string; group?: string }): Promise<PaginatedResponse<Config>> =>
+  getConfigs: (params?: { page?: number; size?: number; search?: string; group?: string; value_type?: string; desc?: string; is_active?: boolean }): Promise<PaginatedResponse<Config>> =>
     request.get('/config/', { params }),
 
   // 获取配置详情

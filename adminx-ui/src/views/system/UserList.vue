@@ -11,6 +11,41 @@
             @pressEnter="handleSearch"
           />
         </a-form-item>
+        <a-form-item label="角色">
+          <a-select
+            v-model:value="searchForm.role"
+            placeholder="全部"
+            allow-clear
+            style="width: 150px"
+            @change="handleSearch"
+          >
+            <a-select-option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="在线">
+          <a-select
+            v-model:value="searchForm.is_online"
+            placeholder="全部"
+            allow-clear
+            style="width: 120px"
+            @change="handleSearch"
+          >
+            <a-select-option value="true">在线</a-select-option>
+            <a-select-option value="false">离线</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="状态">
+          <a-select
+            v-model:value="searchForm.is_active"
+            placeholder="全部"
+            allow-clear
+            style="width: 120px"
+            @change="handleSearch"
+          >
+            <a-select-option :value="true">启用</a-select-option>
+            <a-select-option :value="false">禁用</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 搜索
@@ -200,6 +235,9 @@ const pagination = reactive({
 })
 const searchForm = reactive({
   search: '',
+  is_active: undefined as boolean | undefined,
+  role: undefined as string | undefined,
+  is_online: undefined as string | undefined,
 })
 
 // 角色选项
@@ -243,6 +281,9 @@ const loadData = async () => {
       page: pagination.current,
       size: pagination.pageSize,
       search: searchForm.search,
+      is_active: searchForm.is_active,
+      role: searchForm.role,
+      is_online: searchForm.is_online,
     })
     tableData.value = res.results
     pagination.total = res.count
@@ -273,6 +314,9 @@ const handleSearch = () => {
 // 重置搜索
 const resetSearch = () => {
   searchForm.search = ''
+  searchForm.is_active = undefined
+  searchForm.role = undefined
+  searchForm.is_online = undefined
   handleSearch()
 }
 

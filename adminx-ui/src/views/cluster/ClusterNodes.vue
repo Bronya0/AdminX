@@ -54,6 +54,19 @@
             @pressEnter="handleSearch"
           />
         </a-form-item>
+        <a-form-item label="状态">
+          <a-select
+            v-model:value="searchForm.status"
+            placeholder="全部"
+            allow-clear
+            style="width: 120px"
+            @change="handleSearch"
+          >
+            <a-select-option value="online">在线</a-select-option>
+            <a-select-option value="offline">离线</a-select-option>
+            <a-select-option value="maintenance">维护</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 搜索
@@ -251,6 +264,7 @@ const pagination = reactive({
 })
 const searchForm = reactive({
   search: '',
+  status: undefined as string | undefined,
 })
 
 // 弹窗状态
@@ -315,6 +329,7 @@ const loadData = async () => {
       page: pagination.current,
       size: pagination.pageSize,
       search: searchForm.search,
+      status: searchForm.status,
     })
     tableData.value = res.results
     pagination.total = res.count
@@ -332,6 +347,7 @@ const handleSearch = () => {
 // 重置搜索
 const resetSearch = () => {
   searchForm.search = ''
+  searchForm.status = undefined
   handleSearch()
 }
 

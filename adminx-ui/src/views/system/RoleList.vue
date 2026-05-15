@@ -6,10 +6,38 @@
         <a-form-item label="角色名称">
           <a-input
             v-model:value="searchForm.search"
-            placeholder="请输入角色名称"
+            placeholder="名称"
             allow-clear
             @pressEnter="handleSearch"
           />
+        </a-form-item>
+        <a-form-item label="编码">
+          <a-input
+            v-model:value="searchForm.code"
+            placeholder="编码"
+            allow-clear
+            @pressEnter="handleSearch"
+          />
+        </a-form-item>
+        <a-form-item label="描述">
+          <a-input
+            v-model:value="searchForm.desc"
+            placeholder="描述"
+            allow-clear
+            @pressEnter="handleSearch"
+          />
+        </a-form-item>
+        <a-form-item label="状态">
+          <a-select
+            v-model:value="searchForm.is_active"
+            placeholder="全部"
+            allow-clear
+            style="width: 120px"
+            @change="handleSearch"
+          >
+            <a-select-option :value="true">启用</a-select-option>
+            <a-select-option :value="false">禁用</a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
@@ -212,7 +240,7 @@ const pagination = reactive({
   showSizeChanger: true,
   showTotal: (total: number) => `共 ${total} 条`,
 })
-const searchForm = reactive({ search: '' })
+const searchForm = reactive({ search: '', code: '', desc: '', is_active: undefined as boolean | undefined })
 
 // 弹窗状态
 const modalVisible = ref(false)
@@ -254,7 +282,7 @@ const filteredMenuTreeData = ref<any[]>([])
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await roleApi.getRoles({ page: pagination.current, size: pagination.pageSize, search: searchForm.search })
+    const res = await roleApi.getRoles({ page: pagination.current, size: pagination.pageSize, search: searchForm.search, code: searchForm.code || undefined, desc: searchForm.desc || undefined, is_active: searchForm.is_active })
     tableData.value = res.results
     pagination.total = res.count
   } finally {
@@ -351,7 +379,7 @@ const deselectAllMenus = () => { selectedMenus.value = [] }
 
 // 搜索
 const handleSearch = () => { pagination.current = 1; loadData() }
-const resetSearch = () => { searchForm.search = ''; handleSearch() }
+const resetSearch = () => { searchForm.search = ''; searchForm.code = ''; searchForm.desc = ''; searchForm.is_active = undefined; handleSearch() }
 const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize

@@ -7,7 +7,10 @@ export const auditApi = {
     page?: number
     size?: number
     search?: string
-    ordering?: string
+    action?: string
+    model_name?: string
+    created_at__gte?: string
+    created_at__lte?: string
   }): Promise<PaginatedResponse<AuditLog>> =>
     request.get('/audit/', { params }),
 }

@@ -3,22 +3,59 @@
     <!-- 搜索栏 -->
     <a-card class="search-card">
       <a-form layout="inline" :model="searchForm">
-        <a-form-item label="配置键">
+        <a-form-item label="键">
           <a-input
             v-model:value="searchForm.search"
-            placeholder="请输入配置键"
+            placeholder="配置键"
             allow-clear
             @pressEnter="handleSearch"
           />
         </a-form-item>
+        <a-form-item label="类型">
+          <a-select
+            v-model:value="searchForm.value_type"
+            placeholder="全部"
+            allow-clear
+            style="width: 120px"
+            @change="handleSearch"
+          >
+            <a-select-option value="string">字符串</a-select-option>
+            <a-select-option value="int">整数</a-select-option>
+            <a-select-option value="bool">布尔</a-select-option>
+            <a-select-option value="json">JSON</a-select-option>
+            <a-select-option value="encrypted">加密</a-select-option>
+            <a-select-option value="options">选项列表</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item label="分组">
           <a-select
             v-model:value="searchForm.group"
-            placeholder="请选择分组"
+            placeholder="全部"
             allow-clear
-            style="width: 150px"
+            style="width: 120px"
+            @change="handleSearch"
           >
             <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="描述">
+          <a-input
+            v-model:value="searchForm.desc"
+            placeholder="描述"
+            allow-clear
+            @pressEnter="handleSearch"
+          />
+        </a-form-item>
+        <a-form-item label="状态">
+          <a-select
+            v-model:value="searchForm.is_active"
+            placeholder="全部"
+            allow-clear
+            style="width: 100px"
+            @change="handleSearch"
+          >
+            <a-select-option :value="true">启用</a-select-option>
+            <a-select-option :value="false">禁用</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item>
@@ -203,6 +240,9 @@ const pagination = reactive({
 const searchForm = reactive({
   search: '',
   group: '',
+  value_type: undefined as string | undefined,
+  desc: '',
+  is_active: undefined as boolean | undefined,
 })
 
 // 分组选项（动态加载）
@@ -275,6 +315,9 @@ const loadData = async () => {
       size: pagination.pageSize,
       search: searchForm.search,
       group: searchForm.group,
+      value_type: searchForm.value_type,
+      desc: searchForm.desc || undefined,
+      is_active: searchForm.is_active,
     })
     tableData.value = res.results
     pagination.total = res.count
@@ -293,6 +336,9 @@ const handleSearch = () => {
 const resetSearch = () => {
   searchForm.search = ''
   searchForm.group = ''
+  searchForm.value_type = undefined
+  searchForm.desc = ''
+  searchForm.is_active = undefined
   handleSearch()
 }
 

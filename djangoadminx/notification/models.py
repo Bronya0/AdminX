@@ -4,6 +4,49 @@ from django.conf import settings
 from django.db import models
 
 
+class WebhookConfig(models.Model):
+    """Webhook 外发配置"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField("名称", max_length=128)
+    url = models.URLField("Webhook URL", max_length=512)
+    secret = models.CharField("签名密钥", max_length=256, blank=True, default="")
+    events = models.CharField("触发事件", max_length=256, blank=True, default="info,success,warning,error",
+                              help_text="逗号分隔的通知类型，空=全部")
+    is_active = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Webhook 配置"
+        verbose_name_plural = "Webhook 配置"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
+class WebhookLog(models.Model):
+    """Webhook 发送日志"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    webhook = models.ForeignKey(WebhookConfig, on_delete=models.CASCADE, verbose_name="Webhook 配置")
+    notification = models.ForeignKey("Notification", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="关联通知")
+    status = models.CharField("状态", max_length=20, choices=[("success", "成功"), ("failed", "失败")], default="success")
+    response_status = models.IntegerField("HTTP 状态码", null=True, blank=True)
+    response_body = models.TextField("响应内容", blank=True, default="")
+    error_message = models.TextField("错误信息", blank=True, default="")
+    created_at = models.DateTimeField("发送时间", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Webhook 发送日志"
+        verbose_name_plural = "Webhook 发送日志"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.webhook.name} - {self.status}"
+
+
 class Notification(models.Model):
     """系统通知"""
 

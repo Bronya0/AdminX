@@ -31,7 +31,7 @@ export const webserviceApi = {
 // 定时任务 API
 export const scheduleJobApi = {
   // 获取任务列表
-  getJobs: (params?: { page?: number; search?: string }): Promise<PaginatedResponse<ScheduleJob>> =>
+  getJobs: (params?: { page?: number; size?: number; search?: string; command_type?: string; trigger_type?: string; is_active?: boolean }): Promise<PaginatedResponse<ScheduleJob>> =>
     request.get('/webservice/jobs/', { params }),
 
   // 获取任务详情

@@ -3,7 +3,7 @@ import type { Notification, PaginatedResponse } from '@/types'
 
 export const notificationApi = {
   /** 获取通知列表 */
-  list: (params?: { page?: number; size?: number }): Promise<PaginatedResponse<Notification>> =>
+  list: (params?: { page?: number; size?: number; search?: string; notification_type?: string; is_read?: boolean }): Promise<PaginatedResponse<Notification>> =>
     request.get('/notification/', { params }),
 
   /** 标记已读 */

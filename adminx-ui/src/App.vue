@@ -1,5 +1,5 @@
 <template>
-  <a-config-provider :theme="antTheme">
+  <a-config-provider :locale="zhCN" :theme="antTheme">
     <router-view />
   </a-config-provider>
 </template>
@@ -8,6 +8,7 @@
 import { computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { theme } from 'ant-design-vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
 
 const userStore = useUserStore()
 

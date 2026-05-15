@@ -15,6 +15,7 @@ class ClusterNodeViewSet(AuditLogMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     search_fields = ["name", "host"]
     ordering_fields = ["name", "status", "created_at"]
+    filterset_fields = ["status"]
 
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def overview(self, request):

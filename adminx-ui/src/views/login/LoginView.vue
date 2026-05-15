@@ -138,6 +138,7 @@ const handleSubmit = async () => {
     router.push('/')
   } catch (e: any) {
     console.error('Login error:', e)
+    message.error(e.message || '登录失败')
     // 登录失败，刷新验证码
     if (captchaEnabled.value) {
       fetchCaptcha()

@@ -4,7 +4,7 @@ import type { ClusterNode, ClusterOverview, PaginatedResponse } from '@/types'
 // 集群管理 API
 export const clusterApi = {
   // 获取节点列表
-  getNodes: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<ClusterNode>> =>
+  getNodes: (params?: { page?: number; size?: number; search?: string; status?: string }): Promise<PaginatedResponse<ClusterNode>> =>
     request.get('/cluster/nodes/', { params }),
 
   // 获取节点详情

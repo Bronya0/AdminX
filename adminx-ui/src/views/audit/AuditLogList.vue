@@ -16,12 +16,28 @@
             v-model:value="searchForm.action"
             placeholder="全部"
             allow-clear
-            style="width: 120px"
+            style="width: 100px"
           >
             <a-select-option value="create">创建</a-select-option>
             <a-select-option value="update">更新</a-select-option>
             <a-select-option value="delete">删除</a-select-option>
           </a-select>
+        </a-form-item>
+        <a-form-item label="模型">
+          <a-input
+            v-model:value="searchForm.model_name"
+            placeholder="模型名称"
+            allow-clear
+            @pressEnter="handleSearch"
+            style="width: 140px"
+          />
+        </a-form-item>
+        <a-form-item label="起止">
+          <a-range-picker
+            v-model:value="dateRange"
+            :placeholder="['开始日期', '结束日期']"
+            @change="handleSearch"
+          />
         </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
@@ -79,10 +95,11 @@ const actionLabel = (action: string) =>
 const actionColor = (action: string) =>
   ({ create: 'green', update: 'blue', delete: 'red' })[action] || 'default'
 
-const searchForm = ref({ search: '', action: undefined as string | undefined })
+const searchForm = ref({ search: '', action: undefined as string | undefined, model_name: '' })
+const dateRange = ref<[any, any] | null>(null)
 const tableData = ref<AuditLog[]>([])
 const loading = ref(false)
-const pagination = ref({ current: 1, pageSize: 20, total: 0 })
+const pagination = ref({ current: 1, pageSize: 10, total: 0 })
 
 const fetchData = async () => {
   loading.value = true
@@ -92,6 +109,10 @@ const fetchData = async () => {
       size: pagination.value.pageSize,
     }
     if (searchForm.value.search) params.search = searchForm.value.search
+    if (searchForm.value.action) params.action = searchForm.value.action
+    if (searchForm.value.model_name) params.model_name = searchForm.value.model_name
+    if (dateRange.value && dateRange.value[0]) params.created_at__gte = dateRange.value[0].format('YYYY-MM-DD')
+    if (dateRange.value && dateRange.value[1]) params.created_at__lte = dateRange.value[1].format('YYYY-MM-DD') + ' 23:59:59'
 
     const res = await auditApi.getAuditLogs(params)
     tableData.value = res.results
@@ -107,7 +128,8 @@ const handleSearch = () => {
 }
 
 const resetSearch = () => {
-  searchForm.value = { search: '', action: undefined }
+  searchForm.value = { search: '', action: undefined, model_name: '' }
+  dateRange.value = null
   pagination.value.current = 1
   fetchData()
 }

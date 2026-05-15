@@ -170,7 +170,6 @@ import { notificationApi } from '@/api/notification'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  DashboardOutlined,
   SettingOutlined,
   UserOutlined,
   BellOutlined,
@@ -223,12 +222,6 @@ const sidebarMenus = computed<SidebarItem[]>(() => {
   if (dashboardIdx > 0) {
     const [dash] = items.splice(dashboardIdx, 1)
     items.unshift(dash)
-  } else if (dashboardIdx === -1) {
-    items.unshift({
-      key: '/dashboard',
-      title: '仪表盘',
-      icon: 'DashboardOutlined',
-    })
   }
 
   return items

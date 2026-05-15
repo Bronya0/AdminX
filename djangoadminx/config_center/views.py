@@ -19,6 +19,14 @@ class ConfigViewSet(AuditLogMixin,
     permission_classes = [IsAdminUser]
     search_fields = ["key", "desc", "group"]
     ordering_fields = ["group", "key", "created_at"]
+    filterset_fields = ["group", "value_type", "is_active"]
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        desc = self.request.query_params.get("desc")
+        if desc:
+            queryset = queryset.filter(desc__icontains=desc)
+        return queryset
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def by_group(self, request):

@@ -67,8 +67,9 @@ class ScheduleJobViewSet(AuditLogMixin, viewsets.ModelViewSet):
     queryset = ScheduleJob.objects.all()
     serializer_class = ScheduleJobSerializer
     permission_classes = [IsAdminUser]
-    search_fields = ["name", "handler"]
+    search_fields = ["name", "handler", "command"]
     ordering_fields = ["name", "created_at"]
+    filterset_fields = ["command_type", "trigger_type", "is_active"]
 
     @action(detail=True, methods=["post"])
     def run_once(self, request, pk=None):

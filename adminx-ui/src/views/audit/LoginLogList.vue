@@ -3,12 +3,21 @@
     <!-- 搜索栏 -->
     <a-card class="search-card">
       <a-form layout="inline" :model="searchForm">
-        <a-form-item label="用户名">
+        <a-form-item label="关键字">
           <a-input
             v-model:value="searchForm.search"
-            placeholder="请输入用户名"
+            placeholder="用户名/IP/消息"
             allow-clear
             @pressEnter="handleSearch"
+          />
+        </a-form-item>
+        <a-form-item label="IP">
+          <a-input
+            v-model:value="searchForm.ip"
+            placeholder="IP 地址"
+            allow-clear
+            @pressEnter="handleSearch"
+            style="width: 140px"
           />
         </a-form-item>
         <a-form-item label="结果">
@@ -21,6 +30,13 @@
             <a-select-option :value="true">成功</a-select-option>
             <a-select-option :value="false">失败</a-select-option>
           </a-select>
+        </a-form-item>
+        <a-form-item label="起止">
+          <a-range-picker
+            v-model:value="dateRange"
+            :placeholder="['开始日期', '结束日期']"
+            @change="handleSearch"
+          />
         </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
@@ -74,16 +90,21 @@ const columns = [
   { title: '登录时间', dataIndex: 'created_at', key: 'created_at', width: 180, customRender: ({ text }: any) => formatDateTime(text) },
 ]
 
-const searchForm = ref({ search: '', success: undefined as boolean | undefined })
+const searchForm = ref({ search: '', ip: '', success: undefined as boolean | undefined })
+const dateRange = ref<[any, any] | null>(null)
 const tableData = ref<LoginLog[]>([])
 const loading = ref(false)
-const pagination = ref({ current: 1, pageSize: 20, total: 0 })
+const pagination = ref({ current: 1, pageSize: 10, total: 0 })
 
 const fetchData = async () => {
   loading.value = true
   try {
-    const params: any = { page: pagination.value.current }
+    const params: any = { page: pagination.value.current, size: pagination.value.pageSize }
     if (searchForm.value.search) params.search = searchForm.value.search
+    if (searchForm.value.ip) params.ip = searchForm.value.ip
+    if (searchForm.value.success !== undefined) params.success = searchForm.value.success
+    if (dateRange.value && dateRange.value[0]) params.created_at__gte = dateRange.value[0].format('YYYY-MM-DD')
+    if (dateRange.value && dateRange.value[1]) params.created_at__lte = dateRange.value[1].format('YYYY-MM-DD') + ' 23:59:59'
 
     const res = await loginLogApi.getLoginLogs(params)
     tableData.value = res.results
@@ -99,7 +120,8 @@ const handleSearch = () => {
 }
 
 const resetSearch = () => {
-  searchForm.value = { search: '', success: undefined }
+  searchForm.value = { search: '', ip: '', success: undefined }
+  dateRange.value = null
   pagination.value.current = 1
   fetchData()
 }

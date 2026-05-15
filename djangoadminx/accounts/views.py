@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Permission
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.views import APIView
@@ -147,8 +148,23 @@ class LogoutView(APIView):
 class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """用户 CRUD"""
     queryset = User.objects.all()
-    search_fields = ["username", "email", "phone"]
+    search_fields = ["username", "email", "phone", "desc"]
     ordering_fields = ["date_joined", "username"]
+    filterset_fields = ["is_active"]
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        role = self.request.query_params.get("role")
+        if role:
+            queryset = queryset.filter(roles__code=role)
+        is_online = self.request.query_params.get("is_online")
+        if is_online == "true":
+            queryset = queryset.filter(last_activity__gte=timezone.now() - timedelta(minutes=5))
+        elif is_online == "false":
+            queryset = queryset.filter(
+                Q(last_activity__lt=timezone.now() - timedelta(minutes=5)) | Q(last_activity__isnull=True)
+            )
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -188,8 +204,16 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """角色 CRUD"""
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
-    search_fields = ["name", "code"]
+    search_fields = ["name", "code", "desc"]
     ordering_fields = ["name", "created_at"]
+    filterset_fields = ["is_active", "code"]
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        desc = self.request.query_params.get("desc")
+        if desc:
+            queryset = queryset.filter(desc__icontains=desc)
+        return queryset
 
 
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -208,3 +232,17 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ["username", "ip", "message"]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
+    filterset_fields = ["success"]
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        date_from = self.request.query_params.get("created_at__gte")
+        if date_from:
+            queryset = queryset.filter(created_at__gte=date_from)
+        date_to = self.request.query_params.get("created_at__lte")
+        if date_to:
+            queryset = queryset.filter(created_at__lte=date_to)
+        ip = self.request.query_params.get("ip")
+        if ip:
+            queryset = queryset.filter(ip__icontains=ip)
+        return queryset

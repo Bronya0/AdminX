@@ -1,11 +1,11 @@
 from django.db import models
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Notification
-from .serializers import NotificationSerializer
+from .models import Notification, WebhookConfig, WebhookLog
+from .serializers import NotificationSerializer, WebhookConfigSerializer, WebhookLogSerializer
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -13,6 +13,8 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
     ordering = ["-created_at"]
+    search_fields = ["title", "content"]
+    filterset_fields = ["notification_type", "is_read"]
 
     def get_queryset(self):
         user = self.request.user
@@ -41,3 +43,35 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         """未读通知数量"""
         count = self.get_queryset().filter(is_read=False).count()
         return Response({"code": 200, "msg": "success", "data": {"count": count}})
+
+
+class WebhookConfigViewSet(viewsets.ModelViewSet):
+    """Webhook 配置 CRUD"""
+    queryset = WebhookConfig.objects.all()
+    serializer_class = WebhookConfigSerializer
+    permission_classes = [IsAdminUser]
+    search_fields = ["name", "url"]
+    ordering_fields = ["name", "created_at"]
+
+    @action(detail=True, methods=["post"])
+    def test(self, request, pk=None):
+        """测试发送"""
+        config = self.get_object()
+        from .webhook import send_webhook
+        from .models import Notification
+        notification = Notification.objects.create(
+            title=f"Webhook 测试 - {config.name}",
+            content="这是一条测试消息",
+            notification_type="info",
+        )
+        send_webhook(config, notification)
+        return Response({"code": 200, "msg": "测试消息已发送"})
+
+
+class WebhookLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Webhook 发送日志"""
+    queryset = WebhookLog.objects.select_related("webhook").all()
+    serializer_class = WebhookLogSerializer
+    permission_classes = [IsAdminUser]
+    ordering = ["-created_at"]
+    filterset_fields = ["webhook", "status"]

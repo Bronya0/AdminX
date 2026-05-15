@@ -1,42 +1,35 @@
 <template>
   <div class="page-container">
-    <!-- 搜索栏 -->
-    <a-card class="search-card">
-      <a-form layout="inline">
-        <a-form-item label="搜索">
-          <a-input
-            v-model:value="searchText"
-            placeholder="搜索权限名称或编码"
-            allow-clear
-            @pressEnter="filterData"
-          />
-        </a-form-item>
-        <a-form-item>
-          <a-button type="primary" @click="filterData">
-            <SearchOutlined /> 搜索
-          </a-button>
-          <a-button style="margin-left: 8px" @click="resetSearch">
-            <ReloadOutlined /> 重置
-          </a-button>
-        </a-form-item>
-      </a-form>
-    </a-card>
-
-    <!-- 主体内容 -->
     <a-card class="table-card">
       <a-tabs v-model:activeKey="activeTab" type="card">
         <!-- ===== 接口权限 ===== -->
         <a-tab-pane key="api" tab="接口权限">
           <div class="table-toolbar">
+            <a-form layout="inline" style="flex-wrap: wrap; gap: 4px;">
+              <a-form-item label="名称">
+                <a-input v-model:value="searchName" placeholder="权限名称" allow-clear @pressEnter="filterApiPerms" />
+              </a-form-item>
+              <a-form-item label="编码">
+                <a-input v-model:value="searchCodeName" placeholder="权限编码" allow-clear @pressEnter="filterApiPerms" />
+              </a-form-item>
+              <a-form-item label="模块">
+                <a-select v-model:value="moduleFilter" placeholder="全部" allow-clear style="width: 140px" @change="filterApiPerms">
+                  <a-select-option v-for="m in moduleOptions" :key="m" :value="m">{{ m }}</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item>
+                <a-button type="primary" @click="filterApiPerms"><SearchOutlined /> 搜索</a-button>
+              </a-form-item>
+            </a-form>
             <span style="color: #999; font-size: 13px;">
-              共 {{ filteredApiPerms.length }} 条，由 Django 自动生成，按模型分类
+              共 {{ filteredApiPerms.length }} 条
             </span>
           </div>
 
           <a-table
             :columns="apiColumns"
             :data-source="filteredApiPerms"
-            :pagination="{ pageSize: 20, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条` }"
+            :pagination="{ pageSize: 10, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条` }"
             row-key="codename"
             size="middle"
           >
@@ -58,52 +51,55 @@
               <a-button type="primary" @click="handleAdd">
                 <PlusOutlined /> 新增菜单
               </a-button>
+              <a-button @click="expandAllMenuTree">
+                <ExpandOutlined /> 展开全部
+              </a-button>
+              <a-button @click="collapseAllMenuTree">
+                <CompressOutlined /> 收起全部
+              </a-button>
             </div>
-            <span style="color: #999; font-size: 13px;">
-              共 {{ filteredMenuPerms.length }} 条
-            </span>
+            <a-input-search
+              v-model:value="menuSearchText"
+              placeholder="搜索菜单名称..."
+              allow-clear
+              style="width: 240px"
+              @change="filterMenuTree"
+            />
           </div>
 
-          <a-table
-            :columns="menuColumns"
-            :data-source="filteredMenuPerms"
-            :pagination="{ pageSize: 20, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条` }"
-            row-key="id"
-            size="middle"
+          <a-tree
+            v-model:expandedKeys="menuExpandedKeys"
+            :tree-data="filteredMenuTreeData"
+            :loading="loading"
+            :draggable="true"
+            :block-node="true"
+            :show-line="true"
+            @drop="handleMenuDrop"
           >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'name'">
-                <a-space>
-                  <component :is="resolveIcon(record.icon)" v-if="record.icon" />
-                  <span>{{ record.name }}</span>
-                </a-space>
-              </template>
-              <template v-if="column.key === 'menu_type'">
-                <a-tag :color="getTypeColor(record.menu_type)">{{ getTypeText(record.menu_type) }}</a-tag>
-              </template>
-              <template v-if="column.key === 'permission_code'">
-                <a-tag v-if="record.permission_code" color="blue">{{ record.permission_code }}</a-tag>
-                <span v-else style="color: #ccc;">-</span>
-              </template>
-              <template v-if="column.key === 'is_active'">
-                <a-tag :color="record.is_active ? 'success' : 'error'">
-                  {{ record.is_active ? '启用' : '禁用' }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'action'">
-                <a-space>
-                  <a-button type="link" size="small" @click="handleEdit(record)">
-                    <EditOutlined /> 编辑
+            <template #title="{ key, title, icon, menu_type, is_active, is_visible, code }">
+              <div class="tree-node-content">
+                <component :is="getIcon(icon)" v-if="icon" class="node-icon" />
+                <span class="node-name">{{ title }}</span>
+                <span class="node-code">{{ code }}</span>
+                <a-tag :color="getTypeColor(menu_type)" size="small">{{ getTypeText(menu_type) }}</a-tag>
+                <a-tag v-if="!is_active" color="error" size="small">禁用</a-tag>
+                <a-tag v-if="!is_visible" color="default" size="small">隐藏</a-tag>
+                <span class="node-actions">
+                  <a-button type="link" size="small" @click.stop="handleAddChild(key)">
+                    <PlusOutlined />
                   </a-button>
-                  <a-popconfirm title="确定删除？子菜单也会一并删除" @confirm="handleDelete(record)">
+                  <a-button type="link" size="small" @click.stop="handleEdit(key)">
+                    <EditOutlined />
+                  </a-button>
+                  <a-popconfirm title="确定要删除该菜单吗？子菜单也会一并删除" @confirm.stop="handleDelete(key)">
                     <a-button type="link" danger size="small">
-                      <DeleteOutlined /> 删除
+                      <DeleteOutlined />
                     </a-button>
                   </a-popconfirm>
-                </a-space>
-              </template>
+                </span>
+              </div>
             </template>
-          </a-table>
+          </a-tree>
         </a-tab-pane>
       </a-tabs>
     </a-card>
@@ -216,34 +212,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
-  ReloadOutlined,
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  ExpandOutlined,
+  CompressOutlined,
 } from '@ant-design/icons-vue'
 import { resolveIcon } from '@/utils/iconResolver'
 import { menuApi } from '@/api/menu'
 import { permissionApi } from '@/api/auth'
-import { menusToTreeData, flatMenusToTreeByDepth } from '@/utils/menuTree'
+import { menusToTreeData, flatMenusToTreeByDepth, filterTreeBySearch } from '@/utils/menuTree'
 import type { Menu, Permission } from '@/types'
+
+const getIcon = resolveIcon
 
 // ─── 状态 ───
 const activeTab = ref('api')
-const searchText = ref('')
+const loading = ref(false)
 
 // 接口权限
 const allPermissions = ref<Permission[]>([])
+const searchName = ref('')
+const searchCodeName = ref('')
 const filteredApiPerms = ref<Permission[]>([])
+const moduleFilter = ref<string | undefined>(undefined)
+const moduleOptions = ref<string[]>([])
 
 // 菜单权限
 const allMenus = ref<Menu[]>([])
-const filteredMenuPerms = ref<Menu[]>([])
+const menuSearchText = ref('')
+const menuExpandedKeys = ref<string[]>([])
+const originalMenuTreeData = ref<any[]>([])
+const filteredMenuTreeData = ref<any[]>([])
 const parentTreeData = ref<any[]>([])
-const loading = ref(false)
 
 // ─── 表格列 ───
 const apiColumns = [
@@ -253,40 +258,22 @@ const apiColumns = [
   { title: '类型', key: 'type', width: 80 },
 ]
 
-const menuColumns = [
-  { title: '菜单名称', key: 'name', width: 200 },
-  { title: '编码', dataIndex: 'code', key: 'code', width: 180 },
-  { title: '路径', dataIndex: 'path', key: 'path', width: 150, ellipsis: true },
-  { title: '类型', key: 'menu_type', width: 80 },
-  { title: '关联权限', key: 'permission_code', width: 160 },
-  { title: '状态', key: 'is_active', width: 80 },
-  { title: '操作', key: 'action', width: 140 },
-]
-
 // ─── 过滤 ───
-const filterData = () => {
-  const kw = searchText.value.toLowerCase()
-  filteredApiPerms.value = kw
-    ? allPermissions.value.filter(p => p.name.includes(kw) || p.codename.includes(kw))
-    : allPermissions.value
-
-  filteredMenuPerms.value = kw
-    ? allMenus.value.filter(m =>
-        m.name.toLowerCase().includes(kw) ||
-        m.code.toLowerCase().includes(kw) ||
-        (m.path && m.path.toLowerCase().includes(kw)) ||
-        (m.permission_code && m.permission_code.toLowerCase().includes(kw))
-      )
-    : allMenus.value
+const filterApiPerms = () => {
+  let list = allPermissions.value
+  if (moduleFilter.value) {
+    list = list.filter(p => p.content_type_name === moduleFilter.value)
+  }
+  const name = searchName.value.toLowerCase()
+  if (name) {
+    list = list.filter(p => p.name.toLowerCase().includes(name))
+  }
+  const codename = searchCodeName.value.toLowerCase()
+  if (codename) {
+    list = list.filter(p => p.codename.toLowerCase().includes(codename))
+  }
+  filteredApiPerms.value = list
 }
-
-const resetSearch = () => {
-  searchText.value = ''
-  filterData()
-}
-
-const filterPermOption = (input: string, option: any) =>
-  option.value.toLowerCase().includes(input.toLowerCase())
 
 // ─── 加载数据 ───
 const loadData = async () => {
@@ -298,12 +285,14 @@ const loadData = async () => {
     ])
     allPermissions.value = perms
     allMenus.value = menus
+    moduleOptions.value = [...new Set(perms.map(p => p.content_type_name).filter(Boolean))].sort() as string[]
+    filterApiPerms()
 
-    // 构建上级菜单的树选择器数据
+    // 构建菜单树
     const fullTree = flatMenusToTreeByDepth(menus)
+    originalMenuTreeData.value = menusToTreeData(fullTree, 'id')
+    filteredMenuTreeData.value = [...originalMenuTreeData.value]
     parentTreeData.value = menusToTreeData(fullTree, 'id')
-
-    filterData()
   } finally {
     loading.value = false
   }
@@ -317,6 +306,25 @@ const getTypeColor = (type: string) => {
 const getTypeText = (type: string) => {
   const texts: Record<string, string> = { menu: '菜单', button: '按钮', iframe: 'Iframe' }
   return texts[type] || type
+}
+
+// ─── 菜单树操作 ───
+const expandAllMenuTree = () => {
+  const collect = (nodes: any[]): string[] => {
+    const keys: string[] = []
+    for (const n of nodes) {
+      keys.push(n.key)
+      if (n.children) keys.push(...collect(n.children))
+    }
+    return keys
+  }
+  menuExpandedKeys.value = collect(filteredMenuTreeData.value)
+}
+const collapseAllMenuTree = () => { menuExpandedKeys.value = [] }
+
+const filterMenuTree = () => {
+  filteredMenuTreeData.value = filterTreeBySearch(originalMenuTreeData.value, menuSearchText.value)
+  if (menuSearchText.value) expandAllMenuTree()
 }
 
 // ─── 弹窗状态 ───
@@ -354,6 +362,21 @@ const resetForm = () => {
   })
 }
 
+const filterPermOption = (input: string, option: any) =>
+  option.value.toLowerCase().includes(input.toLowerCase())
+
+// ─── 从树中查找节点 ───
+const findNode = (nodes: any[], key: string): any | null => {
+  for (const n of nodes) {
+    if (n.key === key) return n
+    if (n.children) {
+      const found = findNode(n.children, key)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 // ─── CRUD ───
 const handleAdd = () => {
   isEdit.value = false
@@ -363,29 +386,41 @@ const handleAdd = () => {
   modalVisible.value = true
 }
 
-const handleEdit = (record: any) => {
+const handleAddChild = (parentKey: string) => {
+  isEdit.value = false
+  modalTitle.value = '添加子菜单'
+  currentId.value = ''
+  resetForm()
+  formState.parent = parentKey
+  modalVisible.value = true
+}
+
+const handleEdit = (key: string) => {
+  const node = findNode(filteredMenuTreeData.value, key)
+  if (!node) return
+
   isEdit.value = true
   modalTitle.value = '编辑菜单'
-  currentId.value = record.id
+  currentId.value = key
   Object.assign(formState, {
-    name: record.name,
-    code: record.code,
-    icon: record.icon || '',
-    path: record.path || '',
-    component: record.component || '',
-    permission_code: record.permission_code || '',
-    menu_type: record.menu_type,
-    is_active: record.is_active,
-    is_visible: record.is_visible,
-    sort_order: record.sort_order || 0,
-    parent: record.parent || undefined,
+    name: node.title,
+    code: node.code,
+    icon: node.icon || '',
+    path: node.path || '',
+    component: node.component || '',
+    permission_code: node.permission_code || '',
+    menu_type: node.menu_type || 'menu',
+    is_active: node.is_active ?? true,
+    is_visible: node.is_visible ?? true,
+    sort_order: node.sort_order ?? 0,
+    parent: undefined,
   })
   modalVisible.value = true
 }
 
-const handleDelete = async (record: any) => {
+const handleDelete = async (key: string) => {
   try {
-    await menuApi.deleteMenu(record.id)
+    await menuApi.deleteMenu(key)
     message.success('删除成功')
     loadData()
   } catch {
@@ -422,28 +457,76 @@ const handleModalCancel = () => {
   formRef.value?.resetFields()
 }
 
+// ─── 拖拽移动 ───
+const handleMenuDrop = async (info: any) => {
+  const { dragNode, node, dropPosition, dropToGap } = info
+  let position: 'first-child' | 'left' | 'right'
+  if (dropToGap) {
+    position = dropPosition === -1 ? 'left' : 'right'
+  } else {
+    position = 'first-child'
+  }
+  try {
+    await menuApi.moveMenu({ id: dragNode.key, target_id: node.key, position })
+    message.success('移动成功')
+    loadData()
+  } catch {
+    message.error('移动失败')
+  }
+}
+
 // ─── 初始化 ───
 onMounted(loadData)
 </script>
 
 <style scoped>
-.page-container {
-  padding: 24px;
-}
-.search-card {
-  margin-bottom: 16px;
-}
-.table-card {
-  margin-bottom: 16px;
-}
+.page-container { padding: 24px; }
+.table-card { margin-bottom: 16px; }
 .table-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .table-toolbar-left {
   display: flex;
   gap: 8px;
+}
+
+.tree-node-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  width: 100%;
+}
+.node-icon {
+  font-size: 14px;
+  color: #1890ff;
+  flex-shrink: 0;
+}
+.node-name {
+  font-weight: 500;
+  font-size: 14px;
+  min-width: 80px;
+}
+.node-code {
+  font-size: 12px;
+  color: #999;
+  min-width: 100px;
+}
+.node-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+  visibility: hidden;
+  white-space: nowrap;
+}
+:deep(.ant-tree-treenode:hover) .node-actions {
+  visibility: visible;
+}
+:deep(.ant-tree-node-content-wrapper) {
+  overflow: hidden;
 }
 </style>

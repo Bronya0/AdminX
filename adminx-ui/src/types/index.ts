@@ -240,6 +240,31 @@ export interface Notification {
   created_at: string
 }
 
+// Webhook 配置
+export interface WebhookConfig {
+  id: string
+  name: string
+  url: string
+  secret: string
+  events: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Webhook 发送日志
+export interface WebhookLog {
+  id: string
+  webhook: string
+  webhook_name: string
+  notification: string | null
+  status: 'success' | 'failed'
+  response_status: number | null
+  response_body: string
+  error_message: string
+  created_at: string
+}
+
 // 审计日志
 export interface AuditLog {
   id: string

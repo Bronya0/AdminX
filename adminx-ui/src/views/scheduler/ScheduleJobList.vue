@@ -12,6 +12,19 @@
             <a-select-option value="shell">Shell 命令</a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item label="触发">
+          <a-select v-model:value="searchForm.trigger_type" placeholder="全部" allow-clear style="width: 120px">
+            <a-select-option value="cron">Cron</a-select-option>
+            <a-select-option value="interval">间隔</a-select-option>
+            <a-select-option value="date">指定时间</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="状态">
+          <a-select v-model:value="searchForm.is_active" placeholder="全部" allow-clear style="width: 100px">
+            <a-select-option :value="true">启用</a-select-option>
+            <a-select-option :value="false">禁用</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch"><SearchOutlined /> 搜索</a-button>
           <a-button style="margin-left: 8px" @click="resetSearch"><ReloadOutlined /> 重置</a-button>
@@ -180,7 +193,7 @@ import { formatDateTime } from '@/utils/format'
 import type { ScheduleJob, JobLog } from '@/types'
 
 // ── 搜索 ──
-const searchForm = ref({ search: '', command_type: undefined as string | undefined })
+const searchForm = ref({ search: '', command_type: undefined as string | undefined, trigger_type: undefined as string | undefined, is_active: undefined as boolean | undefined })
 
 // ── 表格 ──
 const columns = [
@@ -203,7 +216,7 @@ const logColumns = [
 
 const tableData = ref<ScheduleJob[]>([])
 const loading = ref(false)
-const pagination = ref({ current: 1, pageSize: 20, total: 0 })
+const pagination = ref({ current: 1, pageSize: 10, total: 0, showTotal: (total: number) => `共 ${total} 条` })
 const schedulerRunning = ref(false)
 const schedulerJobCount = ref<number | null>(null)
 
@@ -233,6 +246,9 @@ const fetchData = async () => {
   try {
     const params: any = { page: pagination.value.current, size: pagination.value.pageSize }
     if (searchForm.value.search) params.search = searchForm.value.search
+    if (searchForm.value.command_type) params.command_type = searchForm.value.command_type
+    if (searchForm.value.trigger_type) params.trigger_type = searchForm.value.trigger_type
+    if (searchForm.value.is_active !== undefined) params.is_active = searchForm.value.is_active
     const res = await scheduleJobApi.getJobs(params)
     tableData.value = res.results
     pagination.value.total = res.count
@@ -259,7 +275,7 @@ const handleExpand = async (expanded: boolean, record: ScheduleJob) => {
 
 // ── 操作 ──
 const handleSearch = () => { pagination.value.current = 1; fetchData() }
-const resetSearch = () => { searchForm.value = { search: '', command_type: undefined }; pagination.value.current = 1; fetchData() }
+const resetSearch = () => { searchForm.value = { search: '', command_type: undefined, trigger_type: undefined, is_active: undefined }; pagination.value.current = 1; fetchData() }
 const handleTableChange = (pag: any) => { pagination.value.current = pag.current; pagination.value.pageSize = pag.pageSize; fetchData() }
 
 const displayContent = (job: ScheduleJob) => job.command_type === 'shell' ? (job.command || '-') : (job.handler || '-')

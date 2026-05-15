@@ -5,6 +5,7 @@ from rest_framework.response import Response
 class StandardPagination(PageNumberPagination):
     """统一分页: page/size 参数, 标准化返回"""
 
+    page_size = 10
     page_query_param = "page"
     page_size_query_param = "size"
     max_page_size = 200

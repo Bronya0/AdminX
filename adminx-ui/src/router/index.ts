@@ -12,7 +12,7 @@ import LoginView from '@/views/login/LoginView.vue'
 import UserList from '@/views/system/UserList.vue'
 import RoleList from '@/views/system/RoleList.vue'
 import PermissionList from '@/views/system/PermissionList.vue'
-import MenuList from '@/views/system/MenuList.vue'
+
 import ConfigList from '@/views/config/ConfigList.vue'
 
 // 监控
@@ -70,12 +70,6 @@ const router = createRouter({
               name: 'roles',
               component: RoleList,
               meta: { title: '角色管理', permission: 'accounts:role:list' },
-            },
-            {
-              path: 'menus',
-              name: 'system-menus',
-              component: MenuList,
-              meta: { title: '菜单管理', icon: 'MenuOutlined', permission: 'menu:menu:list' },
             },
             {
               path: 'permissions',

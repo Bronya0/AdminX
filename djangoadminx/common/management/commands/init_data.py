@@ -30,6 +30,15 @@ DEFAULT_ROLES = [
 # ========== 默认菜单树 ==========
 DEFAULT_MENUS = [
     {
+        "code": "dashboard",
+        "name": "仪表盘",
+        "icon": "DashboardOutlined",
+        "path": "/dashboard",
+        "component": "dashboard/index",
+        "menu_type": "menu",
+        "sort_order": 0,
+    },
+    {
         "code": "system",
         "name": "系统管理",
         "icon": "Settings",
@@ -43,9 +52,7 @@ DEFAULT_MENUS = [
             {"code": "system:config", "name": "配置中心", "icon": "Setting", "path": "/system/config", "component": "config/list/index", "permission_code": "config_center:config:list", "menu_type": "menu", "sort_order": 4},
             {"code": "system:resource", "name": "系统资源", "icon": "Cpu", "path": "/system/resource", "component": "monitor/resource/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 5},
             {"code": "system:component", "name": "组件管理", "icon": "Appstore", "path": "/system/component", "component": "monitor/component/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 6},
-            {"code": "system:cluster", "name": "集群管理", "icon": "Cloud", "path": "/system/cluster", "menu_type": "menu", "sort_order": 7, "children": [
-                {"code": "system:cluster:nodes", "name": "节点管理", "icon": "Hdd", "path": "/system/cluster/nodes", "component": "cluster/nodes/index", "permission_code": "cluster:node:list", "menu_type": "menu", "sort_order": 1},
-            ]},
+            {"code": "system:cluster", "name": "节点管理", "icon": "Hdd", "path": "/system/cluster", "component": "cluster/nodes/index", "permission_code": "cluster:node:list", "menu_type": "menu", "sort_order": 7},
             {"code": "system:scheduler", "name": "定时任务", "icon": "ClockCircle", "path": "/system/scheduler", "component": "scheduler/index", "permission_code": "webservice:schedulejob:list", "menu_type": "menu", "sort_order": 8},
             {"code": "system:notification", "name": "通知中心", "icon": "Bell", "path": "/system/notification", "component": "notification/index", "permission_code": "notification:notification:list", "menu_type": "menu", "sort_order": 9},
         ],
@@ -209,7 +216,6 @@ class Command(BaseCommand):
             security_menus = Menu.objects.filter(
                 code__in=[
                     "system:permission", "system:config", "system:resource", "system:cluster",
-                    "system:cluster:nodes",
                     "audit", "audit:log", "audit:login-log",
                 ]
             )
