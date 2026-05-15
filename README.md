@@ -91,6 +91,53 @@ python manage.py runserver
 open http://127.0.0.1:8000/api/docs/
 ```
 
+## 启用 Redis（可选，推荐）
+
+系统 **无需任何代码改动**，只需设置环境变量，启动时自动检测并切换。
+
+### 配置
+
+```bash
+# .env 中设置 Redis 地址（默认值就是这句，已存在则跳过）
+REDIS_URL=redis://127.0.0.1:6379/0
+
+# 有密码时：
+REDIS_URL=redis://:your-password@127.0.0.1:6379/0
+```
+
+### 启动 Redis
+
+```bash
+# Docker 一键启动所有服务（含 Redis）
+docker compose up -d
+
+# 或本地直接安装
+# Ubuntu/Debian: sudo apt-get install redis-server && sudo systemctl start redis-server
+# Windows: 下载 https://redis.io/downloads/ 运行 redis-server.exe
+# Mac: brew install redis && brew services start redis
+```
+
+### 验证接入成功
+
+启动项目后，访问 `GET /api/common/cache-stats/`：
+
+- ✅ 有 Redis：`{"backend": "redis", "msg": "...Redis 信息..."}`
+- ❌ 无 Redis：`{"backend": "locmem", "msg": "本地内存缓存，不支持统计"}`
+
+### 有 Redis 后多了什么？
+
+| 能力 | 无 Redis | 有 Redis |
+|------|----------|----------|
+| 缓存 | 进程内 LocMemCache，各 worker 独立 | RedisCache，全局共享 |
+| WebSocket 实时日志 | 单 worker 可用 | 跨 worker / 跨节点广播 |
+| 定时任务状态持久化 | MemoryJobStore（重启后从 DB 重载） | RedisJobStore，调度状态完整保留 |
+| 分布式锁 | 退化到 threading.Lock（仅进程内） | 真正的 Redis 分布式锁 |
+| 限流器 | allow-all（不限制） | Redis 滑动窗口限流 |
+| ORM 查询缓存 (cacheops) | 自动禁用 | 自动启用 |
+| 配置中心缓存 | 各 worker 独立缓存（可能读到旧值） | 全局统一缓存 + 实时失效 |
+
+> 一句话：不配 Redis 也能跑，配上更好。
+
 ## 项目结构
 
 ```

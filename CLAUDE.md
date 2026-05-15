@@ -12,6 +12,9 @@ python manage.py init_data              # Init roles, menus, configs
 python manage.py init_data --superuser --username admin --password admin123  # Seed superuser
 python manage.py run_scheduler          # Start APScheduler standalone process
 
+# Redis (optional - see README "启用 Redis" section)
+# Just set REDIS_URL in .env, no code changes needed. Auto-detected at startup.
+
 # Tests
 python manage.py test                   # All tests
 python manage.py test apps.demo_blog    # Single module
