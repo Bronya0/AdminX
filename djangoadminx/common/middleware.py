@@ -1,6 +1,8 @@
 import logging
 import time
 
+from django.conf import settings
+
 logger = logging.getLogger("djangoadminx.request")
 
 
@@ -44,8 +46,8 @@ class IPBlockMiddleware:
         from django.http import JsonResponse
 
         try:
-            from django.apps import apps
-            if not djangoadminx.ready:
+            from django.apps import apps as django_apps
+            if not django_apps.ready:
                 return self.get_response(request)
             from djangoadminx.config_center.models import Config
 
@@ -62,17 +64,14 @@ class IPBlockMiddleware:
                 blocked = [ip.strip() for ip in blacklist.split(",") if ip.strip()]
                 if client_ip in blocked:
                     return JsonResponse({"code": 403, "msg": "IP blocked"})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"IPBlockMiddleware 检查异常: {e}")
 
         return self.get_response(request)
 
 
 class UserActivityMiddleware:
-    """更新已认证用户的最后活动时间 (用于在线状态判定)
-
-    防抖策略：距上次更新超过 60 秒才写入，避免每个请求都写库。
-    """
+    """更新已认证用户的最后活动时间 (用于在线状态判定)"""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -87,12 +86,11 @@ class UserActivityMiddleware:
         try:
             from django.utils import timezone
             now = timezone.now()
-            # 防抖：如果距上次更新 < 60 秒，跳过
             last = getattr(user, 'last_activity', None)
             if last is None or (now - last).total_seconds() >= 60:
                 from djangoadminx.accounts.models import User
                 User.objects.filter(pk=user.pk).update(last_activity=now)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"更新 last_activity 失败: {e}")
 
         return response

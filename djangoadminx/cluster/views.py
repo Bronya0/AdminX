@@ -20,9 +20,10 @@ class ClusterNodeViewSet(AuditLogMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def overview(self, request):
         """集群概览"""
-        total = ClusterNode.objects.count()
-        online = ClusterNode.objects.filter(status="online").count()
-        offline = ClusterNode.objects.filter(status="offline").count()
+        qs = self.get_queryset()
+        total = qs.count()
+        online = qs.filter(status="online").count()
+        offline = qs.filter(status="offline").count()
         return Response({
             "code": 200,
             "msg": "success",
@@ -30,6 +31,6 @@ class ClusterNodeViewSet(AuditLogMixin, viewsets.ModelViewSet):
                 "total": total,
                 "online": online,
                 "offline": offline,
-                "nodes": ClusterNodeSerializer(self.get_queryset(), many=True).data,
+                "nodes": ClusterNodeSerializer(qs, many=True).data,
             },
         })

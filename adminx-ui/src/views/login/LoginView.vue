@@ -40,11 +40,12 @@
             :prefix="h(SafetyOutlined)"
           >
             <template #suffix>
-              <div
+              <img
+                v-if="captchaSvg"
                 class="captcha-img"
-                v-html="captchaSvg"
+                :src="captchaDataUri"
                 @click="fetchCaptcha"
-                style="cursor: pointer"
+                style="cursor: pointer; width: 100px; height: 36px"
               />
             </template>
           </a-input>
@@ -94,6 +95,12 @@ const siteName = ref('DjangoAdminX')
 const siteDesc = ref('企业级 Django Admin 框架')
 const loginBgImage = ref('')
 
+// SVG 验证码 data URI（用 img 标签替代 v-html 防 XSS）
+const captchaDataUri = computed(() => {
+  if (!captchaSvg.value) return ''
+  return 'data:image/svg+xml;base64,' + btoa(captchaSvg.value)
+})
+
 // 表单状态
 const formState = reactive({
   username: '',
@@ -130,15 +137,11 @@ const handleSubmit = async () => {
       captchaEnabled.value ? formState.captchaText : undefined
     )
 
-    console.log('Login result:', result)
-    console.log('User info:', userStore.user)
-    console.log('Username:', userStore.username)
-
     message.success('登录成功')
     router.push('/')
   } catch (e: any) {
-    console.error('Login error:', e)
-    message.error(e.message || '登录失败')
+    const errMsg = (e as Error)?.message || '登录失败'
+    message.error(errMsg)
     // 登录失败，刷新验证码
     if (captchaEnabled.value) {
       fetchCaptcha()
@@ -165,16 +168,16 @@ const bgStyle = computed(() => {
 })
 
 onMounted(async () => {
-  // 清除残留的旧 token，避免公共 API 携带过期令牌触发 401
-  userStore.token = ''
+  // 清除残留的旧 token
+  userStore.clearToken()
   // 获取站点名称和背景图
   try {
     const res = await commonApi.getSiteInfo()
     siteName.value = res.site_name
     siteDesc.value = res.site_desc
-    loginBgImage.value = res.login_bg_image
+    loginBgImage.value = localStorage.getItem('login_bg_image') || res.login_bg_image
   } catch (e) {
-    // 使用默认值
+    loginBgImage.value = localStorage.getItem('login_bg_image') || ''
   }
   // 检查是否需要验证码（从配置读取）
   // captchaEnabled.value = true

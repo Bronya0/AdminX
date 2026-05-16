@@ -47,7 +47,17 @@ def health_check(request):
 
 @require_GET
 def log_tail(request):
-    """SSE 实时日志推送"""
+    """SSE 实时日志推送（仅管理员可访问）"""
+    # 手动 JWT 鉴权（SSE 无法走 DRF 标准流程）
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    try:
+        auth = JWTAuthentication()
+        user, _ = auth.authenticate(request)
+        if not user or not user.is_staff:
+            return JsonResponse({"code": 403, "msg": "权限不足"}, status=200)
+    except Exception:
+        return JsonResponse({"code": 401, "msg": "未授权"}, status=200)
+
     log_file = settings.BASE_DIR / "logs" / "realtime.log"
 
     def event_stream():

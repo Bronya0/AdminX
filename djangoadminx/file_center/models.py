@@ -1,8 +1,11 @@
 import os
+import logging
 import uuid
 
 from django.conf import settings
 from django.db import models
+
+logger = logging.getLogger("djangoadminx.file_center")
 
 
 class FileRecord(models.Model):
@@ -28,8 +31,11 @@ class FileRecord(models.Model):
 
     def delete(self, *args, **kwargs):
         """删除时同时删除物理文件"""
-        backend = get_storage_backend(self.storage_backend)
-        backend.delete(self.storage_path)
+        try:
+            backend = get_storage_backend(self.storage_backend)
+            backend.delete(self.storage_path)
+        except Exception as e:
+            logger.warning(f"删除物理文件失败: {self.storage_path} - {e}")
         super().delete(*args, **kwargs)
 
 

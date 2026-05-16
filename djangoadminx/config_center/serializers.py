@@ -10,7 +10,7 @@ class ConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = Config
         fields = [
-            "id", "key", "value", "value_type", "encrypted_value",
+            "id", "key", "value", "value_type",
             "desc", "group", "is_active", "display_value", "options",
             "created_at", "updated_at",
         ]

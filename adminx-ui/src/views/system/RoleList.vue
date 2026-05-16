@@ -129,42 +129,9 @@
       width="800px"
     >
       <a-tabs v-model:activeKey="activeTab">
-        <a-tab-pane key="permissions" tab="功能权限">
-          <div class="permission-toolbar">
-            <a-input-search
-              v-model:value="permissionSearch"
-              placeholder="搜索权限名称..."
-              allow-clear
-              style="width: 240px"
-              @change="filterPermissionTree"
-            />
-            <a-space>
-              <a-button size="small" @click="expandAllPermissions">展开全部</a-button>
-              <a-button size="small" @click="collapseAllPermissions">收起全部</a-button>
-              <a-button size="small" @click="selectAllPermissions">全选</a-button>
-              <a-button size="small" @click="deselectAllPermissions">取消全选</a-button>
-            </a-space>
-            <span class="selected-count">已选 {{ selectedPermissions.length }} 项</span>
-          </div>
-          <div class="tree-scroll">
-            <a-tree
-              v-model:checkedKeys="selectedPermissions"
-              v-model:expandedKeys="permissionExpandedKeys"
-              checkable
-              :tree-data="filteredPermissionTreeData"
-              :default-expand-all="false"
-            />
-          </div>
-        </a-tab-pane>
         <a-tab-pane key="menus" tab="菜单权限">
           <div class="permission-toolbar">
-            <a-input-search
-              v-model:value="menuSearch"
-              placeholder="搜索菜单名称..."
-              allow-clear
-              style="width: 240px"
-              @change="filterMenuTree"
-            />
+            <a-input-search v-model:value="menuSearch" placeholder="搜索菜单名称..." allow-clear style="width: 240px" @change="filterMenuTree" />
             <a-space>
               <a-button size="small" @click="expandAllMenus">展开全部</a-button>
               <a-button size="small" @click="collapseAllMenus">收起全部</a-button>
@@ -174,13 +141,8 @@
             <span class="selected-count">已选 {{ selectedMenus.length }} 项</span>
           </div>
           <div class="tree-scroll">
-            <a-tree
-              v-model:checkedKeys="selectedMenus"
-              v-model:expandedKeys="menuExpandedKeys"
-              checkable
-              :tree-data="filteredMenuTreeData"
-              :default-expand-all="false"
-            />
+            <a-tree v-model:checkedKeys="selectedMenus" v-model:expandedKeys="menuExpandedKeys"
+              checkable :tree-data="filteredMenuTreeData" :default-expand-all="false" />
           </div>
         </a-tab-pane>
       </a-tabs>
@@ -199,28 +161,11 @@ import {
   DeleteOutlined,
   SafetyOutlined,
 } from '@ant-design/icons-vue'
-import { roleApi, permissionApi } from '@/api/auth'
+import { roleApi } from '@/api/auth'
 import { menuApi } from '@/api/menu'
-import { menusToTreeData } from '@/utils/menuTree'
-import { filterTreeBySearch } from '@/utils/menuTree'
+import { menusToTreeData, filterTreeBySearch } from '@/utils/menuTree'
 import { formatDateTime } from '@/utils/format'
-import type { Role, Permission } from '@/types'
-
-/** 将 Django 自动生成的 "Can add xxx" 等权限名翻译为中文 */
-function translatePermissionName(name: string): string {
-  const map: Record<string, string> = {
-    'Can add ': '添加 ',
-    'Can change ': '修改 ',
-    'Can delete ': '删除 ',
-    'Can view ': '查看 ',
-  }
-  for (const [en, zh] of Object.entries(map)) {
-    if (name.startsWith(en)) {
-      return name.replace(en, zh)
-    }
-  }
-  return name
-}
+import type { Role } from '@/types'
 
 // 表格列定义
 const columns = [
@@ -261,16 +206,9 @@ const formRules = {
 // 权限弹窗状态
 const permissionModalVisible = ref(false)
 const permissionModalLoading = ref(false)
-const activeTab = ref('permissions')
+const activeTab = ref('menus')
 const currentRole = ref<Role | null>(null)
-const selectedPermissions = ref<string[]>([])
 const selectedMenus = ref<string[]>([])
-
-// 权限树
-const permissionSearch = ref('')
-const permissionExpandedKeys = ref<string[]>([])
-const originalPermissionTreeData = ref<any[]>([])
-const filteredPermissionTreeData = ref<any[]>([])
 
 // 菜单树
 const menuSearch = ref('')
@@ -290,28 +228,6 @@ const loadData = async () => {
   }
 }
 
-// 加载权限树
-const loadPermissions = async () => {
-  try {
-    const perms = await permissionApi.getPermissions()
-    // 按 content_type 分组
-    const grouped: Record<string, any[]> = {}
-    perms.forEach((perm: Permission) => {
-      const group = perm.content_type_name || '其他'
-      if (!grouped[group]) grouped[group] = []
-      grouped[group].push({ title: translatePermissionName(perm.name), key: perm.codename, value: perm.codename })
-    })
-    originalPermissionTreeData.value = Object.entries(grouped).map(([key, children]) => ({
-      title: key,
-      key: `group-${key}`,
-      children,
-    }))
-    filteredPermissionTreeData.value = [...originalPermissionTreeData.value]
-  } catch (e) {
-    console.error('加载权限失败', e)
-  }
-}
-
 // 加载菜单树
 const loadMenus = async () => {
   try {
@@ -324,28 +240,6 @@ const loadMenus = async () => {
 }
 
 // 权限树过滤
-const filterPermissionTree = () => {
-  filteredPermissionTreeData.value = filterTreeBySearch(originalPermissionTreeData.value, permissionSearch.value)
-  if (permissionSearch.value) expandAllPermissions()
-}
-const expandAllPermissions = () => {
-  const collect = (nodes: any[]): string[] => {
-    const keys: string[] = []
-    for (const n of nodes) {
-      keys.push(n.key)
-      if (n.children) keys.push(...collect(n.children))
-    }
-    return keys
-  }
-  permissionExpandedKeys.value = collect(filteredPermissionTreeData.value)
-}
-const collapseAllPermissions = () => { permissionExpandedKeys.value = [] }
-const selectAllPermissions = () => {
-  const all = originalPermissionTreeData.value.flatMap(g => g.children.map((c: any) => c.key))
-  selectedPermissions.value = [...new Set([...selectedPermissions.value, ...all])]
-}
-const deselectAllPermissions = () => { selectedPermissions.value = [] }
-
 // 菜单树过滤
 const filterMenuTree = () => {
   filteredMenuTreeData.value = filterTreeBySearch(originalMenuTreeData.value, menuSearch.value)
@@ -413,14 +307,12 @@ const handleDelete = async (record: Role) => {
   } catch { message.error('删除失败') }
 }
 
-// 权限分配
+// 菜单分配
 const handlePermission = async (record: Role) => {
   currentRole.value = record
-  selectedPermissions.value = record.permissions || []
   selectedMenus.value = record.menus || []
-  permissionSearch.value = ''
   menuSearch.value = ''
-  await Promise.all([loadPermissions(), loadMenus()])
+  await loadMenus()
   permissionModalVisible.value = true
 }
 
@@ -443,19 +335,22 @@ const handleModalOk = async () => {
 }
 const handleModalCancel = () => { modalVisible.value = false; formRef.value?.resetFields() }
 
-// 权限确认
+// 菜单确认
 const handlePermissionOk = async () => {
   if (!currentRole.value) return
   permissionModalLoading.value = true
   try {
     await roleApi.updateRole(currentRole.value.id, {
-      permissions: selectedPermissions.value,
+      name: currentRole.value.name,
+      code: currentRole.value.code,
+      desc: currentRole.value.desc,
+      is_active: currentRole.value.is_active,
       menus: selectedMenus.value,
     })
-    message.success('权限分配成功')
+    message.success('菜单分配成功')
     permissionModalVisible.value = false
     loadData()
-  } catch { message.error('权限分配失败') }
+  } catch { message.error('菜单分配失败') }
   finally { permissionModalLoading.value = false }
 }
 

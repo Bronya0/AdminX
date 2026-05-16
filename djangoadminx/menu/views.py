@@ -1,4 +1,4 @@
-from rest_framework import viewsets
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from djangoadminx.audit.mixins import AuditLogMixin
 from .models import Menu
 from .serializers import MenuSerializer, MenuTreeSerializer
+
+ALLOWED_POSITIONS = {"first-child", "last-child", "left", "right"}
 
 
 class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
@@ -15,7 +17,7 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     search_fields = ["name", "code"]
     ordering_fields = ["sort_order", "name"]
-    pagination_class = None  # 菜单是树形数据，不分页
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -26,30 +28,38 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         parent_id = self.request.data.get("parent")
         if parent_id:
-            parent = Menu.objects.get(id=parent_id)
-            instance = serializer.save(sort_order=parent.get_children_count() + 1)
+            try:
+                parent = Menu.objects.get(id=parent_id)
+                instance = serializer.save(sort_order=parent.get_children_count() + 1)
+            except Menu.DoesNotExist:
+                raise serializers.ValidationError({"parent": "上级菜单不存在"})
         else:
             instance = serializer.save(sort_order=Menu.get_root_nodes().count() + 1)
         self._log_audit_create(instance)
 
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def tree(self, request):
-        """菜单树 — 用于菜单管理页面（管理员能看到所有菜单）"""
-        # 管理员能看到所有菜单，包括隐藏和禁用的
-        menus = Menu.get_root_nodes()
+        """菜单树 — 用于菜单管理页面"""
+        if hasattr(Menu, 'get_root_nodes'):
+            menus = Menu.get_root_nodes()
+        else:
+            menus = Menu.objects.filter(parent__isnull=True)
         ser = MenuTreeSerializer(menus, many=True)
         return Response({"code": 200, "msg": "success", "data": ser.data})
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def user_tree(self, request):
-        """用户菜单树 — 用于前端动态路由加载（根据权限过滤）"""
+        """用户菜单树 — 用于前端动态路由加载"""
         user = request.user
         if user.is_superuser:
-            menus = Menu.get_root_nodes().filter(is_active=True, is_visible=True)
+            if hasattr(Menu, 'get_root_nodes'):
+                menus = Menu.get_root_nodes().filter(is_active=True, is_visible=True)
+            else:
+                menus = Menu.objects.filter(parent__isnull=True, is_active=True, is_visible=True)
         else:
             role_ids = user.roles.values_list("id", flat=True)
-            menus = Menu.get_root_nodes().filter(
-                is_active=True, is_visible=True, roles__id__in=role_ids
+            menus = Menu.objects.filter(
+                parent__isnull=True, is_active=True, is_visible=True, roles__id__in=role_ids
             ).distinct()
         ser = MenuTreeSerializer(menus, many=True)
         return Response({"code": 200, "msg": "success", "data": ser.data})
@@ -59,7 +69,14 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
         """移动菜单节点"""
         menu_id = request.data.get("id")
         target_id = request.data.get("target_id")
-        position = request.data.get("position", "first-child")  # first-child, left, right
+        position = request.data.get("position", "first-child")
+
+        if not menu_id or not target_id:
+            return Response({"code": 400, "msg": "请指定 id 和 target_id"})
+        if menu_id == target_id:
+            return Response({"code": 400, "msg": "不能将节点移动到自己"})
+        if position not in ALLOWED_POSITIONS:
+            return Response({"code": 400, "msg": f"无效的 position: {position}，允许: {', '.join(ALLOWED_POSITIONS)}"})
 
         menu = Menu.objects.get(id=menu_id)
         target = Menu.objects.get(id=target_id)

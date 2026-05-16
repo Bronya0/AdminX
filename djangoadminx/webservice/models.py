@@ -8,38 +8,6 @@ from django.utils import timezone
 logger = logging.getLogger("djangoadminx.webservice")
 
 
-class WebService(models.Model):
-    """WebService 配置 — 发布或调用外部 SOAP 服务"""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField("服务名称", max_length=128)
-    wsdl_url = models.URLField("WSDL 地址", blank=True, default="")
-    type = models.CharField("类型", max_length=20,
-                            choices=[("publish", "发布"), ("consume", "调用")],
-                            default="consume")
-    method = models.CharField("方法名", max_length=128, blank=True, default="")
-    request_template = models.TextField("请求模板", blank=True, default="",
-                                        help_text="JSON 模板，供前端填写参数")
-    response_mapping = models.TextField("响应映射", blank=True, default="",
-                                        help_text="响应字段映射配置")
-    auth_type = models.CharField("认证类型", max_length=20,
-                                 choices=[("none", "无"), ("basic", "Basic"), ("token", "Token")],
-                                 default="none")
-    auth_username = models.CharField("认证用户名", max_length=128, blank=True, default="")
-    auth_password = models.CharField("认证密码", max_length=256, blank=True, default="")
-    is_active = models.BooleanField("启用", default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "WebService 配置"
-        verbose_name_plural = "WebService 配置"
-        ordering = ["name"]
-
-    def __str__(self):
-        return f"{self.name} ({self.get_type_display()})"
-
-
 class ScheduleJob(models.Model):
     """定时任务 — 由 APScheduler 执行"""
 
@@ -49,7 +17,7 @@ class ScheduleJob(models.Model):
                                     choices=[("python", "Python 函数"), ("shell", "Shell 命令")],
                                     default="python")
     handler = models.CharField("处理函数", max_length=255, blank=True, default="",
-                               help_text="如 djangoadminx.webservice.tasks.sync_data")
+                               help_text="如 djangoadminx.webservice.tasks.ntp_sync")
     command = models.TextField("Shell 命令", blank=True, default="",
                                help_text="command_type=shell 时，要执行的命令或脚本")
     trigger_type = models.CharField("触发类型", max_length=20,
@@ -59,10 +27,6 @@ class ScheduleJob(models.Model):
                                       help_text="JSON 格式，如 {\"minutes\": 5}")
     args = models.TextField("参数", blank=True, default="", help_text="JSON 数组")
     kwargs = models.TextField("关键字参数", blank=True, default="{}", help_text="JSON 对象")
-    webservice = models.ForeignKey(
-        WebService, on_delete=models.SET_NULL, null=True, blank=True,
-        verbose_name="关联 WebService",
-    )
     is_active = models.BooleanField("启用", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -83,6 +47,7 @@ class ScheduleJob(models.Model):
         if self.command_type == "shell":
             if not self.command:
                 raise ValueError("Shell 命令为空")
+            logger.warning(f"执行 shell 命令: {self.command[:200]}")
             result = subprocess.run(
                 self.command,
                 shell=True,
@@ -100,6 +65,8 @@ class ScheduleJob(models.Model):
             return output.strip() or f"完成 (exit=0)"
 
         # Python 函数
+        if "." not in self.handler:
+            raise ValueError(f"无效处理函数路径，应为 module.func: {self.handler}")
         module_path, func_name = self.handler.rsplit(".", 1)
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)
@@ -127,7 +94,7 @@ class JobLog(models.Model):
 
 
 class SchedulerHeartbeat(models.Model):
-    """调度器进程心跳 — 跨进程检测调度器存活与通知重载（独立于 Redis）"""
+    """调度器进程心跳 — 跨进程检测调度器存活与通知重载"""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     last_heartbeat = models.DateTimeField("最后心跳", null=True, blank=True)
@@ -136,24 +103,3 @@ class SchedulerHeartbeat(models.Model):
     class Meta:
         verbose_name = "调度器心跳"
         verbose_name_plural = "调度器心跳"
-
-
-class WebServiceLog(models.Model):
-    """WebService 调用日志"""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    webservice = models.ForeignKey(WebService, on_delete=models.CASCADE, verbose_name="服务")
-    method = models.CharField("方法", max_length=128)
-    request_body = models.TextField("请求", blank=True, default="")
-    response_body = models.TextField("响应", blank=True, default="")
-    status = models.CharField("状态", max_length=20,
-                              choices=[("success", "成功"), ("failed", "失败")],
-                              default="success")
-    error_msg = models.TextField("错误信息", blank=True, default="")
-    cost_ms = models.IntegerField("耗时(ms)", default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "WebService 日志"
-        verbose_name_plural = "WebService 日志"
-        ordering = ["-created_at"]

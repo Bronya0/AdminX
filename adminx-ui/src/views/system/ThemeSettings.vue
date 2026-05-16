@@ -1,7 +1,6 @@
 <template>
-  <div class="theme-settings">
-    <a-card title="主题设置" class="page-card">
-      <a-tabs v-model:activeKey="activeTab" type="card">
+  <div class="theme-settings-inner">
+    <a-tabs v-model:activeKey="activeTab" type="card">
         <!-- ===== 布局 ===== -->
         <a-tab-pane key="layout" tab="布局">
           <a-form layout="vertical" style="max-width: 600px;">
@@ -273,7 +272,6 @@
           </div>
         </a-tab-pane>
       </a-tabs>
-    </a-card>
   </div>
 </template>
 
@@ -504,8 +502,8 @@ const syncNtpNow = async () => {
 </script>
 
 <style scoped>
-.theme-settings {
-  max-width: 1200px;
+.theme-settings-inner {
+  min-height: 200px;
 }
 
 /* ===== 预览区域 ===== */

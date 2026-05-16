@@ -8,10 +8,13 @@ router.register("users", views.UserViewSet)
 router.register("roles", views.RoleViewSet)
 router.register("permissions", views.PermissionViewSet)
 router.register("login-logs", views.LoginLogViewSet)
+router.register("business-permissions", views.BusinessPermissionViewSet)
+router.register("business-commands", views.BusinessCommandViewSet)
 
 urlpatterns = [
     path("login/", views.LoginView.as_view(), name="login"),
     path("logout/", views.LogoutView.as_view(), name="logout"),
+    path("introspect/", views.TokenIntrospectView.as_view(), name="token-introspect"),
     path("", include(router.urls)),
 ]
 

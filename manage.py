@@ -3,9 +3,6 @@
 import os
 import sys
 
-# 在 spyne 加载前应用兼容垫片（Python 3.13+）
-import djangoadminx.common.spyne_compat  # noqa: F401
-
 
 def main():
     """Run administrative tasks."""

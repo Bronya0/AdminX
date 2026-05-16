@@ -19,7 +19,7 @@ def _get_children_queryset(obj, active_only=False):
 
 
 class MenuFlatSerializer(serializers.ModelSerializer):
-    """扁平菜单序列化器 — 不含 children，用于列表"""
+    """扁平菜单序列化器（列表用，不含 children）"""
     parent = serializers.SerializerMethodField()
 
     class Meta:
@@ -28,6 +28,7 @@ class MenuFlatSerializer(serializers.ModelSerializer):
             "id", "code", "name", "icon", "path", "component",
             "permission_code", "menu_type", "is_active", "is_visible",
             "sort_order", "depth", "numchild", "parent",
+            "allowed_paths",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "depth", "numchild", "created_at", "updated_at"]
@@ -51,6 +52,7 @@ class MenuSerializer(serializers.ModelSerializer):
             "id", "code", "name", "icon", "path", "component",
             "permission_code", "menu_type", "is_active", "is_visible",
             "sort_order", "depth", "numchild", "children",
+            "allowed_paths",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "depth", "numchild", "created_at", "updated_at"]

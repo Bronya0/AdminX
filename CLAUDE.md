@@ -17,8 +17,7 @@ python manage.py run_scheduler          # Start APScheduler standalone process
 
 # Tests
 python manage.py test                   # All tests
-python manage.py test apps.demo_blog    # Single module
-python manage.py test djangoadminx.accounts    # Framework module
+python manage.py test djangoadminx.accounts    # Single module
 
 # Frontend (adminx-ui/)
 cd adminx-ui && npm run dev             # Vite dev server (port 5173, proxies /api to :8000)
@@ -40,16 +39,13 @@ DjangoAdminX/
 │   ├── config_center/     #   Config center (KV + options + Fernet encryption)
 │   ├── monitor/           #   System resource monitor (psutil)
 │   ├── cluster/           #   Cluster node management
-│   ├── webservice/        #   SOAP/spyne + APScheduler jobs + job logs
+│   ├── webservice/        #   APScheduler jobs + job logs
 │   ├── file_center/       #   File upload (Local/MinIO)
 │   ├── data_center/       #   Excel import/export
 │   ├── captcha/           #   Captcha
 │   ├── audit/             #   Audit log (signals-based)
 │   ├── policy/            #   Password policy
-│   └── common/            #   Middleware, unified response/exception/pagination, scheduler, SSE logs
-├── apps/                  # Business applications (decoupled from framework)
-│   ├── demo_blog/         #   Example: Post/Category CRUD + SOAP + tests
-│   └── common/            #   crypto_utils (SM4/AES/MD5), redis_utils (cache/lock/ratelimit)
+│   └── common/            #   Middleware, unified response/exception/pagination, scheduler, SSE logs, crypto_utils
 ├── adminx-ui/             # Frontend (Vue 3 + Ant Design Vue 4 + Pinia + Vite)
 │   └── src/
 │       ├── api/           #   API service layer (axios)
@@ -64,10 +60,6 @@ DjangoAdminX/
 ```
 
 ## Architecture & Key Patterns
-
-### Framework/Business Decoupling
-- `djangoadminx/` is reusable admin framework — never import from `apps/` into framework code.
-- `apps/` is business code — imports framework via `djangoadminx.*`, but not internal details.
 
 ### View Pattern
 - Prefer `viewsets.ModelViewSet` for CRUD.
@@ -100,14 +92,7 @@ DjangoAdminX/
   - See [`SchedulerManager`](djangoadminx/common/scheduler.py) and [`SchedulerHeartbeat`](djangoadminx/webservice/models.py) for implementation.
 - **Anti-pattern (fixed)**: Before this approach, signals and reload called `reload_job()`/`reload_all()` directly on `SchedulerManager` singleton — this only affected the calling process (one Gunicorn worker) and was silently ignored by the actual scheduler process. **Never rely on in-process state for cross-process coordination.**
 
-### Redis Tooling (apps/common/redis_utils.py)
-- `CacheProxy` — auto-serializing cache.
-- `RedisProxy().lock()` — distributed lock.
-- `RateLimiter` — sliding window rate limiter.
-- `delay_double_delete()` — cache update pattern.
-- All components degrade gracefully when Redis is unavailable.
-
-### Encryption (apps/common/crypto_utils.py)
+### Encryption (djangoadminx/common/crypto_utils.py)
 - SM4 (ECB/CBC), AES (CBC/GCM), MD5, SHA256, HMAC-SHA256.
 - Each function has `_b64` variant for base64 I/O.
 
@@ -124,11 +109,12 @@ DjangoAdminX/
 - Always call `response.render()` and parse JSON: `json.loads(response.content)`.
 - Assert on `data["code"]` (not response.status_code) due to `StandardJsonRenderer`.
 
-### Adding a New Module
-1. Create app: `python manage.py startapp myapp apps/myapp`
-2. Register in `config/settings/base.py` → `LOCAL_APPS`
-3. Register routes in `config/urls.py`
-4. Model → Serializer → ViewSet → URL → Test (follow demo_blog patterns)
+### Business Container Development
+Business services run in separate containers and authenticate via JWT introspection:
+1. Write business service in any language/framework
+2. Use `POST /api/v1/accounts/introspect/` to validate tokens
+3. Platform returns `user_id`, `roles`, `permissions` for local authorization
+4. Register menus/routes via Config Center or platform registration API
 
 ### Built-in Roles (等保2.0 三权分立)
 - **超级管理员** (`super_admin`) — all permissions, all menus
@@ -149,7 +135,7 @@ This project uses **Gunicorn multi-worker** for HTTP + **separate scheduler proc
 3. **Cross-process coordination requires shared storage.** Use the database for cross-process communication (not cache/Redis):
    - **Status detection**: `SchedulerHeartbeat.last_heartbeat` written by scheduler process, checked by web workers via `is_alive()`.
    - **Notifications**: `SchedulerHeartbeat.reload_pending` set by web workers (CRUD signals + reload button), polled by scheduler process.
-   - **Distributed locks**: use `RedisProxy().lock()` from `apps/common/redis_utils.py` (Redis only, optional).
+    - **Distributed locks**: use `RedisProxy().lock()` (Redis only, optional).
 4. **LocMemCache is per-process.** Django's `LocMemCache` is not shared between processes. Only `RedisCache` provides cross-process cache sharing. **Use DB instead of cache for any cross-process data that must work without Redis.**
 5. **CacheOps** is automatically disabled when Redis is unavailable (`CACHEOPS_REDIS = None`).
 6. **Never rely on in-process state for cross-process coordination.** If you need to communicate between processes, use the database (or Redis for performance-sensitive scenarios).
@@ -166,21 +152,6 @@ if MyModel.objects.filter(id=FIXED_ID, flag=True).exists():
 ```
 ### Menu Model Note
 `Menu.path` field conflicts with treebeard MP_Node's internal `path` field. The tree structure is rebuilt on the frontend from flat menu data (by path prefix matching in `menuTree.ts`), so treebeard's tree operations (`add_root`, `add_child`) are not used. Menu creation in `init_data.py` uses direct ORM with manually set `depth`/`numchild` values.
-
-### Spyne / SOAP Compatibility (Python 3.13+)
-
-spyne 2.14.0 bundles six 1.14.0, whose `_SixMetaPathImporter` only implements the deprecated `find_module`/`load_module` (PEP 302). Python 3.13+ ignores `find_module` in favor of `find_spec` (PEP 451), causing `from spyne.util.six.moves.collections_abc import MutableSet` to fail.
-
-**Fix**: `djangoadminx/common/spyne_compat.py` pre-loads spyne's bundled `six.py`, patches `_SixMetaPathImporter` with a `find_spec` method, and pre-registers known `six.moves.*` modules in `sys.modules`.
-
-**Critical**: Every Django entry point MUST import this module **before** any spyne code loads:
-
-```python
-# manage.py / wsgi.py / asgi.py — top of the file
-import djangoadminx.common.spyne_compat  # noqa: F401
-```
-
-**Troubleshooting**: If you see `ImportError: cannot import name 'Application' from 'spyne'`, the compat module's stub package cleanup failed (empty `spyne`/`spyne.util` in `sys.modules`). Check `spyne_compat.apply()` step 3b.
 
 ### note
 - 禁止修改虚拟环境源码

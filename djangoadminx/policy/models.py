@@ -26,7 +26,7 @@ class PasswordPolicy(models.Model):
         verbose_name_plural = "密码策略"
 
     def save(self, *args, **kwargs):
-        self.pk = 1  # 单例
+        self.pk = 1
         super().save(*args, **kwargs)
 
     @classmethod
@@ -63,10 +63,10 @@ class PasswordPolicy(models.Model):
             return False
         if not user.password or not user.password.startswith(("pbkdf2_", "bcrypt", "argon2")):
             return False
-        # 取密码修改时间（Django 不记录，用 last_login 或 date_joined 近似）
         from django.utils import timezone
         from datetime import timedelta
-        ref_date = user.last_login or user.date_joined
+        # 使用 password_changed_at 字段（Django 5.x 及以上支持）
+        ref_date = getattr(user, 'password_changed_at', None) or user.last_login or user.date_joined
         if ref_date is None:
             ref_date = timezone.now()
         return timezone.now() - ref_date > timedelta(days=self.expire_days)

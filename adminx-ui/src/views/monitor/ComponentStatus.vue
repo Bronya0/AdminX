@@ -67,22 +67,6 @@
         </a-card>
       </a-col>
 
-      <a-col :xs="24" :sm="12" :lg="6">
-        <a-card>
-          <template #title>
-            <a-space>
-              <ApiOutlined style="color: #fa8c16" />
-              <span>WebService</span>
-            </a-space>
-          </template>
-          <a-skeleton :loading="loading" active>
-            <div class="component-status">
-              <a-badge status="default" />
-              <span>{{ wsCount }} 个服务</span>
-            </div>
-          </a-skeleton>
-        </a-card>
-      </a-col>
     </a-row>
 
     <!-- 详情区域 -->
@@ -92,7 +76,7 @@
           <a-descriptions bordered :column="2">
             <a-descriptions-item label="操作系统">{{ osInfo }}</a-descriptions-item>
             <a-descriptions-item label="Python 版本">{{ pythonVersion }}</a-descriptions-item>
-            <a-descriptions-item label="Django 版本">{{ djangoVersion }}</a-descriptions-item>
+            <a-descriptions-item label="Django 版本" :span="2">{{ djangoVersion }}</a-descriptions-item>
             <a-descriptions-item label="Node 状态" :span="2">
               <a-badge :status="health.status === 'ok' ? 'success' : 'error'" text="运行正常" />
             </a-descriptions-item>
@@ -143,21 +127,18 @@ import {
   DashboardOutlined,
   DatabaseOutlined,
   ClusterOutlined,
-  ApiOutlined,
   DeleteOutlined,
 } from '@ant-design/icons-vue'
 import { commonApi } from '@/api/common'
 import { clusterApi } from '@/api/cluster'
-import { webserviceApi } from '@/api/monitor'
 
 const loading = ref(true)
 const clearing = ref(false)
 const activeKey = ref('system')
 
-const health = reactive<any>({})
-const cacheStats = reactive<any>({})
+const health = reactive<Record<string, any>>({})
+const cacheStats = reactive<Record<string, any>>({})
 const clusterStats = reactive({ total: 0, online: 0 })
-const wsCount = ref(0)
 
 const osInfo = navigator.platform || 'Unknown'
 const pythonVersion = '3.13'
@@ -166,17 +147,15 @@ const djangoVersion = '5.x'
 const loadData = async () => {
   loading.value = true
   try {
-    const [h, c, cl, ws] = await Promise.all([
+    const [h, c, cl] = await Promise.all([
       commonApi.health(),
       commonApi.cacheStats(),
       clusterApi.getOverview(),
-      webserviceApi.getServices({ page: 1 }),
     ])
     Object.assign(health, h)
     Object.assign(cacheStats, c)
     clusterStats.total = cl.total
     clusterStats.online = cl.online
-    wsCount.value = ws.count
   } catch (e) {
     console.error('加载组件状态失败', e)
   } finally {

@@ -7,6 +7,8 @@ import requests
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from .models import Notification, WebhookConfig, WebhookLog
+
 logger = logging.getLogger("djangoadminx.notification")
 
 
@@ -33,8 +35,6 @@ def send_webhook(config, notification):
 
 
 def _log_result(config, notification, status, response_status=None, response_body="", error_message=""):
-    """写发送日志"""
-    from .models import WebhookLog
     WebhookLog.objects.create(
         webhook=config,
         notification=notification,
@@ -55,18 +55,14 @@ def dispatch(notification):
 
 
 def _matches_events(events_csv, notification_type):
-    """检查通知类型是否在配置的触发事件中"""
     if not events_csv:
         return True
     events = [e.strip() for e in events_csv.split(",") if e.strip()]
     return notification_type in events
 
 
-@receiver(post_save)
+@receiver(post_save, sender=Notification)
 def on_notification_created(sender, instance, created, **kwargs):
-    from .models import Notification as NotificationModel
-    if sender is not NotificationModel:
-        return
     """通知创建时自动触发 webhook"""
     if created:
         dispatch(instance)

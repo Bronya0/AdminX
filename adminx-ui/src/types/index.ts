@@ -59,7 +59,8 @@ export interface Role {
   code: string
   desc: string
   is_active: boolean
-  permissions: string[]
+  permissions?: string[]
+  business_permissions: string[]
   menus: string[]
   created_at: string
   updated_at: string
@@ -72,6 +73,29 @@ export interface Permission {
   codename: string
   content_type: number
   content_type_name: string
+  app_label: string
+}
+
+export interface BusinessPermission {
+  id: string
+  app_label: string
+  codename: string
+  name: string
+  desc: string
+  created_at: string
+}
+
+export interface BusinessCommand {
+  id: string
+  app_label: string
+  name: string
+  icon: string
+  menu_path: string
+  allowed_paths: string
+  description: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 // 菜单相关
@@ -91,6 +115,7 @@ export interface Menu {
   numchild: number
   parent?: string
   children?: Menu[]
+  allowed_paths: string
   created_at: string
   updated_at: string
 }
@@ -185,23 +210,6 @@ export interface NetstatInfo {
   OTHER: number
 }
 
-// WebService 相关
-export interface WebService {
-  id: string
-  name: string
-  wsdl_url: string
-  type: 'publish' | 'consume'
-  method: string
-  request_template: string
-  response_mapping: string
-  auth_type: 'none' | 'basic' | 'token'
-  auth_username: string
-  auth_password: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
 // 定时任务相关
 export interface ScheduleJob {
   id: string
@@ -213,7 +221,6 @@ export interface ScheduleJob {
   trigger_config: string
   args: string
   kwargs: string
-  webservice: string | null
   is_active: boolean
   last_run: { status: string; result: string; started_at: string; finished_at: string } | null
   created_at: string

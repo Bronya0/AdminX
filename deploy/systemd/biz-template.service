@@ -1,0 +1,23 @@
+[Unit]
+Description=Biz Service — {APP_NAME}
+After=network.target djangoadminx-web.service
+Requires=djangoadminx-web.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/{APP_NAME}
+ExecStart=/path/to/{APP_NAME}/run.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 按需设置环境变量
+# Environment=APP_PORT=8080
+# Environment=PLATFORM_URL=http://localhost:8000
+# Environment=PLATFORM_TOKEN=xxx
+
+[Install]
+WantedBy=multi-user.target

@@ -1,3 +1,5 @@
+import fnmatch
+import json
 import logging
 from datetime import timedelta
 
@@ -11,13 +13,16 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from djangoadminx.audit.mixins import AuditLogMixin
-from .models import LoginLock, Role, User, UserLoginLog
+from .models import BusinessCommand, BusinessPermission, LoginLock, Role, User, UserLoginLog
 from djangoadminx.captcha.views import verify_captcha
 from .serializers import (
+    BusinessCommandSerializer,
+    BusinessPermissionSerializer,
     LoginLogSerializer,
     LoginSerializer,
     PermissionSerializer,
@@ -69,6 +74,143 @@ def _record_login_failure(username):
 
 def _clear_login_lock(username):
     LoginLock.objects.filter(username=username).delete()
+
+
+class TokenIntrospectView(APIView):
+    """Token introspection — 供业务容器验证 JWT 并获取用户身份/权限
+
+    业务容器在收到前端请求后，将 JWT 转发给此接口。
+    平台返回用户身份、角色、权限，业务容器据此执行本地鉴权。
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []  # 业务容器没有用户上下文，裸调
+
+    # 平台登录页地址，业务容器收到 401 后可引导用户跳转
+    login_url = getattr(settings, "LOGIN_URL", "/login")
+
+    def _error(self, code: str, msg: str, http_status: int = 401, extra: dict | None = None):
+        data = {"valid": False, "error_code": code, "error": msg, "login_url": self.login_url}
+        if extra:
+            data.update(extra)
+        return Response({"code": http_status, "msg": msg, "data": data})
+
+    def post(self, request):
+        token_str = request.data.get("token", "")
+        if not token_str:
+            return self._error("token_missing", "未提供令牌")
+
+        try:
+            access_token = AccessToken(token_str)
+        except TokenError as e:
+            err_msg = str(e).lower()
+            if "expired" in err_msg:
+                return self._error("token_expired", "令牌已过期，请重新登录")
+            if any(kw in err_msg for kw in ("wrong type", "类型错误")):
+                return self._error("token_type_error", "不能使用 refresh token 调用，请传入 access token")
+            return self._error("token_invalid", "令牌无效", extra={"detail": str(e)})
+
+        user_id = access_token.payload.get("user_id")
+        if not user_id:
+            return self._error("token_invalid", "令牌载荷异常：缺少用户标识")
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return self._error("user_not_found", "用户不存在或已被删除")
+
+        if not user.is_active:
+            return self._error("user_inactive", "账号已被禁用，请联系管理员")
+
+        # 权限：合并菜单 permission_code + BusinessPermission codename
+        from djangoadminx.menu.models import Menu
+
+        if user.is_superuser:
+            perms = sorted(
+                Menu.objects.filter(is_active=True)
+                .exclude(permission_code="")
+                .values_list("permission_code", flat=True)
+            )
+            biz_perms = list(
+                BusinessPermission.objects.values_list("codename", flat=True)
+            )
+        else:
+            role_ids = list(user.roles.values_list("id", flat=True))
+            perms = sorted(
+                Menu.objects.filter(
+                    is_active=True, roles__id__in=role_ids
+                ).exclude(permission_code="")
+                .values_list("permission_code", flat=True)
+            )
+            biz_perms = list(
+                BusinessPermission.objects.filter(roles__in=user.roles.all())
+                .values_list("codename", flat=True)
+            )
+
+        # 角色
+        roles = list(user.roles.values("code", "name"))
+
+        # 路径白名单检查：业务容器可校验用户是否授权访问指定 REST 路径
+        check_path = request.data.get("path", "")
+        check_method = request.data.get("method", "")
+        path_allowed = True
+        if check_path and not user.is_superuser:
+            role_ids = list(user.roles.values_list("id", flat=True))
+            # 只检查用户角色有权限的菜单关联的命令
+            from djangoadminx.menu.models import Menu
+            user_menu_paths = set(
+                Menu.objects.filter(is_active=True, roles__id__in=role_ids)
+                .values_list("path", flat=True)
+            )
+            commands = BusinessCommand.objects.filter(
+                is_active=True,
+                menu_path__in=user_menu_paths,
+            )
+            path_allowed = False
+            for cmd in commands:
+                try:
+                    paths = json.loads(cmd.allowed_paths) if cmd.allowed_paths else []
+                except json.JSONDecodeError:
+                    continue
+                for rule in paths:
+                    if not isinstance(rule, str):
+                        continue
+                    rl = rule.strip()
+                    rl_method = ""
+                    rl_path = rl
+                    if check_method and ":" in rl:
+                        parts = rl.split(":", 1)
+                        rl_method = parts[0].upper()
+                        rl_path = parts[1].strip()
+                    if rl_method and rl_method != check_method.upper():
+                        continue
+                    if fnmatch.fnmatch(check_path, rl_path):
+                        path_allowed = True
+                        break
+                if path_allowed:
+                    break
+
+        return Response({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "valid": True,
+                "user_id": str(user.id),
+                "username": user.username,
+                "email": user.email,
+                "phone": user.phone,
+                "avatar": user.avatar,
+                "is_superuser": user.is_superuser,
+                "roles": roles,
+                "role_names": [r.get("name") for r in roles],
+                "permissions": perms,
+                "business_permissions": biz_perms,
+                "exp": access_token.payload.get("exp"),
+                "iat": access_token.payload.get("iat"),
+                "token_type": access_token.payload.get("token_type"),
+                "login_url": self.login_url,
+                "path_allowed": path_allowed,
+            },
+        })
 
 
 class LoginView(TokenObtainPairView):
@@ -175,12 +317,11 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
     def me(self, request):
         """当前用户信息 + 权限 + 菜单"""
         user = request.user
-        perms = user.get_all_permissions()
+        from djangoadminx.menu.models import Menu
+
         if user.is_superuser:
-            from djangoadminx.menu.models import Menu
             menus_qs = Menu.objects.filter(is_active=True).order_by("sort_order")
         else:
-            from djangoadminx.menu.models import Menu
             role_ids = user.roles.values_list("id", flat=True)
             menus_qs = Menu.objects.filter(
                 is_active=True, roles__id__in=role_ids
@@ -189,12 +330,39 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
         from djangoadminx.menu.serializers import MenuFlatSerializer
         menu_ser = MenuFlatSerializer(menus_qs, many=True)
 
+        # 权限：合并菜单 permission_code + 业务权限 codename
+        perm_set: set[str] = set()
+        if user.is_superuser:
+            perm_set.update(
+                Menu.objects.filter(is_active=True)
+                .exclude(permission_code="")
+                .values_list("permission_code", flat=True)
+            )
+            from .models import BusinessPermission
+            perm_set.update(
+                BusinessPermission.objects.values_list("codename", flat=True)
+            )
+        else:
+            role_ids = list(user.roles.values_list("id", flat=True))
+            perm_set.update(
+                Menu.objects.filter(
+                    is_active=True, roles__id__in=role_ids
+                ).exclude(permission_code="")
+                .values_list("permission_code", flat=True)
+            )
+            from .models import BusinessPermission
+            perm_set.update(
+                BusinessPermission.objects.filter(
+                    roles__in=user.roles.all()
+                ).values_list("codename", flat=True)
+            )
+
         return Response({
             "code": 200,
             "msg": "success",
             "data": {
                 "user": UserSerializer(user).data,
-                "permissions": list(perms),
+                "permissions": sorted(perm_set),
                 "menus": menu_ser.data,
             },
         })
@@ -214,6 +382,16 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
         if desc:
             queryset = queryset.filter(desc__icontains=desc)
         return queryset
+
+
+class BusinessPermissionViewSet(viewsets.ModelViewSet):
+    """业务权限 — 供业务容器注册/查询"""
+    queryset = BusinessPermission.objects.all()
+    serializer_class = BusinessPermissionSerializer
+    search_fields = ["name", "codename", "app_label"]
+    ordering_fields = ["app_label", "codename"]
+    filterset_fields = ["app_label"]
+    pagination_class = None  # 列表不分页
 
 
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -246,3 +424,13 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
         if ip:
             queryset = queryset.filter(ip__icontains=ip)
         return queryset
+
+
+class BusinessCommandViewSet(viewsets.ModelViewSet):
+    """业务命令 — 供业务容器注册菜单 + 路径白名单"""
+    queryset = BusinessCommand.objects.all()
+    serializer_class = BusinessCommandSerializer
+    search_fields = ["name", "app_label", "menu_path"]
+    ordering_fields = ["app_label", "name"]
+    filterset_fields = ["app_label", "is_active"]
+    pagination_class = None  # 数据量小，不分页

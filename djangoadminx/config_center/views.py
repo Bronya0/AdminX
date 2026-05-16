@@ -45,6 +45,28 @@ class ConfigViewSet(AuditLogMixin,
         data = Config.get_by_group(group)
         return Response({"code": 200, "msg": "success", "data": data})
 
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def get_value(self, request):
+        """按 key 获取单个配置值（业务容器友好）
+
+        业务容器通过用户 JWT 调用此接口，获取配置中心的值。
+        例如: GET /api/v1/config/get_value/?key=SOME_KEY
+        → 返回 {code: 200, data: {key: "SOME_KEY", value: "xxx"}}
+        """
+        key = request.query_params.get("key", "")
+        if not key:
+            return Response({"code": 400, "msg": "请指定 key 参数"})
+
+        value = Config.get_value(key, default=None)
+        if value is None:
+            return Response({"code": 404, "msg": f"配置 {key} 不存在"})
+
+        return Response({
+            "code": 200,
+            "msg": "success",
+            "data": {"key": key, "value": value},
+        })
+
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def groups(self, request):
         """获取所有分组列表"""

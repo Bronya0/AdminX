@@ -2,7 +2,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 
-from .models import Role, User, UserLoginLog
+from .models import BusinessCommand, BusinessPermission, Role, User, UserLoginLog
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -46,6 +46,9 @@ class RoleSerializer(serializers.ModelSerializer):
     permissions = serializers.SlugRelatedField(
         many=True, slug_field="codename", queryset=Permission.objects.all(), required=False
     )
+    business_permissions = serializers.SlugRelatedField(
+        many=True, slug_field="codename", queryset=BusinessPermission.objects.all(), required=False
+    )
     menus = serializers.SlugRelatedField(
         many=True, slug_field="code", queryset=Role._meta.get_field("menus").remote_field.model.objects.all(), required=False
     )
@@ -56,12 +59,20 @@ class RoleSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+class BusinessPermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BusinessPermission
+        fields = "__all__"
+        read_only_fields = ["id", "created_at"]
+
+
 class PermissionSerializer(serializers.ModelSerializer):
     content_type_name = serializers.CharField(source="content_type.name", read_only=True)
+    app_label = serializers.CharField(source="content_type.app_label", read_only=True)
 
     class Meta:
         model = Permission
-        fields = ["id", "name", "codename", "content_type", "content_type_name"]
+        fields = ["id", "name", "codename", "content_type", "content_type_name", "app_label"]
 
 
 class LoginSerializer(serializers.Serializer):
@@ -75,3 +86,10 @@ class LoginLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserLoginLog
         fields = "__all__"
+
+
+class BusinessCommandSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BusinessCommand
+        fields = "__all__"
+        read_only_fields = ["id", "created_at", "updated_at"]

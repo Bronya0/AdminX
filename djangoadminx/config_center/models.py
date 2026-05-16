@@ -4,18 +4,21 @@ from cryptography.fernet import Fernet
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 
 
 def get_fernet():
-    """获取 Fernet 实例 — 密钥来自 settings"""
+    """获取 Fernet 实例 — 密钥来自环境变量 FERNET_KEY（持久化）"""
     key = getattr(settings, "FERNET_KEY", None)
     if not key:
-        # 自动生成并存储（仅首次）
-        key = Fernet.generate_key()
-        settings.FERNET_KEY = key
-    return Fernet(key)
+        key = settings.FERNET_KEY
+        if not key:
+            raise RuntimeError(
+                "FERNET_KEY 未配置。请在 .env 中设置: "
+                "FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+            )
+    return Fernet(key.encode() if isinstance(key, str) else key)
 
 
 class EncryptedConfigField(models.CharField):
@@ -32,7 +35,7 @@ class EncryptedConfigField(models.CharField):
             try:
                 return get_fernet().decrypt(value.encode()).decode()
             except Exception:
-                return value
+                return "<<解密失败>>"
         return value
 
     def get_prep_value(self, value):
@@ -76,13 +79,20 @@ class Config(models.Model):
         """解析 value 为对应类型"""
         if self.value_type == self.TypeChoices.ENCRYPTED:
             return self.encrypted_value
+        raw = self.value
         if self.value_type == self.TypeChoices.INT:
-            return int(self.value)
+            if not raw:
+                return 0
+            return int(raw)
         if self.value_type == self.TypeChoices.BOOL:
-            return self.value.lower() in ("true", "1", "yes")
+            if not raw:
+                return False
+            return raw.lower() in ("true", "1", "yes")
         if self.value_type in (self.TypeChoices.JSON, self.TypeChoices.OPTIONS):
-            return json.loads(self.value) if self.value else ([] if self.value_type == self.TypeChoices.OPTIONS else None)
-        return self.value
+            if not raw:
+                return [] if self.value_type == self.TypeChoices.OPTIONS else None
+            return json.loads(raw)
+        return raw
 
     def get_options(self):
         """获取选项列表 — 仅对 options 类型有效"""
@@ -108,12 +118,7 @@ class Config(models.Model):
 
     @classmethod
     def get_by_group(cls, group):
-        """
-        按分组批量获取配置（用于选项列表查询）
-
-        返回 {key1: parsed_value, key2: parsed_value, ...}
-        options 类型的 value 自动解析为选项列表
-        """
+        """按分组批量获取配置"""
         cache_key = f"config_group:{group}"
         cached = cache.get(cache_key)
         if cached is not None:
@@ -133,3 +138,17 @@ class Config(models.Model):
 def clear_config_cache(sender, instance, **kwargs):
     cache.delete(f"config:{instance.key}")
     cache.delete(f"config_group:{instance.group}")
+
+
+@receiver(pre_save, sender=Config)
+def clear_old_key_cache(sender, instance, **kwargs):
+    """配置 key/group 变更时清除旧缓存"""
+    if instance.pk:
+        try:
+            old = Config.objects.get(pk=instance.pk)
+            if old.key != instance.key:
+                cache.delete(f"config:{old.key}")
+            if old.group != instance.group:
+                cache.delete(f"config_group:{old.group}")
+        except Config.DoesNotExist:
+            pass

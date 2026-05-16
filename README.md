@@ -1,6 +1,6 @@
 # DjangoAdminX
 
-> 企业级 Django Admin 框架底座 — RBAC 权限、动态菜单、JWT 认证、配置中心（含业务选项列表）、WebService、定时任务、集群管理、系统监控、文件中心、加密工具、Redis 工具集、高可用部署。
+> 企业级 Django Admin 框架底座 — RBAC 权限、动态菜单、JWT 认证、配置中心（含业务选项列表）、定时任务、集群管理、系统监控、文件中心、加密工具、高可用部署。
 
 ## 特性
 
@@ -15,7 +15,6 @@
 ### 核心功能
 - **动态菜单** — `django-treebeard` 物化路径树形结构，多级 + 排序 + 角色绑定
 - **配置中心** — KV 动态配置 + 业务选项列表一体化，支持 String/Int/Bool/JSON/加密/选项列表 六种类型，Fernet 加密存储，Redis 缓存加速，分组批量查询
-- **WebService (SOAP)** — `spyne` 发布与调用 WSDL 接口，完整调用日志与错误追溯
 - **定时任务** — APScheduler 独立进程运行（不受 Gunicorn 多进程影响），数据库驱动，Cron/间隔/一次性触发
 - **文件中心** — 统一文件上传，支持 Local / MinIO 存储后端，可扩展
 - **数据导入导出** — 基于 openpyxl 的 Excel 导入导出，支持多模型
@@ -32,7 +31,7 @@
 ### 架构
 - **统一 API 规范** — `{code, msg, data}` 全局响应格式，统一异常处理，统一分页
 - **统一异常处理** — 全局 exception handler，所有异常统一包装为标准格式
-- **业务/框架解耦** — 框架代码 `djangoadminx/`, 业务代码 `apps/`，互不依赖内部细节
+- **业务/框架解耦** — 框架代码 `djangoadminx/`，业务代码独立容器部署，JWT Token Introspection 认证
 - **分布式部署** — Nginx 负载均衡 + Redis Session 共享 + PostgreSQL HA
 - **配置环境分离** — `base.py` / `dev.py` / `prod.py` 三环境
 - **API 文档** — `drf-spectacular` → OpenAPI 3.0 + Swagger UI
@@ -49,11 +48,6 @@
 | 树形结构 | django-treebeard（物化路径） |
 | 加密 | Cryptography Fernet（配置加密字段）+ GMSSL（SM4） |
 | 调度 | APScheduler 3.x（独立进程） |
-| 文档 | drf-spectacular（OpenAPI 3.0 + Swagger） |
-| 部署 | Gunicorn + Uvicorn + Nginx + Docker |
-| 监控 | psutil + Django Channels（实时日志） |
-| WebService | spyne + lxml |
-| 文件处理 | openpyxl（导入导出）+ MinIO（对象存储） |
 
 ## 快速开始
 
@@ -142,11 +136,6 @@ docker compose up -d
 
 ```
 DjangoAdminX/
-├── apps/                          # 业务应用（与框架解耦）
-│   ├── demo_blog/                 #   业务示例：文章/分类 CRUD + SOAP
-│   └── common/                    #   业务通用工具
-│       ├── crypto_utils.py        #     加解密工具（SM4/AES/MD5/SHA256/HMAC）
-│       └── redis_utils.py         #     Redis 工具（缓存/锁/限流/延迟双删）
 ├── djangoadminx/                  # 框架代码
 │   ├── accounts/                  #   用户、角色、权限、JWT 登录/登出、登录锁定
 │   ├── menu/                      #   动态菜单（treebeard 物化路径）
@@ -172,12 +161,14 @@ DjangoAdminX/
 │   ├── docker/
 │   │   ├── Dockerfile
 │   │   ├── entrypoint.sh
-│   │   ├── djangoadminx-scheduler.service
-│   │   ├── djangoadminx.service
-│   │   └── supervisor.conf
-│   ├── nginx/
-│   │   └── nginx.conf
-│   └── docker-compose.yml
+│   │   ├── supervisor.conf
+│   │   └── docker-compose.yml
+│   ├── systemd/
+│   │   ├── djangoadminx-web.service      # Gunicorn
+│   │   ├── djangoadminx-scheduler.service # APScheduler
+│   │   └── biz-template.service           # 三方业务模板
+│   └── nginx/
+│       └── nginx.conf
 ├── start-linux.sh
 ├── start-win.bat
 ├── requirements.txt
@@ -225,16 +216,6 @@ DjangoAdminX/
 | | `GET /api/common/log/tail/` | SSE 实时日志流 |
 | **文档** | `GET /api/schema/` | OpenAPI 3.0 Schema |
 | | `GET /api/docs/` | Swagger UI |
-| **SOAP (WSDL)** | `GET /api/publish/user/?wsdl` | 用户数据 SOAP 接口 |
-| | `GET /api/publish/menu/?wsdl` | 菜单数据 SOAP 接口 |
-| | `GET /api/publish/config/?wsdl` | 配置数据 SOAP 接口 |
-| | `GET /api/publish/cluster/?wsdl` | 集群数据 SOAP 接口 |
-| **Demo 博客** | `GET/POST/PUT/DELETE /api/v1/demo/categories/` | 分类 CRUD |
-| | `GET/POST/PUT/DELETE /api/v1/demo/posts/` | 文章 CRUD（含搜索/过滤/排序） |
-| | `POST /api/v1/demo/posts/{id}/publish/` | 发布文章 |
-| | `POST /api/v1/demo/posts/{id}/increment_view/` | 增加浏览量 |
-| | `GET /api/v1/demo/posts/stats/` | 文章统计 |
-| | `POST /api/v1/demo/publish/post/` | Demo SOAP 发布 |
 
 ## 配置中心
 
@@ -285,7 +266,7 @@ options = Config.get_by_group("post_status")
 ### crypto_utils — 加解密工具
 
 ```python
-from apps.common.crypto_utils import (
+from djangoadminx.common.crypto_utils import (
     sm4_ecb_encrypt, sm4_cbc_encrypt,
     aes_cbc_encrypt, aes_gcm_encrypt,
     md5_hash, sha256_hash, hmac_sha256,
@@ -304,34 +285,6 @@ digest = sha256_hash(b"data")
 
 所有函数提供 bytes 和 base64 两种变体（`_b64` 后缀）。
 
-### redis_utils — Redis 工具集
-
-所有组件在 Redis 不可用时自动降级，不抛出异常。
-
-```python
-from apps.common.redis_utils import CacheProxy, RedisProxy, RateLimiter
-
-# 缓存代理（带自动序列化）
-cache = CacheProxy()
-cache.set("key", {"data": [1,2,3]}, ttl=300)
-data = cache.get("key")
-
-# 分布式锁
-with RedisProxy().lock("my_lock", timeout=10):
-    # 互斥操作
-    pass
-
-# 限流器
-limiter = RateLimiter()
-if limiter.allow("api:login", max_requests=5, window=60):
-    # 处理请求
-    pass
-
-# 延迟双删（缓存更新模式）
-from apps.common.redis_utils import delay_double_delete
-delay_double_delete("cache_key")
-```
-
 ## Scheduler 独立进程
 
 APScheduler 以独立进程运行，不受 Gunicorn 多 worker 影响：
@@ -340,46 +293,25 @@ APScheduler 以独立进程运行，不受 Gunicorn 多 worker 影响：
 # 开发环境
 python manage.py run_scheduler
 
-# 生产（supervisor 管理）
-supervisorctl start djangoadminx-scheduler
+# 生产（systemd）
+sudo systemctl start djangoadminx-scheduler
 ```
 
 - Job 定义存储在数据库（`ScheduleJob` 模型），CRUD 后通过 Django 信号自动通知调度器重载
 - Job 存储使用 Redis JobStore，进程重启自动恢复
 - 支持 `cron` / `interval` / `date` 三种触发类型
-- 内置 `call_webservice()`、`ntp_sync()`、`sample_task()` 任务模板
-
-## SOAP 接口
-
-框架内置 4 个 WSDL 服务端点，通过 spyne 发布，所有 SOAP 请求需携带 JWT token（`Authorization: Bearer xxx`）：
-
-| 服务 | WSDL 地址 | 方法 |
-|------|-----------|------|
-| 用户数据 | `GET /api/publish/user/?wsdl` | `list_users`, `get_user` |
-| 菜单数据 | `GET /api/publish/menu/?wsdl` | `list_menus` |
-| 配置数据 | `GET /api/publish/config/?wsdl` | `list_configs`（加密值脱敏） |
-| 集群数据 | `GET /api/publish/cluster/?wsdl` | `list_nodes` |
-
-## 业务示例 — demo_blog
-
-完整的业务开发规范示例，位于 `apps/demo_blog/`，演示：
-
-- **Model** — UUID 主键、ForeignKey、状态机、时间戳最佳实践
-- **Serializer** — 嵌套字段、字段校验、跨字段校验、tag_list ↔ tags 转换
-- **ViewSet** — ModelViewSet、search/ordering/filterset 声明式查询、@action 自定义端点
-- **FilterSet** — 时间范围、多字段关键词、多分类筛选
-- **WSDL** — spyne SOAP 发布
-- **配置中心集成** — 状态选项从配置中心动态获取
-- **测试** — APITestCase 完整覆盖 CRUD + 边界 + 权限
+- 内置 `ntp_sync()`、`sample_task()` 任务模板
 
 ## 开发指南
 
-### 添加新模块
+### 业务容器开发
 
-1. 在 `apps/` 下创建新 app：`python manage.py startapp myapp apps/myapp`
-2. 在 `config/settings/base.py` 的 `LOCAL_APPS` 中添加 `"apps.myapp"`
-3. 在 `config/urls.py` 中注册路由
-4. 编写 Model → Serializer → ViewSet → URL → 测试
+业务功能运行在独立容器中，通过 JWT Token Introspection 接入平台认证：
+
+1. 使用任意语言/框架编写业务服务
+2. 请求到达后，将前端 `Authorization` 头中的 token 发送至 `POST /api/v1/accounts/introspect/`
+3. 平台返回 `user_id`、`roles`、`permissions`，业务容器据此执行本地鉴权
+4. 菜单/路由通过注册 API 或配置中心手动配置
 
 ### 新增定时任务
 
@@ -394,9 +326,6 @@ supervisorctl start djangoadminx-scheduler
 python manage.py test
 
 # 运行单个模块
-python manage.py test apps.demo_blog
-
-# 运行框架测试
 python manage.py test djangoadminx.accounts
 ```
 
@@ -425,6 +354,67 @@ python manage.py test djangoadminx.accounts
          │  APScheduler (独立进程)                 │
          │  python manage.py run_scheduler        │  ← 不受 Gunicorn 多进程影响
          └────────────────────────────────────────┘
+```
+
+## 部署（Linux + systemd）
+
+提供 systemd service unit 文件，支持开机自启、崩溃自动拉起。
+
+### 服务说明
+
+| 组件 | Service | 说明 |
+|------|---------|------|
+| Web | `djangoadminx-web.service` | Gunicorn，Type=notify，HUP 热重载 |
+| 调度器 | `djangoadminx-scheduler.service` | APScheduler，After=web |
+| 三方业务 | `biz-{name}.service` | 按模板创建，After=web |
+
+### 安装
+
+```bash
+# 1. 修改路径
+sed -i 's|/path/to/DjangoAdminX|/var/www/djangoadminx|g' deploy/systemd/*.service
+
+# 2. 复制到系统目录
+sudo cp deploy/systemd/djangoadminx-*.service /etc/systemd/system/
+
+# 3. 重新加载
+sudo systemctl daemon-reload
+
+# 4. 启用开机自启 + 启动
+sudo systemctl enable --now djangoadminx-web
+sudo systemctl enable --now djangoadminx-scheduler
+```
+
+### 常用操作
+
+```bash
+# 查看状态
+sudo systemctl status djangoadminx-web
+
+# 重启
+sudo systemctl restart djangoadminx-web
+
+# 优雅重载（worker 逐个重启，不停服）
+sudo systemctl reload djangoadminx-web
+
+# 查看实时日志
+sudo journalctl -u djangoadminx-web -f
+
+# 停止
+sudo systemctl stop djangoadminx-web
+```
+
+### 三方业务
+
+```bash
+# 复制模板
+sudo cp deploy/systemd/biz-template.service /etc/systemd/system/biz-blog.service
+
+# 编辑，替换 {APP_NAME} 和路径
+sudo vi /etc/systemd/system/biz-blog.service
+
+# 启动
+sudo systemctl enable --now biz-blog
 ```
 
 ## License

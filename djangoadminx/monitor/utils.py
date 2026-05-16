@@ -1,5 +1,4 @@
 import time
-from functools import lru_cache
 
 import psutil
 
@@ -10,7 +9,7 @@ class SystemMonitor:
     @staticmethod
     def cpu():
         return {
-            "percent": psutil.cpu_percent(interval=1),
+            "percent": psutil.cpu_percent(interval=0),
             "count": psutil.cpu_count(),
             "freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else {},
         }
@@ -40,15 +39,20 @@ class SystemMonitor:
 
     @staticmethod
     def disk_io():
-        return psutil.disk_io_counters()._asdict()
+        io = psutil.disk_io_counters()
+        return io._asdict() if io else {}
 
     @staticmethod
     def network_io():
-        return psutil.net_io_counters()._asdict()
+        io = psutil.net_io_counters()
+        return io._asdict() if io else {}
 
     @staticmethod
     def netstat():
-        conns = psutil.net_connections()
+        try:
+            conns = psutil.net_connections()
+        except psutil.AccessDenied:
+            return {"error": "权限不足，无法获取连接状态"}
         stats = {"LISTEN": 0, "ESTABLISHED": 0, "TIME_WAIT": 0, "CLOSE_WAIT": 0, "OTHER": 0}
         for c in conns:
             st = c.status if c.status else "OTHER"

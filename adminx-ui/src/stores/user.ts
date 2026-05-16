@@ -69,7 +69,6 @@ export const useUserStore = defineStore(
       setToken(res.access, res.refresh)
       // 设置用户信息（登录返回的用户信息）
       user.value = res.user
-      console.log('Store user set to:', user.value)
       return res
     }
 
@@ -121,6 +120,14 @@ export const useUserStore = defineStore(
       document.documentElement.style.setProperty('--primary-color', color)
     }
 
+    const clearToken = () => {
+      token.value = ''
+      refreshToken.value = ''
+      user.value = null
+      permissions.value = []
+      menus.value = []
+    }
+
     const toggleDarkMode = () => {
       theme.value.isDark = !theme.value.isDark
       if (theme.value.isDark) {
@@ -155,6 +162,7 @@ export const useUserStore = defineStore(
       updateTheme,
       toggleCollapsed,
       setPrimaryColor,
+      clearToken,
       toggleDarkMode,
     }
   },

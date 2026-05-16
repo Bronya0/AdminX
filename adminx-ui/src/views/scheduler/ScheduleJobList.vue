@@ -97,9 +97,8 @@
               :ellipsis="{ rows: 1, expandable: false }"
               style="margin: 0; max-width: 300px;"
               :title="displayContent(record)"
-            >
-              {{ displayContent(record) }}
-            </a-typography-paragraph>
+              :content="displayContent(record)"
+            />
           </template>
           <template v-if="column.key === 'trigger'">
             <span style="font-size: 12px;">{{ formatTrigger(record) }}</span>
@@ -152,7 +151,7 @@
           </a-radio-group>
         </a-form-item>
         <a-form-item v-if="formState.command_type === 'python'" label="处理函数" name="handler">
-          <a-input v-model:value="formState.handler" placeholder="如 djangoadminx.webservice.tasks.sample_task" />
+          <a-input v-model:value="formState.handler" placeholder="如 djangoadminx.webservice.tasks.ntp_sync" />
         </a-form-item>
         <a-form-item v-if="formState.command_type === 'shell'" label="Shell 命令" name="command">
           <a-textarea v-model:value="formState.command" :rows="3" placeholder="要执行的命令或脚本路径" />
@@ -167,12 +166,28 @@
               </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="12">
-            <a-form-item :label="triggerConfigLabel" name="trigger_config">
-              <a-input v-model:value="formState.trigger_config" :placeholder="triggerConfigPlaceholder" />
-            </a-form-item>
-          </a-col>
         </a-row>
+        <!-- 间隔执行 -->
+        <a-form-item v-if="formState.trigger_type === 'interval'" label="间隔">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <a-input-number v-model:value="formInterval.days" :min="0" :max="365" style="width: 70px" /><span>天</span>
+            <a-input-number v-model:value="formInterval.hours" :min="0" :max="23" style="width: 70px" /><span>时</span>
+            <a-input-number v-model:value="formInterval.minutes" :min="0" :max="59" style="width: 70px" /><span>分</span>
+            <a-input-number v-model:value="formInterval.seconds" :min="0" :max="59" style="width: 70px" /><span>秒</span>
+            <a-select v-model:value="intervalPreset" :options="intervalOptions" placeholder="常用间隔" allow-clear style="width: 120px" @change="onIntervalPreset" />
+          </div>
+        </a-form-item>
+        <!-- Cron 表达式 -->
+        <a-form-item v-else-if="formState.trigger_type === 'cron'" label="Cron 表达式" name="trigger_config">
+          <div style="display: flex; gap: 8px;">
+            <a-input v-model:value="formState.trigger_config" placeholder="*/5 * * * *" style="flex:1" />
+            <a-select v-model:value="formState.trigger_config" :options="cronOptions" placeholder="常用表达式" allow-clear style="width: 150px" />
+          </div>
+        </a-form-item>
+        <!-- 指定时间 -->
+        <a-form-item v-else label="执行时间" name="trigger_config">
+          <a-date-picker v-model:value="formDate" show-time value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
+        </a-form-item>
         <a-form-item label="状态">
           <a-switch v-model:checked="formState.is_active" checked-children="启用" un-checked-children="禁用" />
         </a-form-item>
@@ -182,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import {
   SearchOutlined, ReloadOutlined, PlusOutlined,
   EditOutlined, DeleteOutlined, PlayCircleOutlined,
@@ -232,13 +247,65 @@ const modalTitle = computed(() => editingId.value ? '编辑任务' : '新建任�
 const formState = ref({
   name: '', command_type: 'python' as 'python' | 'shell',
   handler: '', command: '',
-  trigger_type: 'interval', trigger_config: '{"minutes": 5}', is_active: true,
+  trigger_type: 'interval', trigger_config: '{"hours": 1}', is_active: true,
 })
 const formRules: Record<string, any> = { name: [{ required: true, message: '请输入任务名称' }] }
-const triggerConfigLabel = computed(() =>
-  ({ interval: '间隔配置 (JSON)', cron: 'Cron 表达式', date: '执行时间' })[formState.value.trigger_type] || '触发配置')
-const triggerConfigPlaceholder = computed(() =>
-  ({ interval: '{"minutes": 5}', cron: '*/5 * * * *', date: '{"run_date": "2025-01-01 00:00:00"}' })[formState.value.trigger_type] || 'JSON')
+
+// 间隔配置拆分为独立字段
+const formInterval = reactive({ days: 0, hours: 1, minutes: 0, seconds: 0 })
+const formDate = ref<string>('')
+
+// 常用间隔选项
+const intervalOptions = [
+  { label: '每 5 分钟', value: '5' },
+  { label: '每 10 分钟', value: '10' },
+  { label: '每 30 分钟', value: '30' },
+  { label: '每 1 小时', value: '60' },
+  { label: '每 2 小时', value: '120' },
+  { label: '每 6 小时', value: '360' },
+  { label: '每 1 天', value: '1440' },
+]
+const intervalPreset = ref<string>('60')
+const onIntervalPreset = (val: string) => {
+  const total = Number(val)
+  if (!total) return
+  formInterval.days = Math.floor(total / 1440)
+  formInterval.hours = Math.floor((total % 1440) / 60)
+  formInterval.minutes = total % 60
+  formInterval.seconds = 0
+}
+
+// 常用 Cron 表达式
+const cronOptions = [
+  { label: '每 5 分钟', value: '*/5 * * * *' },
+  { label: '每 10 分钟', value: '*/10 * * * *' },
+  { label: '每 30 分钟', value: '*/30 * * * *' },
+  { label: '每小时', value: '0 * * * *' },
+  { label: '每天 2:00', value: '0 2 * * *' },
+  { label: '每天 12:00', value: '0 12 * * *' },
+  { label: '每周一 0:00', value: '0 0 * * 1' },
+  { label: '每月 1 号 0:00', value: '0 0 1 * *' },
+]
+
+// 间隔字段 → JSON
+const intervalToConfig = () => JSON.stringify({
+  ...(formInterval.days ? { days: formInterval.days } : {}),
+  ...(formInterval.hours ? { hours: formInterval.hours } : {}),
+  ...(formInterval.minutes ? { minutes: formInterval.minutes } : {}),
+  ...(formInterval.seconds ? { seconds: formInterval.seconds } : {}),
+})
+// JSON → 间隔字段
+const configToInterval = (json: string) => {
+  try {
+    const c = JSON.parse(json)
+    formInterval.days = c.days ?? 0
+    formInterval.hours = c.hours ?? 0
+    formInterval.minutes = c.minutes ?? 0
+    formInterval.seconds = c.seconds ?? 0
+  } catch {
+    formInterval.days = formInterval.hours = formInterval.minutes = formInterval.seconds = 0
+  }
+}
 
 // ── 取数据 ──
 const fetchData = async () => {
@@ -282,24 +349,43 @@ const displayContent = (job: ScheduleJob) => job.command_type === 'shell' ? (job
 
 const handleAdd = () => {
   editingId.value = null
-  formState.value = { name: '', command_type: 'python', handler: '', command: '', trigger_type: 'interval', trigger_config: '{"minutes": 5}', is_active: true }
+  formState.value = { name: '', command_type: 'python', handler: '', command: '', trigger_type: 'interval', trigger_config: '{"hours": 1}', is_active: true }
+  formInterval.days = 0; formInterval.hours = 1; formInterval.minutes = 0; formInterval.seconds = 0
+  formDate.value = ''
   modalVisible.value = true
 }
 
 const handleEdit = (job: ScheduleJob) => {
   editingId.value = job.id
   formState.value = { name: job.name, command_type: job.command_type, handler: job.handler || '', command: job.command || '', trigger_type: job.trigger_type, trigger_config: job.trigger_config, is_active: job.is_active }
+  formDate.value = ''
+  if (job.trigger_type === 'interval') {
+    configToInterval(job.trigger_config)
+  }
+  if (job.trigger_type === 'date') {
+    try {
+      const c = JSON.parse(job.trigger_config)
+      formDate.value = c.run_date || ''
+    } catch { formDate.value = '' }
+  }
   modalVisible.value = true
 }
 
 const handleModalOk = async () => {
   modalLoading.value = true
   try {
+    // 序列化触发配置
+    const data = { ...formState.value }
+    if (data.trigger_type === 'interval') {
+      data.trigger_config = intervalToConfig()
+    } else if (data.trigger_type === 'date' && formDate.value) {
+      data.trigger_config = JSON.stringify({ run_date: formDate.value })
+    }
     if (editingId.value) {
-      await scheduleJobApi.updateJob(editingId.value, { ...formState.value })
+      await scheduleJobApi.updateJob(editingId.value, data)
       message.success('任务已更新')
     } else {
-      await scheduleJobApi.createJob({ ...formState.value })
+      await scheduleJobApi.createJob(data)
       message.success('任务已创建')
     }
     modalVisible.value = false

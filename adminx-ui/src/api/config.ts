@@ -27,6 +27,10 @@ export const configApi = {
   getConfigsByGroup: (group: string): Promise<Record<string, any>> =>
     request.get('/config/by_group/', { params: { group } }),
 
+  // 按 key 获取单个配置值（业务容器友好）
+  getValue: (key: string): Promise<{ key: string; value: any }> =>
+    request.get('/config/get_value/', { params: { key } }),
+
   // 获取所有分组列表
   getGroups: (): Promise<string[]> =>
     request.get('/config/groups/'),

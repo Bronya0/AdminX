@@ -20,7 +20,7 @@ if env_file.exists():
 
 # ---------- 核心 ----------
 SECRET_KEY = env("SECRET_KEY", default="django-insecure-change-me-in-production")
-DEBUG = env("DEBUG")
+DEBUG = env("DEBUG", default="True")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
@@ -65,8 +65,6 @@ LOCAL_APPS = [
     "djangoadminx.captcha",
     "djangoadminx.data_center",
     "djangoadminx.notification",
-    # 业务应用
-    "apps.demo_blog",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -314,11 +312,6 @@ LOGGING = {
         "django.request": {
             "handlers": ["error_file"],
             "level": "ERROR",
-            "propagate": False,
-        },
-        "apps": {
-            "handlers": ["console", "file", "error_file"],
-            "level": "DEBUG" if DEBUG else "INFO",
             "propagate": False,
         },
         "realtime": {

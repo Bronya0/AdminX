@@ -18,6 +18,8 @@ class Menu(MP_Node):
     is_active = models.BooleanField("启用", default=True)
     is_visible = models.BooleanField("是否可见", default=True)
     sort_order = models.IntegerField("排序", default=0)
+    allowed_paths = models.TextField("接口路径白名单", blank=True, default="[]",
+                                      help_text='JSON 数组，格式同 BusinessCommand，如 ["GET:/api/v1/menu/*"]')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

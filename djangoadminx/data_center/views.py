@@ -4,12 +4,30 @@ import logging
 from io import BytesIO
 
 from django.apps import apps
+from django.db import transaction
 from django.http import HttpResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 logger = logging.getLogger("djangoadminx.data_center")
+
+# 允许导入导出的模型白名单
+EXPORTABLE_MODELS = [
+    "accounts.User", "accounts.Role",
+    "menu.Menu",
+    "config_center.Config",
+    "cluster.ClusterNode",
+    "webservice.ScheduleJob",
+]
+
+# 导入时禁止写入的敏感字段
+IMPORT_BLACKLIST = {
+    "accounts.User": {"password", "is_superuser", "is_staff", "last_login", "date_joined", "last_activity", "user_permissions", "groups"},
+    "accounts.Role": {"permissions", "menus", "created_at", "updated_at"},
+    "config_center.Config": {"encrypted_value", "created_at", "updated_at"},
+    "webservice.ScheduleJob": {"created_at", "updated_at"},
+}
 
 
 def _get_model(model_label):
@@ -21,13 +39,16 @@ def _get_model(model_label):
 
 
 def _get_exportable_models():
-    return [
-        "accounts.User", "accounts.Role",
-        "menu.Menu",
-        "config_center.Config",
-        "cluster.ClusterNode",
-        "webservice.WebService", "webservice.ScheduleJob",
-    ]
+    return EXPORTABLE_MODELS
+
+
+def _get_import_field_whitelist(model_label):
+    """获取导入时允许写入的字段白名单"""
+    blacklist = IMPORT_BLACKLIST.get(model_label, set())
+    model = _get_model(model_label)
+    if model is None:
+        return set()
+    return {f.name for f in model._meta.fields} - blacklist
 
 
 @api_view(["GET"])
@@ -44,6 +65,7 @@ def export_data(request):
 
     if fields_param:
         fields = [f.strip() for f in fields_param.split(",") if f.strip()]
+        fields = [f for f in fields if f not in ("password", "encrypted_value")]
     else:
         fields = [f.name for f in model._meta.fields if f.name != "id"]
         fields = [f for f in fields if f not in ("password", "encrypted_value")]
@@ -116,6 +138,8 @@ def import_data(request):
     except ImportError:
         return Response({"code": 500, "msg": "openpyxl 未安装"})
 
+    whitelist = _get_import_field_whitelist(model_label)
+
     try:
         wb = openpyxl.load_workbook(file_obj)
         ws = wb.active
@@ -127,21 +151,25 @@ def import_data(request):
         success, failed = 0, 0
         errors = []
 
-        for row_idx, row in enumerate(rows[1:], 2):
-            try:
-                data = {}
-                for col_idx, val in enumerate(row):
-                    if col_idx < len(headers):
-                        data[headers[col_idx]] = val
-                obj_id = data.pop("id", None)
-                if obj_id:
-                    model.objects.update_or_create(id=obj_id, defaults=data)
-                else:
-                    model.objects.create(**data)
-                success += 1
-            except Exception as e:
-                failed += 1
-                errors.append("第%d行: %s" % (row_idx, str(e)[:200]))
+        with transaction.atomic():
+            for row_idx, row in enumerate(rows[1:], 2):
+                try:
+                    data = {}
+                    for col_idx, val in enumerate(row):
+                        if col_idx < len(headers):
+                            field = headers[col_idx]
+                            if field in whitelist:
+                                data[field] = val
+                    obj_id = data.pop("id", None)
+                    if obj_id and not model.objects.filter(id=obj_id).exists():
+                        model.objects.create(id=obj_id, **data)
+                        success += 1
+                    elif not obj_id:
+                        model.objects.create(**data)
+                        success += 1
+                except Exception as e:
+                    failed += 1
+                    errors.append("第%d行: %s" % (row_idx, str(e)[:200]))
 
         return Response({
             "code": 200,

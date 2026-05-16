@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="config-list-content">
     <!-- 搜索栏 -->
     <a-card class="search-card">
       <a-form layout="inline" :model="searchForm">
@@ -436,8 +436,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container {
-  padding: 24px;
+.config-list-content {
+  min-height: 200px;
 }
 
 .search-card {

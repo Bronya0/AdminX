@@ -68,6 +68,12 @@ class Role(models.Model):
         blank=True,
         related_name="roles",
     )
+    business_permissions = models.ManyToManyField(
+        "BusinessPermission",
+        verbose_name="业务权限",
+        blank=True,
+        related_name="roles",
+    )
     menus = models.ManyToManyField(
         "menu.Menu",
         verbose_name="关联菜单",
@@ -118,3 +124,52 @@ class LoginLock(models.Model):
 
     def __str__(self):
         return f"{self.username} locked"
+
+
+class BusinessPermission(models.Model):
+    """业务权限 — 业务容器注册的权限，不依赖 Django ContentType"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    app_label = models.CharField("应用标识", max_length=128, db_index=True,
+                                 help_text="如 blog、crm，用于前端分组")
+    codename = models.CharField("权限编码", max_length=255, unique=True,
+                                help_text="如 blog:post:list，业务容器通过 introspect 获取")
+    name = models.CharField("权限名称", max_length=255)
+    desc = models.TextField("描述", blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "业务权限"
+        verbose_name_plural = "业务权限"
+        ordering = ["app_label", "codename"]
+
+    def __str__(self):
+        return f"[{self.app_label}] {self.name}"
+
+
+class BusinessCommand(models.Model):
+    """业务命令 — 业务容器注册的菜单 + REST 路径白名单"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    app_label = models.CharField("应用标识", max_length=128, db_index=True,
+                                 help_text="如 blog、crm")
+    name = models.CharField("名称", max_length=255, help_text="菜单显示名称")
+    icon = models.CharField("图标", max_length=128, blank=True, default="",
+                            help_text="Ant Design 图标名，如 FileTextOutlined")
+    menu_path = models.CharField("前端路由", max_length=255,
+                                 help_text="如 /plugins/blog，侧边栏点击后跳转至此")
+    allowed_paths = models.TextField("路径白名单", blank=True, default="[]",
+                                     help_text='JSON 数组，如 ["GET:/api/v1/blog/*","POST:/api/v1/blog/*"]')
+    description = models.TextField("描述", blank=True, default="")
+    is_active = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "业务命令"
+        verbose_name_plural = "业务命令"
+        ordering = ["app_label", "name"]
+        unique_together = [["app_label", "menu_path"]]
+
+    def __str__(self):
+        return f"[{self.app_label}] {self.name}"

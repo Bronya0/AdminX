@@ -13,7 +13,7 @@ import UserList from '@/views/system/UserList.vue'
 import RoleList from '@/views/system/RoleList.vue'
 import PermissionList from '@/views/system/PermissionList.vue'
 
-import ConfigList from '@/views/config/ConfigList.vue'
+import ConfigCenter from '@/views/config/ConfigCenter.vue'
 
 // 监控
 import DashboardView from '@/views/dashboard/DashboardView.vue'
@@ -23,9 +23,6 @@ import ClusterNodes from '@/views/cluster/ClusterNodes.vue'
 
 // 通知中心
 import NotificationCenter from '@/views/notification/NotificationCenter.vue'
-
-// 主题设置
-import ThemeSettings from '@/views/system/ThemeSettings.vue'
 
 // 定时任务
 import ScheduleJobList from '@/views/scheduler/ScheduleJobList.vue'
@@ -75,31 +72,31 @@ const router = createRouter({
               path: 'permissions',
               name: 'permissions',
               component: PermissionList,
-              meta: { title: '权限管理', icon: 'SafetyOutlined' },
+              meta: { title: '权限管理', icon: 'SafetyOutlined', permission: 'accounts:permission:list' },
             },
             {
               path: 'config',
               name: 'system-config',
-              component: ConfigList,
+              component: ConfigCenter,
               meta: { title: '配置中心', icon: 'ControlOutlined', permission: 'config_center:config:list' },
             },
             {
               path: 'resources',
               name: 'system-resources',
               component: SystemMonitor,
-              meta: { title: '系统资源', permission: 'monitor:view' },
+              meta: { title: '系统资源', permission: 'monitor:resource:list' },
             },
             {
               path: 'components',
               name: 'system-components',
               component: ComponentStatus,
-              meta: { title: '组件管理', permission: 'monitor:view' },
+              meta: { title: '组件管理', permission: 'monitor:resource:list' },
             },
             {
               path: 'nodes',
               name: 'system-nodes',
               component: ClusterNodes,
-              meta: { title: '节点管理', permission: 'cluster:clusternode:list' },
+              meta: { title: '节点管理', permission: 'cluster:node:list' },
             },
             {
               path: 'scheduler',
@@ -115,9 +112,7 @@ const router = createRouter({
             },
             {
               path: 'theme',
-              name: 'system-theme',
-              component: ThemeSettings,
-              meta: { title: '主题设置', icon: 'BgColorsOutlined' },
+              redirect: '/system/config',
             },
           ],
         },
@@ -151,31 +146,30 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, from) => {
   const userStore = useUserStore()
 
   // 公开页面直接放行
   if (to.meta.public) {
-    next()
-    return
+    return true
   }
 
   // 未登录跳转到登录页
   if (!userStore.isLoggedIn) {
-    next('/login')
-    return
+    return '/login'
   }
 
   // 已登录但没有用户信息或菜单数据，获取用户信息
   if (!userStore.user || !userStore.menus || userStore.menus.length === 0) {
     try {
-      await userStore.fetchUserInfo()
-      await userStore.fetchSiteInfo()
+      await Promise.all([
+        userStore.fetchUserInfo(),
+        userStore.fetchSiteInfo(),
+      ])
     } catch (e) {
       message.error('获取用户信息失败')
       userStore.logout()
-      next('/login')
-      return
+      return '/login'
     }
   }
 
@@ -183,11 +177,10 @@ router.beforeEach(async (to, from, next) => {
   const requiredPermission = to.meta.permission as string
   if (requiredPermission && !userStore.hasPermission(requiredPermission)) {
     message.error('没有权限访问该页面')
-    next('/dashboard')
-    return
+    return '/dashboard'
   }
 
-  next()
+  return true
 })
 
 export default router
