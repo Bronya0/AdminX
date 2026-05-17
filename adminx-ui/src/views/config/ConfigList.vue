@@ -71,24 +71,19 @@
         </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
-            <SearchOutlined /> 搜索
+            <SearchOutlined /> 查询
           </a-button>
           <a-button style="margin-left: 8px" @click="resetSearch">
             <ReloadOutlined /> 重置
+          </a-button>
+          <a-button type="primary" style="margin-left: 16px" @click="handleAdd">
+            <PlusOutlined /> 新增配置
           </a-button>
         </a-form-item>
       </a-form>
     </a-card>
 
-    <!-- 操作栏 -->
     <a-card class="table-card">
-      <div class="table-toolbar">
-        <div class="table-toolbar-left">
-          <a-button type="primary" @click="handleAdd">
-            <PlusOutlined /> 新增配置
-          </a-button>
-        </div>
-      </div>
 
       <!-- 表格 -->
       <a-table

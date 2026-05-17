@@ -7,7 +7,7 @@ from .models import BusinessCommand, BusinessPermission, Role, User, UserLoginLo
 
 class UserSerializer(serializers.ModelSerializer):
     roles = serializers.SlugRelatedField(
-        many=True, slug_field="code", queryset=Role.objects.all(), required=False
+        many=True, slug_field="name", queryset=Role.objects.all(), required=False
     )
     role_names = serializers.SerializerMethodField()
     is_online = serializers.ReadOnlyField()
@@ -17,6 +17,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "username", "phone", "email", "avatar", "desc",
             "is_active", "is_superuser", "roles", "role_names",
+            "home_page",
             "date_joined", "last_login", "last_activity", "is_online",
         ]
         read_only_fields = ["id", "date_joined", "last_login", "last_activity", "is_online"]
@@ -26,14 +27,15 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
+    password = serializers.CharField(write_only=True, min_length=6,
+        error_messages={"min_length": "密码长度不能少于6位"})
     roles = serializers.SlugRelatedField(
-        many=True, slug_field="code", queryset=Role.objects.all(), required=False
+        many=True, slug_field="name", queryset=Role.objects.all(), required=False
     )
 
     class Meta:
         model = User
-        fields = ["id", "username", "password", "phone", "email", "avatar", "desc", "is_active", "roles"]
+        fields = ["id", "username", "password", "phone", "email", "avatar", "desc", "is_active", "roles", "home_page"]
 
     def create(self, validated_data):
         from djangoadminx.policy.models import PasswordPolicy

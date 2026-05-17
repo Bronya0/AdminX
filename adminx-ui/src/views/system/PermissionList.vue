@@ -9,14 +9,15 @@
               <a-button type="primary" @click="handleAdd"><PlusOutlined /> 新增菜单</a-button>
               <a-button @click="expandAllMenuTree"><ExpandOutlined /> 展开全部</a-button>
               <a-button @click="collapseAllMenuTree"><CompressOutlined /> 收起全部</a-button>
+              <a-input-search v-model:value="menuSearchText" placeholder="搜索菜单名称..." allow-clear style="width: 240px; margin-left: 16px;" @change="filterMenuTree" />
             </div>
-            <a-input-search v-model:value="menuSearchText" placeholder="搜索菜单名称..." allow-clear style="width: 240px" @change="filterMenuTree" />
           </div>
           <a-tree v-model:expandedKeys="menuExpandedKeys" :tree-data="filteredMenuTreeData" :loading="loading"
-            :draggable="true" :block-node="true" :show-line="true" @drop="handleMenuDrop">
-            <template #title="{ key, title, is_active }">
+            :draggable="true" :block-node="true" @drop="handleMenuDrop">
+            <template #title="{ key, title, is_active, path, permission_code }">
               <div class="tree-node-content">
                 <span class="node-name">{{ title }}</span>
+                <span v-if="path" class="node-path">{{ path }}</span>
                 <a-tag v-if="!is_active" color="error" size="small">禁用</a-tag>
                 <span class="node-actions">
                   <a-button type="link" size="small" @click.stop="handleAddChild(key)"><PlusOutlined /></a-button>
@@ -210,7 +211,8 @@ onMounted(() => { loadData() })
 .tree-node-content { display: flex; align-items: center; gap: 8px; padding: 2px 0; width: 100%; }
 .node-icon { font-size: 14px; color: #1890ff; flex-shrink: 0; }
 .node-name { font-weight: 500; font-size: 14px; min-width: 80px; }
+.node-path { color: #999; font-family: monospace; font-size: 11px; margin-right: auto; }
 .node-code { font-size: 12px; color: #999; min-width: 100px; }
 .node-actions { flex-shrink: 0; white-space: nowrap; }
-:deep(.ant-tree-node-content-wrapper) { overflow: hidden; }
+:deep(.ant-tree-node-content-wrapper) { overflow: hidden; flex: 1; width: 0; }
 </style>

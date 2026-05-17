@@ -128,6 +128,14 @@ class TokenIntrospectView(APIView):
         if not user.is_active:
             return self._error("user_inactive", "账号已被禁用，请联系管理员")
 
+        if user.last_logout:
+            iat = access_token.payload.get("iat")
+            if iat and iat < user.last_logout.timestamp():
+                return self._error(
+                    "token_expired",
+                    "令牌已失效，请重新登录",
+                )
+
         # 权限：合并菜单 permission_code + BusinessPermission codename
         from djangoadminx.menu.models import Menu
 
@@ -154,7 +162,7 @@ class TokenIntrospectView(APIView):
             )
 
         # 角色
-        roles = list(user.roles.values("code", "name"))
+        roles = list(user.roles.values("name"))
 
         # 路径白名单检查：业务容器可校验用户是否授权访问指定 REST 路径
         check_path = request.data.get("path", "")
@@ -289,6 +297,10 @@ class LogoutView(APIView):
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
+            if request.user.is_authenticated:
+                from django.utils import timezone
+                request.user.last_logout = timezone.now()
+                request.user.save(update_fields=["last_logout"])
         except Exception as e:
             logger.warning(f"logout blacklist error: {e}")
         return Response({"code": 200, "msg": "success", "data": None})
@@ -301,11 +313,16 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
     ordering_fields = ["date_joined", "username"]
     filterset_fields = ["is_active"]
 
+    def perform_destroy(self, instance):
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+        OutstandingToken.objects.filter(user=instance).delete()
+        instance.delete()
+
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
         role = self.request.query_params.get("role")
         if role:
-            queryset = queryset.filter(roles__code=role)
+            queryset = queryset.filter(roles__name=role)
         is_online = self.request.query_params.get("is_online")
         if is_online == "true":
             queryset = queryset.filter(last_activity__gte=timezone.now() - timedelta(minutes=5))
@@ -320,10 +337,17 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
             return UserCreateSerializer
         return UserSerializer
 
-    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=["get", "patch"], permission_classes=[IsAuthenticated])
     def me(self, request):
         """当前用户信息 + 权限 + 菜单"""
         user = request.user
+
+        if request.method == "PATCH":
+            ser = UserSerializer(user, data=request.data, partial=True)
+            ser.is_valid(raise_exception=True)
+            ser.save()
+            return Response({"code": 200, "msg": "success", "data": UserSerializer(user).data})
+
         from djangoadminx.menu.models import Menu
 
         if user.is_superuser:
@@ -374,14 +398,20 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
             },
         })
 
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def roles(self, request):
+        """角色选项列表 — 用于用户管理页面的角色下拉框"""
+        qs = Role.objects.filter(is_active=True).values("name")
+        return Response({"code": 200, "msg": "success", "data": list(qs)})
+
 
 class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """角色 CRUD"""
     queryset = Role.objects.order_by("-created_at")
     serializer_class = RoleSerializer
-    search_fields = ["name", "code", "desc"]
+    search_fields = ["name", "desc"]
     ordering_fields = ["name", "created_at"]
-    filterset_fields = ["is_active", "code"]
+    filterset_fields = ["is_active"]
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
@@ -389,6 +419,45 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
         if desc:
             queryset = queryset.filter(desc__icontains=desc)
         return queryset
+
+    def _check_system_role(self, role):
+        if role.is_system:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("系统内置角色不可编辑或删除")
+
+    def perform_update(self, serializer):
+        role = self.get_object()
+        self._check_system_role(role)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._check_system_role(instance)
+        instance.delete()
+
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def menu_tree(self, request):
+        """菜单树 — 用于角色管理页面的菜单权限分配"""
+        from djangoadminx.menu.models import Menu
+        from djangoadminx.menu.serializers import MenuTreeSerializer
+        if hasattr(Menu, 'get_root_nodes'):
+            menus = Menu.get_root_nodes().filter(is_active=True, is_visible=True)
+        else:
+            menus = Menu.objects.filter(parent__isnull=True, is_active=True, is_visible=True)
+        ser = MenuTreeSerializer(menus, many=True)
+        return Response({"code": 200, "msg": "success", "data": ser.data})
+
+    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
+    def accessible_menus(self, request):
+        """根据角色名列表返回可访问的菜单路径（用于用户首页配置）"""
+        role_names = request.data.get("roles", [])
+        from djangoadminx.menu.models import Menu
+        from djangoadminx.menu.serializers import MenuFlatSerializer
+        menus = Menu.objects.filter(is_active=True, is_visible=True, numchild=0).exclude(path="")
+        if role_names:
+            menus = menus.filter(roles__name__in=role_names)
+        menus = menus.distinct().order_by("sort_order")
+        ser = MenuFlatSerializer(menus, many=True)
+        return Response({"code": 200, "msg": "success", "data": ser.data})
 
 
 class BusinessPermissionViewSet(viewsets.ModelViewSet):

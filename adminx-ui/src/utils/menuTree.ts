@@ -174,6 +174,10 @@ export function menusToSidebarItems(
 /**
  * 将 Vue Router 路由配置递归转换为 SidebarItem[]，
  * 同时根据权限过滤。这样侧边栏和路由结构保持完全一致。
+ *
+ * 规则：
+ * - 叶子路由：必须拥有 `meta.permission` 才显示（无 permission 则始终显示）
+ * - 父级路由：用户拥有 `meta.permission` 或至少一个子路由可见时显示
  */
 export function routesToSidebar(
   routes: any[],
@@ -188,24 +192,37 @@ export function routesToSidebar(
     // 跳过没有 title 的路由（布局容器、重定向等）
     if (!meta.title) continue
 
-    // 权限检查
-    const perm = meta.permission as string | undefined
-    if (perm && !hasPermission(perm)) continue
-
     // 构建完整路径
-    const fullPath = parentPath ? `${parentPath}/${route.path}` : `/${route.path}`
+    const fullPath = parentPath
+      ? `${parentPath}/${route.path}`
+      : `/${route.path}`
+    const cleanPath = fullPath.replace(/\/+/g, '/')
+
+    const perm = meta.permission as string | undefined
+
+    // 优先处理子路由，用于父级可见性判断
+    let children: SidebarItem[] | undefined
+    if (route.children && route.children.length > 0) {
+      const childItems = routesToSidebar(route.children, hasPermission, cleanPath)
+      if (childItems.length > 0) {
+        children = childItems
+      }
+    }
+
+    // 权限检查：叶子路由严格执行；父级路由有子路由可见则放行
+    if (perm && !hasPermission(perm)) {
+      const hasVisibleChildren = children && children.length > 0
+      if (!hasVisibleChildren) continue
+    }
 
     const item: SidebarItem = {
-      key: fullPath.replace(/\/+/g, '/'),
+      key: cleanPath,
       title: meta.title,
       icon: defaultIcons[meta.title] || meta.icon || 'FileOutlined',
     }
 
-    if (route.children && route.children.length > 0) {
-      const children = routesToSidebar(route.children, hasPermission, item.key)
-      if (children.length > 0) {
-        item.children = children
-      }
+    if (children) {
+      item.children = children
     }
 
     result.push(item)

@@ -17,7 +17,7 @@ class ScheduleJob(models.Model):
                                     choices=[("python", "Python 函数"), ("shell", "Shell 命令")],
                                     default="python")
     handler = models.CharField("处理函数", max_length=255, blank=True, default="",
-                               help_text="如 djangoadminx.webservice.tasks.ntp_sync")
+                               help_text="如 djangoadminx.jobs.tasks.ntp_sync")
     command = models.TextField("Shell 命令", blank=True, default="",
                                help_text="command_type=shell 时，要执行的命令或脚本")
     trigger_type = models.CharField("触发类型", max_length=20,

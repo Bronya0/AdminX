@@ -54,7 +54,7 @@ const router = createRouter({
         {
           path: 'system',
           name: 'system',
-          meta: { title: '系统管理', icon: 'SettingOutlined' },
+          meta: { title: '系统管理', icon: 'SettingOutlined', permission: 'system:view' },
           children: [
             {
               path: 'users',
@@ -119,7 +119,7 @@ const router = createRouter({
         {
           path: 'audit',
           name: 'audit',
-          meta: { title: '安全审计', icon: 'AuditOutlined' },
+          meta: { title: '安全审计', icon: 'AuditOutlined', permission: 'audit:view' },
           children: [
             {
               path: 'log',
@@ -178,6 +178,17 @@ router.beforeEach(async (to, from) => {
   if (requiredPermission && !userStore.hasPermission(requiredPermission)) {
     message.error('没有权限访问该页面')
     return '/dashboard'
+  }
+
+  // 访问根路径时跳转
+  if (to.path === '/') {
+    if (userStore.user?.home_page) {
+      return userStore.user.home_page
+    }
+    const firstPath = userStore.menus?.[0]?.path
+    if (firstPath) {
+      return firstPath
+    }
   }
 
   return true

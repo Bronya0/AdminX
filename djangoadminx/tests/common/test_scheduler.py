@@ -3,7 +3,7 @@
 from django.utils import timezone
 from datetime import timedelta
 from djangoadminx.common.scheduler import SchedulerManager, HEARTBEAT_ID
-from djangoadminx.webservice.models import SchedulerHeartbeat
+from djangoadminx.jobs.models import SchedulerHeartbeat
 
 
 class TestSchedulerManager:

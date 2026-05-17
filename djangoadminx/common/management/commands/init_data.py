@@ -19,10 +19,10 @@ UserModel = get_user_model()
 
 # ========== 默认角色（等保2.0 三权分立）==========
 DEFAULT_ROLES = [
-    {"name": "超级管理员", "code": "super_admin", "desc": "系统最高权限，拥有所有操作权限"},
-    {"name": "安全管理员", "code": "security_admin", "desc": "负责安全策略配置、系统监控与安全审计"},
-    {"name": "审计管理员", "code": "audit_admin", "desc": "负责审计日志查看与操作追溯"},
-    {"name": "普通用户", "code": "user", "desc": "普通用户，仅有基本查看权限"},
+    {"name": "超级管理员", "desc": "系统最高权限，拥有所有操作权限", "is_system": True},
+    {"name": "安全管理员", "desc": "负责安全策略配置、系统监控与安全审计", "is_system": True},
+    {"name": "审计管理员", "desc": "负责审计日志查看与操作追溯", "is_system": True},
+    {"name": "普通用户", "desc": "普通用户，仅有基本查看权限", "is_system": True},
 ]
 
 # ========== 默认菜单树 ==========
@@ -35,25 +35,26 @@ DEFAULT_MENUS = [
         "component": "dashboard/index",
         "menu_type": "menu",
         "sort_order": 0,
-        "allowed_paths": "[]",
+        "allowed_paths": '["GET:/api/v1/common/dashboard/stats/"]',
     },
     {
         "code": "system",
         "name": "系统管理",
         "icon": "Settings",
         "path": "/system",
+        "permission_code": "system:view",
         "menu_type": "menu",
         "sort_order": 1,
-        "allowed_paths": '["GET:/api/v1/menu/*"]',
+        "allowed_paths": "[]",
         "children": [
-            {"code": "system:user", "name": "用户管理", "icon": "User", "path": "/system/user", "component": "system/user/index", "permission_code": "accounts:user:list", "menu_type": "menu", "sort_order": 1, "allowed_paths": '["/api/v1/accounts/users/*", "/api/v1/accounts/business-permissions/*", "/api/v1/accounts/business-commands/*"]'},
-            {"code": "system:role", "name": "角色管理", "icon": "Shield", "path": "/system/role", "component": "system/role/index", "permission_code": "accounts:role:list", "menu_type": "menu", "sort_order": 2, "allowed_paths": '["/api/v1/accounts/roles/*"]'},
-            {"code": "system:permission", "name": "权限管理", "icon": "Safety", "path": "/system/permissions", "component": "system/permissions/index", "permission_code": "accounts:permission:list", "menu_type": "menu", "sort_order": 3, "allowed_paths": '["/api/v1/accounts/permissions/*", "/api/v1/accounts/business-permissions/*"]'},
+            {"code": "system:user", "name": "用户管理", "icon": "User", "path": "/system/users", "component": "system/user/index", "permission_code": "accounts:user:list", "menu_type": "menu", "sort_order": 1, "allowed_paths": '["/api/v1/accounts/users/*"]'},
+            {"code": "system:role", "name": "角色管理", "icon": "Shield", "path": "/system/roles", "component": "system/role/index", "permission_code": "accounts:role:list", "menu_type": "menu", "sort_order": 2, "allowed_paths": '["/api/v1/accounts/roles/*"]'},
+            {"code": "system:permission", "name": "权限管理", "icon": "Safety", "path": "/system/permissions", "component": "system/permissions/index", "permission_code": "accounts:permission:list", "menu_type": "menu", "sort_order": 3, "allowed_paths": '["/api/v1/menu/*"]'},
             {"code": "system:config", "name": "配置中心", "icon": "Setting", "path": "/system/config", "component": "config/list/index", "permission_code": "config_center:config:list", "menu_type": "menu", "sort_order": 4, "allowed_paths": '["/api/v1/config/*"]'},
-            {"code": "system:resource", "name": "系统资源", "icon": "Cpu", "path": "/system/resource", "component": "monitor/resource/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 5, "allowed_paths": '["/api/v1/monitor/resources/*", "/api/v1/monitor/netstat/*"]'},
-            {"code": "system:component", "name": "组件管理", "icon": "Appstore", "path": "/system/component", "component": "monitor/component/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 6, "allowed_paths": '["/api/v1/monitor/components/*", "/api/v1/monitor/component/*"]'},
-            {"code": "system:cluster", "name": "节点管理", "icon": "Hdd", "path": "/system/cluster", "component": "cluster/nodes/index", "permission_code": "cluster:node:list", "menu_type": "menu", "sort_order": 7, "allowed_paths": '["/api/v1/cluster/*"]'},
-            {"code": "system:scheduler", "name": "定时任务", "icon": "ClockCircle", "path": "/system/scheduler", "component": "scheduler/index", "permission_code": "webservice:schedulejob:list", "menu_type": "menu", "sort_order": 8, "allowed_paths": '["/api/v1/webservice/*"]'},
+            {"code": "system:resource", "name": "系统资源", "icon": "Cpu", "path": "/system/resources", "component": "monitor/resource/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 5, "allowed_paths": '["GET:/api/v1/monitor/resources/", "GET:/api/v1/monitor/netstat/"]'},
+            {"code": "system:component", "name": "组件管理", "icon": "Appstore", "path": "/system/components", "component": "monitor/component/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 6, "allowed_paths": '["GET:/api/v1/common/health/", "GET:/api/v1/common/cache/stats/", "POST:/api/v1/common/cache/clear/", "GET:/api/v1/cluster/nodes/overview/"]'},
+            {"code": "system:cluster", "name": "节点管理", "icon": "Hdd", "path": "/system/nodes", "component": "cluster/nodes/index", "permission_code": "cluster:node:list", "menu_type": "menu", "sort_order": 7, "allowed_paths": '["/api/v1/cluster/*"]'},
+            {"code": "system:scheduler", "name": "定时任务", "icon": "ClockCircle", "path": "/system/scheduler", "component": "scheduler/index", "permission_code": "webservice:schedulejob:list", "menu_type": "menu", "sort_order": 8, "allowed_paths": '["/api/v1/jobs/*"]'},
             {"code": "system:notification", "name": "通知中心", "icon": "Bell", "path": "/system/notification", "component": "notification/index", "permission_code": "notification:notification:list", "menu_type": "menu", "sort_order": 9, "allowed_paths": '["/api/v1/notification/*"]'},
         ],
     },
@@ -62,18 +63,21 @@ DEFAULT_MENUS = [
         "name": "安全审计",
         "icon": "Safety",
         "path": "/audit",
+        "permission_code": "audit:view",
         "menu_type": "menu",
         "sort_order": 2,
-        "allowed_paths": '["/api/v1/audit/*", "/api/v1/accounts/login-logs/*"]',
+        "allowed_paths": "[]",
         "children": [
-            {"code": "audit:log", "name": "操作审计", "icon": "FileSearch", "path": "/audit/log", "component": "audit/log/index", "permission_code": "audit:auditlog:list", "menu_type": "menu", "sort_order": 1, "allowed_paths": '["/api/v1/audit/*"]'},
-            {"code": "audit:login-log", "name": "登录日志", "icon": "Login", "path": "/audit/login-log", "component": "audit/login-log/index", "permission_code": "accounts:userloginlog:list", "menu_type": "menu", "sort_order": 2, "allowed_paths": '["/api/v1/accounts/login-logs/*"]'},
+            {"code": "audit:log", "name": "操作审计", "icon": "FileSearch", "path": "/audit/log", "component": "audit/log/index", "permission_code": "audit:auditlog:list", "menu_type": "menu", "sort_order": 1, "allowed_paths": '["GET:/api/v1/audit/"]'},
+            {"code": "audit:login-log", "name": "登录日志", "icon": "Login", "path": "/audit/login-log", "component": "audit/login-log/index", "permission_code": "accounts:userloginlog:list", "menu_type": "menu", "sort_order": 2, "allowed_paths": '["GET:/api/v1/accounts/login-logs/"]'},
         ],
     },
 ]
 
 # 平台业务权限（与 Menu.permission_code 对齐）
 PLATFORM_PERMISSIONS = [
+    {"app_label": "system", "codename": "system:view", "name": "系统管理"},
+    {"app_label": "audit", "codename": "audit:view", "name": "安全审计"},
     {"app_label": "accounts", "codename": "accounts:user:list", "name": "用户管理"},
     {"app_label": "accounts", "codename": "accounts:role:list", "name": "角色管理"},
     {"app_label": "accounts", "codename": "accounts:permission:list", "name": "权限管理"},
@@ -111,9 +115,9 @@ DEFAULT_CONFIGS = [
 
 # ========== 默认定时任务 ==========
 DEFAULT_JOBS = [
-    {"name": "系统资源监控", "handler": "djangoadminx.webservice.tasks.system_resource_monitor", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 5}', "is_active": True},
-    {"name": "NTP 时间同步", "handler": "djangoadminx.webservice.tasks.ntp_sync", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"hours": 1}', "is_active": True},
-    {"name": "示例任务", "handler": "djangoadminx.webservice.tasks.sample_task", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 10}', "is_active": True},
+    {"name": "系统资源监控", "handler": "djangoadminx.jobs.tasks.system_resource_monitor", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 5}', "is_active": True},
+    {"name": "NTP 时间同步", "handler": "djangoadminx.jobs.tasks.ntp_sync", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"hours": 1}', "is_active": True},
+    {"name": "示例任务", "handler": "djangoadminx.jobs.tasks.sample_task", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 10}', "is_active": True},
 ]
 
 
@@ -188,10 +192,13 @@ class Command(BaseCommand):
         role_map = {}
         for r in DEFAULT_ROLES:
             role, created = Role.objects.get_or_create(
-                code=r["code"],
-                defaults={"name": r["name"], "desc": r["desc"]},
+                name=r["name"],
+                defaults={"desc": r["desc"], "is_system": r.get("is_system", False)},
             )
-            role_map[r["code"]] = role
+            if not created and r.get("is_system") and not role.is_system:
+                role.is_system = True
+                role.save(update_fields=["is_system"])
+            role_map[r["name"]] = role
             self.stdout.write(f"  角色 {'创建' if created else '已存在'}: {role.name}")
 
         # 创建平台业务权限（与 Menu.permission_code 对齐）
@@ -207,13 +214,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  平台业务权限创建/更新: {len(PLATFORM_PERMISSIONS)} 条")
 
         # 超级管理员 — 全部业务权限 + 全部菜单
-        admin_role = role_map.get("super_admin")
+        admin_role = role_map.get("超级管理员")
         if admin_role:
             admin_role.business_permissions.add(*BusinessPermission.objects.all())
             self.stdout.write(f"  超级管理员已赋予 {BusinessPermission.objects.count()} 个业务权限")
 
         # 安全管理员 — 安全配置/监控/审计权限
-        security_role = role_map.get("security_admin")
+        security_role = role_map.get("安全管理员")
         if security_role:
             security_biz_codes = [
                 "config_center:config:list",
@@ -228,7 +235,7 @@ class Command(BaseCommand):
             self.stdout.write(f"  安全管理员已赋予 {security_biz.count()} 个业务权限")
 
         # 审计管理员 — 审计日志查看权限
-        audit_role = role_map.get("audit_admin")
+        audit_role = role_map.get("审计管理员")
         if audit_role:
             audit_biz = BusinessPermission.objects.filter(
                 codename__in=["audit:auditlog:list", "accounts:userloginlog:list"]
@@ -278,7 +285,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"  配置创建: {c['key']}")
 
         # 4. 创建默认定时任务
-        from djangoadminx.webservice.models import ScheduleJob
+        from djangoadminx.jobs.models import ScheduleJob
 
         for j in DEFAULT_JOBS:
             _, created = ScheduleJob.objects.update_or_create(

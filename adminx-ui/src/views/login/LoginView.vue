@@ -138,9 +138,10 @@ const handleSubmit = async () => {
     )
 
     message.success('登录成功')
-    router.push('/')
+    router.push(result.user.home_page || '/')
   } catch (e: any) {
     if (captchaEnabled.value) fetchCaptcha()
+    message.error(e?.message || '登录失败')
   } finally {
     loading.value = false
   }

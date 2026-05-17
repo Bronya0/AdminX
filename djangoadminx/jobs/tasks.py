@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-logger = logging.getLogger("djangoadminx.webservice.tasks")
+logger = logging.getLogger("djangoadminx.jobs.tasks")
 
 
 def ntp_sync(server="pool.ntp.org", version=3):

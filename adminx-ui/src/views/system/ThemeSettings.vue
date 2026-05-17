@@ -285,6 +285,7 @@ import {
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { commonApi } from '@/api/common'
+import { configApi } from '@/api/config'
 
 const userStore = useUserStore()
 
@@ -491,7 +492,7 @@ const syncNtpNow = async () => {
   ntpSyncing.value = true
   ntpResult.value = null
   try {
-    const res = await commonApi.ntpSync()
+    const res = await configApi.ntpSync()
     ntpResult.value = res
   } catch {
     ntpResult.value = { success: false, error: '请求失败' }

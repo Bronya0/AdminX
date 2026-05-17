@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN" id="app-html">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业务管理</title>
+<style>
+:root {
+  --primary: #1890ff;
+  --bg: #f0f2f5;
+  --bg-card: #fff;
+  --text: #333;
+  --text-secondary: #666;
+  --border: #e8e8e8;
+}
+html.dark {
+  --bg: #141414;
+  --bg-card: #1f1f1f;
+  --text: #e8e8e8;
+  --text-secondary: #999;
+  --border: #333;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 24px;
+  transition: background 0.3s, color 0.3s;
+}
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.top-bar h1 { font-size: 20px; font-weight: 600; }
+.top-bar .pill {
+  font-size: 12px; padding: 2px 10px; border-radius: 10px;
+  background: var(--primary); color: #fff;
+}
+.top-bar .stats { font-size: 13px; color: var(--text-secondary); }
+.card {
+  background: var(--bg-card); border-radius: 8px; padding: 20px;
+  margin-bottom: 16px; border: 1px solid var(--border);
+  transition: background 0.3s, border-color 0.3s;
+}
+.card h2 { font-size: 16px; margin-bottom: 12px; }
+.card p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.endpoint { font-family: monospace; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; }
+.status-badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 12px; }
+.status-badge.published { background: #e6f7ff; color: #1890ff; }
+.status-badge.draft { background: #f5f5f5; color: #999; }
+.dark .status-badge.published { background: rgba(24,144,255,0.2); }
+.dark .status-badge.draft { background: rgba(255,255,255,0.1); }
+.empty { text-align: center; padding: 40px 0; color: var(--text-secondary); }
+.error-msg { color: #ff4d4f; font-size: 14px; margin-top: 8px; }
+.success-msg { color: #52c41a; font-size: 14px; margin-top: 8px; }
+.form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: flex-start; }
+input, select {
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg-card); color: var(--text); font-size: 14px;
+  transition: border-color 0.2s;
+}
+input:focus, select:focus { outline: none; border-color: var(--primary); }
+input[type="text"] { flex: 1; min-width: 200px; }
+.btn {
+  padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer;
+  font-size: 14px; background: var(--primary); color: #fff; white-space: nowrap;
+}
+.btn:hover { opacity: 0.9; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.danger { background: #ff4d4f; }
+.btn.outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-bar label { font-size: 13px; color: var(--text-secondary); }
+.loading { text-align: center; padding: 20px; color: var(--text-secondary); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; margin-right: 8px; vertical-align: middle; }
+.actions { display: flex; gap: 6px; }
+.actions .btn { padding: 2px 10px; font-size: 12px; }
+.edit-form { margin: 12px 0; padding: 12px; background: var(--bg); border-radius: 6px; display: none; }
+.edit-form.visible { display: block; }
+.pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: var(--text-secondary); }
+.pagination .btn { padding: 2px 12px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1 style="display:flex;align-items:center;gap:8px;">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z"/></svg>
+    业务管理
+  </h1>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <span class="stats" id="statsInfo"></span>
+    <span class="pill" id="statusPill">● 运行中</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📋 文章管理</h2>
+
+  <div class="form-row">
+    <input type="text" id="titleInput" placeholder="文章标题" maxlength="100" />
+    <input type="text" id="contentInput" placeholder="文章内容" maxlength="500" />
+    <select id="statusSelect">
+      <option value="draft">草稿</option>
+      <option value="published">已发布</option>
+    </select>
+    <button class="btn" id="createBtn">新建</button>
+  </div>
+
+  <div class="filter-bar">
+    <label>筛选：</label>
+    <select id="filterStatus">
+      <option value="">全部状态</option>
+      <option value="draft">草稿</option>
+      <option value="published">已发布</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="搜索标题..." style="width:160px;padding:4px 8px;font-size:13px;" />
+    <button class="btn outline" id="searchBtn" style="padding:2px 12px;font-size:12px;">搜索</button>
+  </div>
+
+  <div id="postList"><div class="loading"><span class="spinner"></span>加载中...</div></div>
+
+  <div class="pagination" id="paginationBar" style="display:none;">
+    <span id="pageInfo"></span>
+    <div>
+      <button class="btn outline" id="prevBtn" style="padding:2px 12px;font-size:12px;">← 上一页</button>
+      <button class="btn outline" id="nextBtn" style="padding:2px 12px;font-size:12px;">下一页 →</button>
+    </div>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+  <div class="success-msg" id="successMsg"></div>
+</div>
+
+<div class="card">
+  <h2>🔗 API 端点</h2>
+  <table>
+    <tr><th>方法</th><th>路径</th><th>说明</th><th>鉴权</th></tr>
+    <tr><td>GET</td><td class="endpoint">/api/v1/posts/</td><td>文章列表（支持分页、筛选、搜索）</td><td>JWT</td></tr>
+    <tr><td>POST</td><td class="endpoint">/api/v1/posts/</td><td>新建文章</td><td>JWT</td></tr>
+    <tr><td>GET</td><td class="endpoint">/api/v1/posts/{id}</td><td>获取单篇文章</td><td>JWT</td></tr>
+    <tr><td>PUT</td><td class="endpoint">/api/v1/posts/{id}</td><td>全量更新</td><td>JWT</td></tr>
+    <tr><td>PATCH</td><td class="endpoint">/api/v1/posts/{id}</td><td>部分更新</td><td>JWT</td></tr>
+    <tr><td>DELETE</td><td class="endpoint">/api/v1/posts/{id}</td><td>删除文章</td><td>JWT</td></tr>
+    <tr><td>POST</td><td class="endpoint">/api/v1/register/</td><td>注册菜单到平台</td><td>—</td></tr>
+    <tr><td>POST</td><td class="endpoint">/api/v1/unregister/</td><td>注销菜单</td><td>—</td></tr>
+    <tr><td>GET</td><td class="endpoint">/healthz</td><td>健康检查</td><td>—</td></tr>
+  </table>
+</div>
+
+<script>
+// ── 从 URL 读取平台参数 ──
+const params = new URLSearchParams(location.search);
+const primary = params.get('primary');
+const dark = params.get('dark');
+const token = params.get('token');
+
+if (dark === '1') document.documentElement.classList.add('dark');
+if (primary) {
+  document.documentElement.style.setProperty('--primary', primary);
+  document.querySelectorAll('.btn, .pill, .status-badge.published').forEach(el => {
+    el.style.background = primary;
+  });
+}
+
+// ── API 调用 ──
+const API_BASE = '';
+const TOKEN = token || localStorage.getItem('business_token');
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
+  let resp;
+  try {
+    resp = await fetch(API_BASE + path, { ...opts, headers });
+  } catch (e) {
+    throw new Error('网络请求失败: ' + getErrMsg(e));
+  }
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const body = await resp.json();
+      detail = typeof body.detail === 'string' ? body.detail
+             : typeof body.msg === 'string' ? body.msg
+             : resp.statusText;
+    } catch {}
+    throw new Error(detail);
+  }
+  try {
+    return await resp.json();
+  } catch {
+    throw new Error('响应解析失败（可能是网关错误）');
+  }
+}
+
+function getErrMsg(e) {
+  if (typeof e === 'string') return e;
+  if (e && typeof e.message === 'string') return e.message;
+  try { return String(e); } catch { return '未知错误'; }
+}
+
+// ── 状态管理 ──
+let allPosts = [];
+let currentPage = 0;
+const PAGE_SIZE = 5;
+let filterStatus = '';
+let searchKeyword = '';
+let editingId = null;
+
+async function loadPosts() {
+  const container = document.getElementById('postList');
+  const errEl = document.getElementById('errorMsg');
+  const paginationBar = document.getElementById('paginationBar');
+  const statsInfo = document.getElementById('statsInfo');
+  errEl.textContent = '';
+
+  try {
+    let url = `/api/v1/posts/?skip=0&limit=100`;
+    if (filterStatus) url += `&status=${filterStatus}`;
+    if (searchKeyword) url += `&search=${encodeURIComponent(searchKeyword)}`;
+
+    const body = await api(url);
+    const data = body.data || body;
+    allPosts = data.results || (Array.isArray(data) ? data : []);
+    statsInfo.textContent = `共 ${data.count || allPosts.length} 篇`;
+
+    currentPage = 0;
+    renderPage();
+  } catch (e) {
+    container.innerHTML = '<div class="empty">加载失败：' + escHtml(getErrMsg(e)) + '</div>';
+    paginationBar.style.display = 'none';
+  }
+}
+
+function renderPage() {
+  const container = document.getElementById('postList');
+  const paginationBar = document.getElementById('paginationBar');
+  const totalPages = Math.max(1, Math.ceil(allPosts.length / PAGE_SIZE));
+
+  if (currentPage >= totalPages) currentPage = totalPages - 1;
+  const start = currentPage * PAGE_SIZE;
+  const pageItems = allPosts.slice(start, start + PAGE_SIZE);
+
+  if (allPosts.length === 0) {
+    container.innerHTML = '<div class="empty">暂无文章，新建一篇吧</div>';
+    paginationBar.style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = `<table>
+    <tr>
+      <th style="width:50px">ID</th>
+      <th>标题</th>
+      <th style="width:80px">状态</th>
+      <th style="width:160px">创建时间</th>
+      <th style="width:140px">操作</th>
+    </tr>
+    ${pageItems.map(p => `<tr>
+      <td>${p.id}</td>
+      <td>
+        <strong>${escHtml(p.title)}</strong>
+        ${p.content ? `<br><span style="color:var(--text-secondary);font-size:12px;">${escHtml(p.content.substring(0, 60))}${p.content.length > 60 ? '...' : ''}</span>` : ''}
+      </td>
+      <td><span class="status-badge ${p.status}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
+      <td style="font-size:12px;color:var(--text-secondary)">${p.created_at ? new Date(p.created_at).toLocaleString() : '-'}</td>
+      <td>
+        <div class="actions">
+          <button class="btn outline" onclick="editPost(${p.id})">编辑</button>
+          <button class="btn danger" onclick="deletePost(${p.id})">删除</button>
+        </div>
+      </td>
+    </tr>`).join('')}
+  </table>`;
+
+  // 分页栏
+  paginationBar.style.display = 'flex';
+  document.getElementById('pageInfo').textContent =
+    `第 ${currentPage + 1} / ${totalPages} 页`;
+  document.getElementById('prevBtn').disabled = currentPage <= 0;
+  document.getElementById('nextBtn').disabled = currentPage >= totalPages - 1;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function showError(msg) {
+  document.getElementById('errorMsg').textContent = msg;
+  setTimeout(() => document.getElementById('errorMsg').textContent = '', 3000);
+}
+
+function showSuccess(msg) {
+  document.getElementById('successMsg').textContent = msg;
+  setTimeout(() => document.getElementById('successMsg').textContent = '', 3000);
+}
+
+// ── 新建 ──
+document.getElementById('createBtn').addEventListener('click', async () => {
+  const title = document.getElementById('titleInput').value.trim();
+  const content = document.getElementById('contentInput').value.trim();
+  const status = document.getElementById('statusSelect').value;
+  if (!title) { showError('请输入标题'); return; }
+
+  try {
+    await api('/api/v1/posts/', {
+      method: 'POST',
+      body: JSON.stringify({ title, content, status }),
+    });
+    document.getElementById('titleInput').value = '';
+    document.getElementById('contentInput').value = '';
+    showSuccess('创建成功');
+    await loadPosts();
+  } catch (e) {
+    showError('创建失败: ' + getErrMsg(e));
+  }
+});
+
+// ── 编辑 ──
+async function editPost(id) {
+  const post = allPosts.find(p => p.id === id);
+  if (!post) return;
+
+  // 如果已有编辑框在编辑同一篇，切换显隐
+  const existingForm = document.getElementById(`edit-form-${id}`);
+  if (existingForm) {
+    existingForm.classList.toggle('visible');
+    return;
+  }
+
+  const container = document.getElementById('postList');
+  const form = document.createElement('div');
+  form.id = `edit-form-${id}`;
+  form.className = 'edit-form visible';
+  form.innerHTML = `
+    <div style="font-size:13px;margin-bottom:8px;color:var(--text-secondary);">编辑文章 #${id}</div>
+    <div class="form-row" style="margin-bottom:8px;">
+      <input type="text" id="edit-title-${id}" value="${escHtml(post.title)}" placeholder="标题" />
+      <input type="text" id="edit-content-${id}" value="${escHtml(post.content)}" placeholder="内容" />
+      <select id="edit-status-${id}">
+        <option value="draft" ${post.status === 'draft' ? 'selected' : ''}>草稿</option>
+        <option value="published" ${post.status === 'published' ? 'selected' : ''}>已发布</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" onclick="saveEdit(${id})">保存</button>
+      <button class="btn outline" onclick="document.getElementById('edit-form-${id}').classList.remove('visible')">取消</button>
+    </div>
+  `;
+  container.parentNode.insertBefore(form, container.nextSibling);
+}
+
+async function saveEdit(id) {
+  const title = document.getElementById(`edit-title-${id}`).value.trim();
+  const content = document.getElementById(`edit-content-${id}`).value.trim();
+  const status = document.getElementById(`edit-status-${id}`).value;
+  if (!title) { showError('标题不能为空'); return; }
+
+  try {
+    await api(`/api/v1/posts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title, content, status }),
+    });
+    document.getElementById(`edit-form-${id}`).classList.remove('visible');
+    showSuccess('更新成功');
+    await loadPosts();
+  } catch (e) {
+    showError('更新失败: ' + getErrMsg(e));
+  }
+}
+
+// ── 删除 ──
+async function deletePost(id) {
+  if (!confirm('确定删除此文章？')) return;
+  try {
+    await api(`/api/v1/posts/${id}`, { method: 'DELETE' });
+    showSuccess('已删除');
+    await loadPosts();
+  } catch (e) {
+    showError('删除失败: ' + getErrMsg(e));
+  }
+}
+
+// ── 筛选 & 搜索 ──
+document.getElementById('filterStatus').addEventListener('change', (e) => {
+  filterStatus = e.target.value;
+  loadPosts();
+});
+
+document.getElementById('searchBtn').addEventListener('click', () => {
+  searchKeyword = document.getElementById('searchInput').value.trim();
+  loadPosts();
+});
+document.getElementById('searchInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    searchKeyword = e.target.value.trim();
+    loadPosts();
+  }
+});
+
+// ── 分页 ──
+document.getElementById('prevBtn').addEventListener('click', () => {
+  if (currentPage > 0) { currentPage--; renderPage(); }
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  const totalPages = Math.ceil(allPosts.length / PAGE_SIZE);
+  if (currentPage < totalPages - 1) { currentPage++; renderPage(); }
+});
+
+// ── 启动 ──
+loadPosts();
+if (token) localStorage.setItem('business_token', token);
+</script>
+</body>
+</html>

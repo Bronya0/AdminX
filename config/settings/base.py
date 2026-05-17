@@ -60,7 +60,7 @@ LOCAL_APPS = [
     "djangoadminx.monitor",
     "djangoadminx.cluster",
     "djangoadminx.common",
-    "djangoadminx.webservice",
+    "djangoadminx.jobs",
     "djangoadminx.audit",
     "djangoadminx.file_center",
     "djangoadminx.policy",

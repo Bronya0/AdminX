@@ -24,7 +24,7 @@ class UserFactory:
 
     @staticmethod
     def create_with_permission(perm_codename, username="perm_user"):
-        role = Role.objects.create(name=f"role_{perm_codename}", code=f"role_{perm_codename}")
+        role = Role.objects.create(name=f"role_{perm_codename}")
         try:
             perm = Permission.objects.get(codename=perm_codename)
             role.permissions.add(perm)

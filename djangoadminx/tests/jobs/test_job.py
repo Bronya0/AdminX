@@ -10,10 +10,10 @@ class TestScheduleJob(AdminXTestCase):
         self.auth(self.admin)
 
     def test_create_python_job(self):
-        resp = self.client.post("/api/v1/webservice/jobs/", {
+        resp = self.client.post("/api/v1/jobs/", {
             "name": "测试任务",
             "command_type": "python",
-            "handler": "djangoadminx.webservice.tasks.sample_task",
+            "handler": "djangoadminx.jobs.tasks.sample_task",
             "trigger_type": "interval",
             "trigger_config": '{"minutes": 5}',
         })
@@ -21,7 +21,7 @@ class TestScheduleJob(AdminXTestCase):
         self.assertEqual(data["name"], "测试任务")
 
     def test_create_shell_job(self):
-        resp = self.client.post("/api/v1/webservice/jobs/", {
+        resp = self.client.post("/api/v1/jobs/", {
             "name": "Shell任务",
             "command_type": "shell",
             "command": "echo hello",
@@ -32,7 +32,7 @@ class TestScheduleJob(AdminXTestCase):
         self.assertEqual(data["name"], "Shell任务")
 
     def test_create_job_missing_handler(self):
-        resp = self.client.post("/api/v1/webservice/jobs/", {
+        resp = self.client.post("/api/v1/jobs/", {
             "name": "无效任务",
             "command_type": "python",
             "handler": "",
@@ -42,25 +42,25 @@ class TestScheduleJob(AdminXTestCase):
 
     @override_settings(DEBUG=True)
     def test_run_once_python(self):
-        from djangoadminx.webservice.models import ScheduleJob
+        from djangoadminx.jobs.models import ScheduleJob
         job = ScheduleJob.objects.create(
             name="RunTest",
-            handler="djangoadminx.webservice.tasks.sample_task",
+            handler="djangoadminx.jobs.tasks.sample_task",
             trigger_type="interval",
         )
-        resp = self.client.post(f"/api/v1/webservice/jobs/{job.id}/run_once/")
+        resp = self.client.post(f"/api/v1/jobs/{job.id}/run_once/")
         data = self.assert_ok(resp)
         self.assertIn("result", data)
 
     def test_toggle_active(self):
-        from djangoadminx.webservice.models import ScheduleJob
+        from djangoadminx.jobs.models import ScheduleJob
         job = ScheduleJob.objects.create(
-            name="ToggleTest", handler="djangoadminx.webservice.tasks.sample_task",
+            name="ToggleTest", handler="djangoadminx.jobs.tasks.sample_task",
             trigger_type="interval", is_active=False,
         )
-        resp = self.client.put(f"/api/v1/webservice/jobs/{job.id}/", {
+        resp = self.client.put(f"/api/v1/jobs/{job.id}/", {
             "name": "ToggleTest", "is_active": True,
-            "handler": "djangoadminx.webservice.tasks.sample_task",
+            "handler": "djangoadminx.jobs.tasks.sample_task",
             "trigger_type": "interval",
         })
         self.assert_ok(resp)

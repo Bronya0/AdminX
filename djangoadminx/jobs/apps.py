@@ -3,12 +3,13 @@ import logging
 from django.apps import AppConfig
 from django.db.models.signals import post_delete, post_save
 
-logger = logging.getLogger("djangoadminx.webservice")
+logger = logging.getLogger("djangoadminx.jobs")
 
 
-class WebserviceConfig(AppConfig):
-    name = "djangoadminx.webservice"
-    verbose_name = "WebService 管理"
+class JobsConfig(AppConfig):
+    name = "djangoadminx.jobs"
+    label = "webservice"
+    verbose_name = "定时任务"
 
     def ready(self):
         """注册信号 — 定时任务变更时通知调度器进程重载"""

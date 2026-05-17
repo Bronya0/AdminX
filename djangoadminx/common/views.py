@@ -110,3 +110,72 @@ def ntp_sync(request):
         "code": 200, "msg": "success",
         "data": {"enabled": True, "server": server},
     })
+
+
+@api_view(["GET"])
+def dashboard_stats(request):
+    """仪表盘统计数据（聚合各模块计数，避免前端直接调用各模块 list 接口）"""
+    from django.contrib.auth import get_user_model
+    from djangoadminx.accounts.models import Role
+    from djangoadminx.menu.models import Menu
+    from djangoadminx.accounts.models import UserLoginLog
+    from djangoadminx.cluster.models import ClusterNode
+    from djangoadminx.monitor.utils import SystemMonitor
+
+    User = get_user_model()
+
+    # 各模块计数（单个模块失败不影响其余）
+    def safe_int(fn):
+        try:
+            return fn()
+        except Exception:
+            return 0
+
+    user_count = safe_int(lambda: User.objects.all().count())
+    role_count = safe_int(lambda: Role.objects.count())
+    menu_count = safe_int(lambda: Menu.objects.filter(is_active=True).count())
+
+    # 资源监控
+    try:
+        resources = SystemMonitor.all()
+    except Exception:
+        resources = {}
+    cpu_usage = resources.get("cpu", {}).get("percent", 0)
+    cpu_cores = resources.get("cpu", {}).get("count", 0)
+    memory = resources.get("memory", {})
+    memory_usage = memory.get("percent", 0)
+    memory_total = memory.get("total", 0)
+    memory_used = memory.get("used", 0)
+
+    # 集群概况
+    online_nodes = safe_int(lambda: ClusterNode.objects.filter(status="online").count())
+    offline_nodes = safe_int(lambda: ClusterNode.objects.filter(status="offline").count())
+    maintenance_nodes = safe_int(lambda: ClusterNode.objects.filter(status="maintenance").count())
+
+    # 最近登录记录
+    try:
+        recent_logs = list(
+            UserLoginLog.objects.values("username", "ip", "success", "message", "created_at")
+            .order_by("-created_at")[:5]
+        )
+    except Exception:
+        recent_logs = []
+
+    return JsonResponse({
+        "code": 200,
+        "msg": "success",
+        "data": {
+            "user_count": user_count,
+            "role_count": role_count,
+            "menu_count": menu_count,
+            "cpu_usage": cpu_usage,
+            "cpu_cores": cpu_cores,
+            "memory_usage": memory_usage,
+            "memory_total": memory_total,
+            "memory_used": memory_used,
+            "online_nodes": online_nodes,
+            "offline_nodes": offline_nodes,
+            "maintenance_nodes": maintenance_nodes,
+            "recent_logs": recent_logs,
+        },
+    })

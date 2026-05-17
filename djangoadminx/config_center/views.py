@@ -37,6 +37,18 @@ class ConfigViewSet(AuditLogMixin,
             queryset = queryset.filter(desc__icontains=desc)
         return queryset
 
+    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
+    def ntp_sync(self, request):
+        """NTP 时间同步 — 用于配置中心的主题设置页"""
+        from djangoadminx.common.ntp import sync_time
+        from djangoadminx.config_center.models import Config
+        server = Config.get_value("NTP_SERVER", default="")
+        enabled = Config.get_value("NTP_SYNC_ENABLED", default=False)
+        if not enabled or not server:
+            return Response({"code": 200, "msg": "success", "data": {"enabled": False, "server": server or "(未配置)"}})
+        result = sync_time(server)
+        return Response({"code": 200, "msg": "success", "data": result})
+
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def by_group(self, request):
         """

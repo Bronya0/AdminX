@@ -33,6 +33,8 @@ class User(SafeDeleteModel, AbstractUser):
     avatar = models.URLField("头像", blank=True, default="")
     desc = models.TextField("描述", blank=True, default="")
     last_activity = models.DateTimeField("最后活动时间", null=True, blank=True)
+    last_logout = models.DateTimeField("最后登出时间", null=True, blank=True)
+    home_page = models.CharField("首页路径", max_length=255, blank=True, default="")
     roles = models.ManyToManyField(
         "Role",
         verbose_name="角色",
@@ -61,9 +63,9 @@ class Role(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField("角色名称", max_length=128, unique=True)
-    code = models.CharField("角色编码", max_length=128, unique=True)
     desc = models.TextField("描述", blank=True, default="")
     is_active = models.BooleanField("启用", default=True)
+    is_system = models.BooleanField("系统内置", default=False, help_text="系统内置角色不可编辑或删除")
     permissions = models.ManyToManyField(
         "auth.Permission",
         verbose_name="权限",

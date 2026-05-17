@@ -13,9 +13,9 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ["name", "code", "is_active", "created_at"]
+    list_display = ["name", "is_active", "created_at"]
     list_filter = ["is_active"]
-    search_fields = ["name", "code"]
+    search_fields = ["name"]
     filter_horizontal = ["permissions", "menus"]
 
 

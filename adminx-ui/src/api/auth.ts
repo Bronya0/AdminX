@@ -24,11 +24,17 @@ export const authApi = {
 
   changePassword: (data: { old_password: string; new_password: string }): Promise<void> =>
     request.post('/policy/change-password/', data),
+
+  updateMe: (data: Partial<User>): Promise<User> =>
+    request.patch('/accounts/users/me/', data),
 }
 
 export const userApi = {
   getUsers: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; role?: string; is_online?: string }): Promise<PaginatedResponse<User>> =>
     request.get('/accounts/users/', { params }),
+
+  getRoleOptions: (): Promise<{ name: string }[]> =>
+    request.get('/accounts/users/roles/'),
 
   getUser: (id: string): Promise<User> =>
     request.get(`/accounts/users/${id}/`),
@@ -44,8 +50,11 @@ export const userApi = {
 }
 
 export const roleApi = {
-  getRoles: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; code?: string; desc?: string }): Promise<PaginatedResponse<Role>> =>
+  getRoles: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; desc?: string }): Promise<PaginatedResponse<Role>> =>
     request.get('/accounts/roles/', { params }),
+
+  getMenuTree: (): Promise<any[]> =>
+    request.get('/accounts/roles/menu_tree/'),
 
   getRole: (id: string): Promise<Role> =>
     request.get(`/accounts/roles/${id}/`),
@@ -61,6 +70,9 @@ export const roleApi = {
 
   deleteRole: (id: string): Promise<void> =>
     request.delete(`/accounts/roles/${id}/`),
+
+  accessibleMenus: (roles: string[]): Promise<{ path: string; name: string }[]> =>
+    request.post('/accounts/roles/accessible_menus/', { roles }),
 }
 
 export const permissionApi = {

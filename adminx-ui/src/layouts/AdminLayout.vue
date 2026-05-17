@@ -77,13 +77,6 @@
                   </a-space>
                   <template #overlay>
                     <a-menu>
-                      <a-menu-item @click="goToProfile">
-                        <UserOutlined /> 个人中心
-                      </a-menu-item>
-                      <a-menu-item @click="goToTheme">
-                        <SettingOutlined /> 主题设置
-                      </a-menu-item>
-                      <a-menu-divider />
                       <a-menu-item @click="handleLogout">
                         <LogoutOutlined /> 退出登录
                       </a-menu-item>
@@ -134,13 +127,6 @@
               </a-space>
               <template #overlay>
                 <a-menu>
-                  <a-menu-item @click="goToProfile">
-                    <UserOutlined /> 个人中心
-                  </a-menu-item>
-                  <a-menu-item @click="goToTheme">
-                    <SettingOutlined /> 主题设置
-                  </a-menu-item>
-                  <a-menu-divider />
                   <a-menu-item @click="handleLogout">
                     <LogoutOutlined /> 退出登录
                   </a-menu-item>
@@ -170,7 +156,6 @@ import { notificationApi } from '@/api/notification'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  SettingOutlined,
   UserOutlined,
   BellOutlined,
   LogoutOutlined,
@@ -211,11 +196,24 @@ const fetchUnreadCount = async () => {
   }
 }
 
-// 构建动态菜单树（从路由配置构建，和路由结构完全一致）
 const sidebarMenus = computed<SidebarItem[]>(() => {
-  // 从 router 配置中提取 AdminLayout 的子路由
   const childRoutes = router.options.routes.find(r => r.path === '/')?.children || []
   const items = routesToSidebar(childRoutes, (code: string) => userStore.hasPermission(code))
+
+  // 合并外部菜单（来自动态注册，path 以 http 开头）
+  if (userStore.menus && userStore.menus.length > 0) {
+    for (const menu of userStore.menus) {
+      if (menu.path && menu.path.startsWith('http') && menu.is_visible && menu.is_active) {
+        if (!menu.permission_code || userStore.hasPermission(menu.permission_code)) {
+          items.push({
+            key: menu.path,
+            title: menu.name,
+            icon: menu.icon || 'LinkOutlined',
+          })
+        }
+      }
+    }
+  }
 
   // 确保仪表盘在第一位
   const dashboardIdx = items.findIndex(m => m.key === '/dashboard')
@@ -276,8 +274,12 @@ const toggleFullscreen = () => {
 
 const handleMenuClick = (key: string) => {
   if (!key) return
+  if (key.startsWith('http://') || key.startsWith('https://')) {
+    const sep = key.includes('?') ? '&' : '?'
+    window.open(`${key}${sep}token=${userStore.token}`, '_blank')
+    return
+  }
   router.push(key).catch((err) => {
-    // 忽略重复导航错误
     if (err.name !== 'NavigationDuplicated') {
       console.warn(`导航到 "${key}" 失败:`, err)
     }
@@ -295,17 +297,16 @@ const handleTopMenuClick = (key: string) => {
     target = parent.key
   }
   if (target) {
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+      const sep = target.includes('?') ? '&' : '?'
+      window.open(`${target}${sep}token=${userStore.token}`, '_blank')
+      return
+    }
     const routeExists = router.getRoutes().some(r => r.path === target)
     if (routeExists) {
       router.push(target)
     }
   }
-}
-
-const goToProfile = () => message.info('个人中心功能开发中')
-
-const goToTheme = () => {
-  router.push('/system/theme')
 }
 
 const goToNotification = () => {

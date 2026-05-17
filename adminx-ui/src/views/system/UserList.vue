@@ -48,24 +48,19 @@
         </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
-            <SearchOutlined /> 搜索
+            <SearchOutlined /> 查询
           </a-button>
           <a-button style="margin-left: 8px" @click="resetSearch">
             <ReloadOutlined /> 重置
+          </a-button>
+          <a-button type="primary" style="margin-left: 16px" @click="handleAdd">
+            <PlusOutlined /> 新增用户
           </a-button>
         </a-form-item>
       </a-form>
     </a-card>
 
-    <!-- 操作栏 -->
     <a-card class="table-card">
-      <div class="table-toolbar">
-        <div class="table-toolbar-left">
-          <a-button type="primary" @click="handleAdd">
-            <PlusOutlined /> 新增用户
-          </a-button>
-        </div>
-      </div>
 
       <!-- 表格 -->
       <a-table
@@ -172,6 +167,13 @@
             un-checked-children="禁用"
           />
         </a-form-item>
+        <a-form-item label="首页">
+          <a-select v-model:value="formState.home_page" placeholder="默认" allow-clear style="width: 100%">
+            <a-select-option v-for="item in menuOptions" :key="item.path" :value="item.path">
+              {{ item.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
       </a-form>
     </a-modal>
 
@@ -196,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -207,10 +209,9 @@ import {
   DeleteOutlined,
   KeyOutlined,
 } from '@ant-design/icons-vue'
-import { userApi } from '@/api/auth'
-import { roleApi } from '@/api/auth'
+import { userApi, roleApi } from '@/api/auth'
 import { formatDateTime } from '@/utils/format'
-import type { User, Role } from '@/types'
+import type { User } from '@/types'
 
 const router = useRouter()
 
@@ -247,6 +248,48 @@ const searchForm = reactive({
 // 角色选项
 const roleOptions = ref<{ label: string; value: string }[]>([])
 
+// 完整菜单树（用于计算多级菜单名）
+const fullMenuTree = ref<any[]>([])
+const menuPathLabelMap = ref<Record<string, string>>({})
+
+const loadFullMenuTree = async () => {
+  try {
+    const tree = await roleApi.getMenuTree()
+    fullMenuTree.value = tree
+    const map: Record<string, string> = {}
+    const walk = (items: any[], prefix: string) => {
+      for (const item of items) {
+        const label = prefix ? `${prefix} / ${item.name}` : item.name
+        if (item.path && (!item.children || !item.children.length)) {
+          map[item.path] = label
+        }
+        if (item.children) walk(item.children, label)
+      }
+    }
+    walk(tree, '')
+    menuPathLabelMap.value = map
+  } catch (e) {
+    console.error('加载菜单树失败', e)
+  }
+}
+
+// 菜单首页选项（根据选中角色过滤）
+const menuOptions = ref<{ label: string; path: string }[]>([])
+const loadMenuOptions = async (roles: string[]) => {
+  if (!roles.length) {
+    menuOptions.value = []
+    return
+  }
+  try {
+    const menus = await roleApi.accessibleMenus(roles)
+    menuOptions.value = menus
+      .filter(m => m.path && m.path !== '/dashboard')
+      .map(m => ({ label: menuPathLabelMap.value[m.path] || m.name, path: m.path }))
+  } catch (e) {
+    console.error('加载菜单失败', e)
+  }
+}
+
 // 弹窗状态
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -263,11 +306,19 @@ const formState = reactive({
   desc: '',
   roles: [] as string[],
   is_active: true,
+  home_page: '',
+})
+
+watch(() => formState.roles, (val) => {
+  loadMenuOptions(val)
 })
 
 const formRules = {
   username: [{ required: true, message: '请输入用户名' }],
-  password: [{ required: true, message: '请输入密码' }],
+  password: [
+    { required: true, message: '请输入密码' },
+    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' },
+  ],
   email: [{ type: 'email', message: '请输入正确的邮箱' }],
 }
 
@@ -299,10 +350,10 @@ const loadData = async () => {
 // 加载角色选项
 const loadRoles = async () => {
   try {
-    const res = await roleApi.getRoles()
-    roleOptions.value = res.results.map((role: Role) => ({
+    const res = await userApi.getRoleOptions()
+    roleOptions.value = res.map((role: { name: string }) => ({
       label: role.name,
-      value: role.code,
+      value: role.name,
     }))
   } catch (e) {
     console.error('加载角色失败', e)
@@ -344,6 +395,7 @@ const handleAdd = () => {
     desc: '',
     roles: [],
     is_active: true,
+    home_page: '',
   })
   modalVisible.value = true
 }
@@ -360,6 +412,7 @@ const handleEdit = (record: User) => {
     desc: record.desc || '',
     roles: record.roles,
     is_active: record.is_active,
+    home_page: record.home_page || '',
   })
   modalVisible.value = true
 }
@@ -428,6 +481,7 @@ const handlePasswordOk = async () => {
 onMounted(() => {
   loadData()
   loadRoles()
+  loadFullMenuTree()
 })
 </script>
 

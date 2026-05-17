@@ -34,4 +34,8 @@ export const configApi = {
   // 获取所有分组列表
   getGroups: (): Promise<string[]> =>
     request.get('/config/groups/'),
+
+  // NTP 时间同步
+  ntpSync: (): Promise<any> =>
+    request.post('/config/ntp/sync/'),
 }

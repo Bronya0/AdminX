@@ -29,6 +29,7 @@ export interface User {
   last_activity?: string | null
   roles: string[]
   role_names: string[]
+  home_page?: string
   date_joined: string
   last_login: string | null
 }
@@ -56,9 +57,9 @@ export interface UserInfo {
 export interface Role {
   id: string
   name: string
-  code: string
   desc: string
   is_active: boolean
+  is_system?: boolean
   permissions: string[]
   business_permissions: string[]
   menus: string[]

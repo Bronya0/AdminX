@@ -10,7 +10,7 @@ from djangoadminx.audit.mixins import AuditLogMixin
 from .models import JobLog, ScheduleJob
 from .serializers import JobLogSerializer, ScheduleJobSerializer
 
-logger = logging.getLogger("djangoadminx.webservice")
+logger = logging.getLogger("djangoadminx.jobs")
 
 
 class ScheduleJobViewSet(AuditLogMixin, viewsets.ModelViewSet):

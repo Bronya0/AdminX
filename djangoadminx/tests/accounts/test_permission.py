@@ -49,15 +49,15 @@ class TestRBACPermission(AdminXTestCase):
         )
 
         # 角色 A: 只有菜单 A
-        cls.role_a = Role.objects.create(name="角色A", code="role_a")
+        cls.role_a = Role.objects.create(name="角色A")
         cls.role_a.menus.add(cls.menu_a)
 
         # 角色 B: 菜单 B + C
-        cls.role_b = Role.objects.create(name="角色B", code="role_b")
+        cls.role_b = Role.objects.create(name="角色B")
         cls.role_b.menus.add(cls.menu_b, cls.menu_c)
 
         # 角色 C: 菜单 D（BusinessCommand 关联）
-        cls.role_c = Role.objects.create(name="角色C", code="role_c")
+        cls.role_c = Role.objects.create(name="角色C")
         cls.role_c.menus.add(cls.menu_d)
 
     # ─── 基础场景 ───
@@ -125,7 +125,7 @@ class TestRBACPermission(AdminXTestCase):
         user = UserFactory.create_user(username="perm_b"); user.roles.add(self.role_b)
         self.auth(user)
         from djangoadminx.accounts.models import Role as RoleModel
-        role = RoleModel.objects.create(name="del_role", code="del_role")
+        role = RoleModel.objects.create(name="del_role")
         resp = self.client.delete(f"/api/v1/accounts/roles/{role.id}/")
         self.assert_fail(resp, 403)
 
@@ -136,14 +136,14 @@ class TestRBACPermission(AdminXTestCase):
         user = UserFactory.create_user(username="perm_b"); user.roles.add(self.role_b)
         self.auth(user)
         # POST:/api/v1/accounts/roles/ 放行
-        resp = self.client.post("/api/v1/accounts/roles/", {"name": "x", "code": "x"})
+        resp = self.client.post("/api/v1/accounts/roles/", {"name": "x"})
         self.assert_created(resp)
         # GET:/api/v1/accounts/roles/* 放行
         resp = self.client.get("/api/v1/accounts/roles/")
         self.assert_ok(resp)
         # DELETE 不在任何规则内 → 拒绝
         from djangoadminx.accounts.models import Role as RoleModel
-        role = RoleModel.objects.create(name="y", code="y")
+        role = RoleModel.objects.create(name="y")
         resp = self.client.delete(f"/api/v1/accounts/roles/{role.id}/")
         self.assert_fail(resp, 403)
 
@@ -183,7 +183,7 @@ class TestRBACPermission(AdminXTestCase):
         user.roles.add(self.role_a, self.role_b)
         self.auth(user)
         # role_a 和 role_b 都没有 webservice 权限
-        resp = self.client.get("/api/v1/webservice/jobs/")
+        resp = self.client.get("/api/v1/jobs/")
         self.assert_fail(resp, 403)
 
     def test_multi_role_inherit_menu_c(self):
@@ -218,7 +218,7 @@ class TestRBACPermission(AdminXTestCase):
         bp = BusinessPermission.objects.create(
             app_label="test", codename="test:only:perm", name="仅权限",
         )
-        role = Role.objects.create(name="仅权限角色", code="only_perm_role")
+        role = Role.objects.create(name="仅权限角色")
         role.business_permissions.add(bp)
         user.roles.add(role)
         self.auth(user)

@@ -3,6 +3,7 @@ from . import views
 from . import cache_views
 
 urlpatterns = [
+    path("dashboard/stats/", views.dashboard_stats, name="dashboard_stats"),
     path("health/", views.health_check, name="health"),
     path("site-info/", views.site_info, name="site_info"),
     path("log/tail/", views.log_tail, name="log_tail"),

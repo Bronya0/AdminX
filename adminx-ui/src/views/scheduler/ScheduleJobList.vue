@@ -382,10 +382,10 @@ const handleModalOk = async () => {
       data.trigger_config = JSON.stringify({ run_date: formDate.value })
     }
     if (editingId.value) {
-      await scheduleJobApi.updateJob(editingId.value, data)
+      await scheduleJobApi.update(editingId.value, data)
       message.success('任务已更新')
     } else {
-      await scheduleJobApi.createJob(data)
+      await scheduleJobApi.create(data)
       message.success('任务已创建')
     }
     modalVisible.value = false
@@ -395,7 +395,7 @@ const handleModalOk = async () => {
 
 const handleDelete = async (job: ScheduleJob) => {
   try {
-    await scheduleJobApi.deleteJob(job.id)
+    await scheduleJobApi.remove(job.id)
     message.success('已删除')
     fetchData()
   } catch { /* interceptor handles error */ }
@@ -415,7 +415,7 @@ const handleRunOnce = async (job: ScheduleJob) => {
 
 const handleToggleActive = async (job: ScheduleJob, checked: boolean) => {
   try {
-    await scheduleJobApi.updateJob(job.id, { is_active: checked } as any)
+    await scheduleJobApi.update(job.id, { is_active: checked } as any)
     job.is_active = checked
     message.success(checked ? '任务已启用' : '任务已禁用')
   } catch { /* revert on failure */ }
@@ -423,7 +423,7 @@ const handleToggleActive = async (job: ScheduleJob, checked: boolean) => {
 
 const handleReload = async () => {
   try {
-    await scheduleJobApi.reloadJobs()
+    await scheduleJobApi.reload()
     message.success('调度器已重载')
     fetchSchedulerStatus()
   } catch { /* interceptor handles error */ }

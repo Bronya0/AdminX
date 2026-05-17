@@ -172,12 +172,9 @@ import {
   ToolOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { monitorApi } from '@/api/monitor'
-import { clusterApi } from '@/api/cluster'
-import { userApi, roleApi, loginLogApi } from '@/api/auth'
-import { menuApi } from '@/api/menu'
+import { dashboardApi } from '@/api/dashboard'
+import type { DashboardStats } from '@/api/dashboard'
 import { formatDateTime } from '@/utils/format'
-import type { LoginLog, SystemResources } from '@/types'
 
 // ── 用户存储 ──
 const userStore = useUserStore()
@@ -252,7 +249,7 @@ const quickLinks = [
 ]
 
 // ── 登录日志 ──
-const loginLogs = ref<LoginLog[]>([])
+const loginLogs = ref<DashboardStats['recent_logs']>([])
 const logColumns = [
   { title: '用户名',   dataIndex: 'username', key: 'username', width: 120 },
   { title: 'IP 地址',  dataIndex: 'ip',       key: 'ip',       width: 150 },
@@ -283,35 +280,24 @@ function statCardStyle(color: string) {
   return { borderLeft: `4px solid ${color}` }
 }
 
-// ── 数据加载 ──
+// ── 数据加载（统一走 dashboard/stats/ 聚合接口）──
 async function loadStats() {
   try {
-    const [resources, clusterOverview, users, roles, menus, logs] = await Promise.all([
-      monitorApi.getSystemResources() as Promise<SystemResources>,
-      clusterApi.getOverview(),
-      userApi.getUsers({ page: 1 }),
-      roleApi.getRoles({ page: 1 }),
-      menuApi.getMenus(),
-      loginLogApi.getLoginLogs({ page: 1 }),
-    ])
-
-    stats.cpuUsage = resources.cpu.percent
-    stats.memoryUsage = resources.memory.percent
-    stats.memoryTotal = resources.memory.total
-    stats.memoryUsed = resources.memory.used
-    cpuCores.value = resources.cpu.count
-
-    stats.onlineNodes = clusterOverview.online
-    stats.offlineNodes = clusterOverview.offline
-    stats.maintenanceNodes = (clusterOverview.nodes || []).filter(n => n.status === 'maintenance').length
-
-    stats.userCount = users.count
-    stats.roleCount = roles.count
-    stats.menuCount = menus.length
-
-    loginLogs.value = logs.results.slice(0, 5)
-  } catch (e) {
-    console.error('加载仪表盘数据失败', e)
+    const d = await dashboardApi.getStats()
+    stats.userCount = d.user_count
+    stats.roleCount = d.role_count
+    stats.menuCount = d.menu_count
+    stats.cpuUsage = d.cpu_usage
+    stats.memoryUsage = d.memory_usage
+    stats.memoryTotal = d.memory_total
+    stats.memoryUsed = d.memory_used
+    cpuCores.value = d.cpu_cores
+    stats.onlineNodes = d.online_nodes
+    stats.offlineNodes = d.offline_nodes
+    stats.maintenanceNodes = d.maintenance_nodes
+    loginLogs.value = d.recent_logs
+  } catch {
+    // 聚合接口失败时保持默认值
   }
 }
 

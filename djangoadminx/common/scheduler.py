@@ -98,7 +98,7 @@ class SchedulerManager:
 
     @staticmethod
     def _get_heartbeat_model():
-        from djangoadminx.webservice.models import SchedulerHeartbeat
+        from djangoadminx.jobs.models import SchedulerHeartbeat
         return SchedulerHeartbeat
 
     @staticmethod
@@ -161,7 +161,7 @@ class SchedulerManager:
             logger.warning(f"处理通知失败: {e}")
 
     def _load_jobs_from_db(self):
-        from djangoadminx.webservice.models import ScheduleJob
+        from djangoadminx.jobs.models import ScheduleJob
 
         count = 0
         for job in ScheduleJob.objects.filter(is_active=True):
@@ -207,7 +207,7 @@ class SchedulerManager:
 
 
 def _execute_job_wrapper(job_id):
-    from djangoadminx.webservice.models import JobLog, ScheduleJob
+    from djangoadminx.jobs.models import JobLog, ScheduleJob
 
     try:
         job = ScheduleJob.objects.get(id=job_id, is_active=True)
