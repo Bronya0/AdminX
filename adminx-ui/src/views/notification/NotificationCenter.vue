@@ -19,14 +19,14 @@
           placeholder="搜索通知标题..."
           allow-clear
           style="width: 240px"
-          @search="fetchData"
+          @search="page = 1; fetchData()"
         />
         <a-select
           v-model:value="filterType"
           placeholder="全部类型"
           allow-clear
           style="width: 140px"
-          @change="fetchData"
+          @change="page = 1; fetchData()"
         >
           <a-select-option value="info">信息</a-select-option>
           <a-select-option value="success">成功</a-select-option>
@@ -38,7 +38,7 @@
           placeholder="全部状态"
           allow-clear
           style="width: 140px"
-          @change="fetchData"
+          @change="page = 1; fetchData()"
         >
           <a-select-option :value="false">未读</a-select-option>
           <a-select-option :value="true">已读</a-select-option>
@@ -295,18 +295,14 @@ const whDelete = async (record: WebhookConfig) => {
     await webhookApi.delete(record.id)
     message.success('删除成功')
     loadWh()
-  } catch {
-    message.error('删除失败')
-  }
+  } catch { /* interceptor handles error */ }
 }
 
 const whTest = async (record: WebhookConfig) => {
   try {
     await webhookApi.test(record.id)
     message.success('测试消息已发送')
-  } catch {
-    message.error('测试发送失败')
-  }
+  } catch { /* interceptor handles error */ }
 }
 
 const whSave = async () => {

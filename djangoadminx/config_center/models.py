@@ -1,24 +1,35 @@
 import json
+import logging
 
 from cryptography.fernet import Fernet
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 from django.core.cache import cache
 from django.db import models
 from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 
 
+_fernet_instance = None
+_fernet_key = None
+
+
 def get_fernet():
     """获取 Fernet 实例 — 密钥来自环境变量 FERNET_KEY（持久化）"""
-    key = getattr(settings, "FERNET_KEY", None)
+    global _fernet_instance, _fernet_key
+    key = settings.FERNET_KEY
+    if _fernet_instance is not None and _fernet_key == key:
+        return _fernet_instance
+    _fernet_instance = None
+    _fernet_key = key
     if not key:
-        key = settings.FERNET_KEY
-        if not key:
-            raise RuntimeError(
-                "FERNET_KEY 未配置。请在 .env 中设置: "
-                "FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
-            )
-    return Fernet(key.encode() if isinstance(key, str) else key)
+        raise RuntimeError(
+            "FERNET_KEY 未配置。请在 .env 中设置: "
+            "FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+        )
+    _fernet_instance = Fernet(key.encode() if isinstance(key, str) else key)
+    return _fernet_instance
 
 
 class EncryptedConfigField(models.CharField):
@@ -52,7 +63,6 @@ class Config(models.Model):
         INT = "int", "整数"
         BOOL = "bool", "布尔"
         JSON = "json", "JSON"
-        ENCRYPTED = "encrypted", "加密"
         OPTIONS = "options", "选项列表"
 
     key = models.CharField("配置键", max_length=255, unique=True, db_index=True)
@@ -61,6 +71,8 @@ class Config(models.Model):
         "值类型", max_length=20, choices=TypeChoices.choices, default=TypeChoices.STRING
     )
     encrypted_value = EncryptedConfigField("加密值")
+    is_encrypted = models.BooleanField("加密存储", default=False,
+                                       help_text="开启后配置值将加密存储，API 返回 ***，编辑时不可见原值")
     desc = models.CharField("描述", max_length=500, blank=True, default="")
     group = models.CharField("分组", max_length=128, blank=True, default="default")
     is_active = models.BooleanField("启用", default=True)
@@ -77,8 +89,20 @@ class Config(models.Model):
 
     def parse_value(self):
         """解析 value 为对应类型"""
-        if self.value_type == self.TypeChoices.ENCRYPTED:
-            return self.encrypted_value
+        if self.is_encrypted:
+            if not self.value:
+                return ""
+            try:
+                val = get_fernet().decrypt(self.value.encode()).decode()
+            except Exception:
+                return "<<解密失败>>"
+            if self.value_type == self.TypeChoices.INT:
+                return int(val) if val else 0
+            if self.value_type == self.TypeChoices.BOOL:
+                return val.lower() in ("true", "1", "yes") if val else False
+            if self.value_type in (self.TypeChoices.JSON, self.TypeChoices.OPTIONS):
+                return json.loads(val) if val else ([] if self.value_type == self.TypeChoices.OPTIONS else None)
+            return val
         raw = self.value
         if self.value_type == self.TypeChoices.INT:
             if not raw:
@@ -99,6 +123,20 @@ class Config(models.Model):
         if self.value_type != self.TypeChoices.OPTIONS:
             return None
         return self.parse_value()
+
+    def save(self, *args, **kwargs):
+        if self.is_encrypted:
+            if self.value:
+                try:
+                    f = get_fernet()
+                except RuntimeError:
+                    logger.warning(f"FERNET_KEY 未配置，配置 {self.key} 的加密值将明文存储")
+                else:
+                    try:
+                        f.decrypt(self.value.encode())
+                    except Exception:
+                        self.value = f.encrypt(self.value.encode()).decode()
+        super().save(*args, **kwargs)
 
     @classmethod
     def get_value(cls, key, default=None):
@@ -124,10 +162,10 @@ class Config(models.Model):
         if cached is not None:
             return cached
 
-        configs = cls.objects.filter(group=group, is_active=True).values("key", "value", "value_type", "encrypted_value")
+        configs = cls.objects.filter(group=group, is_active=True).values("key", "value", "value_type", "is_encrypted", "encrypted_value")
         result = {}
         for c in configs:
-            obj = cls(key=c["key"], value=c["value"], value_type=c["value_type"], encrypted_value=c.get("encrypted_value", ""))
+            obj = cls(key=c["key"], value=c["value"], value_type=c["value_type"], is_encrypted=c["is_encrypted"], encrypted_value=c.get("encrypted_value", ""))
             result[c["key"]] = obj.parse_value()
 
         cache.set(cache_key, result, timeout=3600)

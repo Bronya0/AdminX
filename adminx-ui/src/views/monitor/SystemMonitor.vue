@@ -180,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   DashboardOutlined,
@@ -226,11 +226,8 @@ const loadData = async () => {
 
     const netstatRes = await monitorApi.getNetstat()
     Object.assign(netstat, netstatRes)
-  } catch (e) {
-    message.error('加载监控数据失败')
-  } finally {
-    loading.value = false
-  }
+  } catch { /* interceptor handles error */ }
+  finally { loading.value = false }
 }
 
 // 格式化字节
@@ -322,7 +319,6 @@ onUnmounted(() => {
   stopAutoRefresh()
 })
 
-import { watch } from 'vue'
 </script>
 
 <style scoped>

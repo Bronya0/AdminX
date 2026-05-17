@@ -24,7 +24,6 @@ export function flatMenusToTree(menus: Menu[]): Menu[] {
     const parent = _findParentByPathPrefix(node, sorted, nodeMap)
 
     if (parent) {
-      if (!parent.children) parent.children = []
       parent.children.push(node)
     } else {
       roots.push(node)
@@ -75,13 +74,11 @@ export function flatMenusToTreeByDepth(menus: Menu[]): Menu[] {
     const node: Menu & { children: Menu[] } = { ...menu, children: [] }
     nodeMap.set(menu.id, node)
 
-    if (menu.depth === 1) {
+    if (menu.depth <= 1) {
       roots.push(node)
     } else {
-      // depth > 1: 用路由 path 前缀匹配找父节点
       const parent = _findParentByPathPrefix(menu, sorted, nodeMap)
       if (parent) {
-        if (!parent.children) parent.children = []
         parent.children.push(node)
       } else {
         roots.push(node)

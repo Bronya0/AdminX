@@ -15,7 +15,9 @@ class UserManager(SafeDeleteManager, BaseUserManager):
         return self.get(**{self.model.USERNAME_FIELD: username})
 
     def create_superuser(self, username, password=None, **extra_fields):
-        return self.all_objects.create_superuser(username, password, **extra_fields)
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        return super().create_user(username, password=password, **extra_fields)
 
 
 class User(SafeDeleteModel, AbstractUser):
@@ -44,7 +46,7 @@ class User(SafeDeleteModel, AbstractUser):
         ordering = ["-date_joined"]
 
     def __str__(self):
-        return self.username or self.email
+        return self.username or self.email or str(self.id)
 
     @property
     def is_online(self):

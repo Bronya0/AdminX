@@ -151,9 +151,9 @@ def import_data(request):
         success, failed = 0, 0
         errors = []
 
-        with transaction.atomic():
-            for row_idx, row in enumerate(rows[1:], 2):
-                try:
+        for row_idx, row in enumerate(rows[1:], 2):
+            try:
+                with transaction.atomic():
                     data = {}
                     for col_idx, val in enumerate(row):
                         if col_idx < len(headers):
@@ -161,15 +161,14 @@ def import_data(request):
                             if field in whitelist:
                                 data[field] = val
                     obj_id = data.pop("id", None)
-                    if obj_id and not model.objects.filter(id=obj_id).exists():
-                        model.objects.create(id=obj_id, **data)
-                        success += 1
-                    elif not obj_id:
+                    if obj_id:
+                        model.objects.update_or_create(id=obj_id, defaults=data)
+                    else:
                         model.objects.create(**data)
-                        success += 1
-                except Exception as e:
-                    failed += 1
-                    errors.append("第%d行: %s" % (row_idx, str(e)[:200]))
+                    success += 1
+            except Exception as e:
+                failed += 1
+                errors.append("第%d行: %s" % (row_idx, str(e)[:200]))
 
         return Response({
             "code": 200,

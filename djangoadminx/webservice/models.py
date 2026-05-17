@@ -42,6 +42,7 @@ class ScheduleJob(models.Model):
     def execute(self):
         """执行任务 — Python 函数或 Shell 命令"""
         import importlib
+        import shlex
         import subprocess
 
         if self.command_type == "shell":
@@ -49,8 +50,8 @@ class ScheduleJob(models.Model):
                 raise ValueError("Shell 命令为空")
             logger.warning(f"执行 shell 命令: {self.command[:200]}")
             result = subprocess.run(
-                self.command,
-                shell=True,
+                shlex.split(self.command),
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=3600,

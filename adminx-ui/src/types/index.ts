@@ -59,7 +59,7 @@ export interface Role {
   code: string
   desc: string
   is_active: boolean
-  permissions?: string[]
+  permissions: string[]
   business_permissions: string[]
   menus: string[]
   created_at: string
@@ -100,7 +100,7 @@ export interface BusinessCommand {
 
 // 菜单相关
 export interface Menu {
-  id: string
+  id: number
   code: string
   name: string
   icon: string
@@ -122,16 +122,16 @@ export interface Menu {
 
 // 配置相关
 export interface Config {
-  id: string
+  id: number
   key: string
   value: string
-  value_type: 'string' | 'int' | 'bool' | 'json' | 'encrypted' | 'options'
-  encrypted_value: string
+  value_type: 'string' | 'int' | 'bool' | 'json' | 'options'
+  is_encrypted: boolean
   desc: string
   group: string
   is_active: boolean
-  display_value: string
-  options: any
+  display_value: string | any[]
+  options: unknown
   created_at: string
   updated_at: string
 }
@@ -288,7 +288,7 @@ export interface LoginLog {
   id: string
   user: string | null
   username: string
-  ip: string
+  ip: string | null
   user_agent: string
   success: boolean
   message: string

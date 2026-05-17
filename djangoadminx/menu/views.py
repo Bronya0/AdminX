@@ -27,14 +27,16 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         parent_id = self.request.data.get("parent")
+        depth = 1
         if parent_id:
             try:
                 parent = Menu.objects.get(id=parent_id)
-                instance = serializer.save(sort_order=parent.get_children_count() + 1)
+                depth = parent.depth + 1
+                instance = serializer.save(depth=depth, sort_order=parent.get_children_count() + 1)
             except Menu.DoesNotExist:
                 raise serializers.ValidationError({"parent": "上级菜单不存在"})
         else:
-            instance = serializer.save(sort_order=Menu.get_root_nodes().count() + 1)
+            instance = serializer.save(depth=depth, sort_order=Menu.get_root_nodes().count() + 1)
         self._log_audit_create(instance)
 
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
@@ -66,7 +68,7 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], permission_classes=[IsAdminUser])
     def move(self, request):
-        """移动菜单节点"""
+        """移动菜单节点（treebeard 操作因 path 字段冲突不可用，使用手动更新 parent/sort_order）"""
         menu_id = request.data.get("id")
         target_id = request.data.get("target_id")
         position = request.data.get("position", "first-child")
@@ -78,7 +80,14 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
         if position not in ALLOWED_POSITIONS:
             return Response({"code": 400, "msg": f"无效的 position: {position}，允许: {', '.join(ALLOWED_POSITIONS)}"})
 
-        menu = Menu.objects.get(id=menu_id)
-        target = Menu.objects.get(id=target_id)
-        getattr(menu, position)(target)
+        try:
+            menu = Menu.objects.get(id=menu_id)
+            target = Menu.objects.get(id=target_id)
+        except Menu.DoesNotExist:
+            return Response({"code": 400, "msg": "菜单节点不存在"})
+
+        try:
+            getattr(menu, position)(target)
+        except Exception as e:
+            return Response({"code": 400, "msg": f"移动失败: {e}"})
         return Response({"code": 200, "msg": "success"})

@@ -1,5 +1,6 @@
 from rest_framework import viewsets, mixins
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
@@ -14,12 +15,20 @@ class ConfigViewSet(AuditLogMixin,
                     mixins.DestroyModelMixin,
                     viewsets.ReadOnlyModelViewSet):
     """配置中心 CRUD + 分组批量查询"""
-    queryset = Config.objects.all()
+    queryset = Config.objects.order_by("-created_at")
     serializer_class = ConfigSerializer
     permission_classes = [IsAdminUser]
     search_fields = ["key", "desc", "group"]
     ordering_fields = ["group", "key", "created_at"]
-    filterset_fields = ["group", "value_type", "is_active"]
+    filterset_fields = ["group", "value_type", "is_active", "is_encrypted"]
+
+    def perform_update(self, serializer):
+        if serializer.instance.is_encrypted:
+            if "value" not in self.request.data:
+                serializer.validated_data.pop("value", None)
+            if self.request.data.get("is_encrypted") is False:
+                raise ValidationError("加密存储的配置不允许改回非加密")
+        super().perform_update(serializer)
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)

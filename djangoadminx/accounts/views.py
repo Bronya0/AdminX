@@ -64,12 +64,19 @@ def _check_login_lock(username):
 
 
 def _record_login_failure(username):
-    lock, _ = LoginLock.objects.get_or_create(username=username)
-    lock.failed_count += 1
+    from django.db.models import F
+    lock, created = LoginLock.objects.get_or_create(
+        username=username,
+        defaults={"failed_count": 1},
+    )
+    if not created:
+        lock.failed_count = F("failed_count") + 1
+        lock.save(update_fields=["failed_count"])
+        lock.refresh_from_db(fields=["failed_count"])
     max_attempts = getattr(settings, "LOGIN_MAX_ATTEMPTS", 5)
     if lock.failed_count >= max_attempts:
-        lock.locked_at = timezone.now()
-    lock.save()
+        LoginLock.objects.filter(username=username).update(locked_at=timezone.now())
+    return lock
 
 
 def _clear_login_lock(username):
@@ -284,12 +291,12 @@ class LogoutView(APIView):
                 token.blacklist()
         except Exception as e:
             logger.warning(f"logout blacklist error: {e}")
-        return Response({"code": 200, "msg": "success"})
+        return Response({"code": 200, "msg": "success", "data": None})
 
 
 class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """用户 CRUD"""
-    queryset = User.objects.all()
+    queryset = User.objects.prefetch_related("roles").all()
     search_fields = ["username", "email", "phone", "desc"]
     ordering_fields = ["date_joined", "username"]
     filterset_fields = ["is_active"]
@@ -370,7 +377,7 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
 class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """角色 CRUD"""
-    queryset = Role.objects.all()
+    queryset = Role.objects.order_by("-created_at")
     serializer_class = RoleSerializer
     search_fields = ["name", "code", "desc"]
     ordering_fields = ["name", "created_at"]

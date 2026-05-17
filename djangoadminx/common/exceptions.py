@@ -13,7 +13,7 @@ def custom_exception_handler(exc, context):
             vals = [v for v in data.values() if v is not None]
             if vals:
                 first = vals[0]
-                msg = str(first[0]) if isinstance(first, list) else str(first)
+                msg = str(first[0]) if isinstance(first, list) and first else str(first)
             else:
                 msg = "请求错误"
         response.data = {"code": response.status_code, "msg": msg, "data": data}

@@ -66,7 +66,7 @@ class PasswordPolicy(models.Model):
         from django.utils import timezone
         from datetime import timedelta
         # 使用 password_changed_at 字段（Django 5.x 及以上支持）
-        ref_date = getattr(user, 'password_changed_at', None) or user.last_login or user.date_joined
+        ref_date = getattr(user, 'password_changed_at', None) or user.date_joined
         if ref_date is None:
             ref_date = timezone.now()
         return timezone.now() - ref_date > timedelta(days=self.expire_days)

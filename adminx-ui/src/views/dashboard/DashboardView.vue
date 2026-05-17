@@ -303,7 +303,7 @@ async function loadStats() {
 
     stats.onlineNodes = clusterOverview.online
     stats.offlineNodes = clusterOverview.offline
-    stats.maintenanceNodes = clusterOverview.nodes.filter(n => n.status === 'maintenance').length
+    stats.maintenanceNodes = (clusterOverview.nodes || []).filter(n => n.status === 'maintenance').length
 
     stats.userCount = users.count
     stats.roleCount = roles.count

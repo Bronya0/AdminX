@@ -140,12 +140,7 @@ const handleSubmit = async () => {
     message.success('登录成功')
     router.push('/')
   } catch (e: any) {
-    const errMsg = (e as Error)?.message || '登录失败'
-    message.error(errMsg)
-    // 登录失败，刷新验证码
-    if (captchaEnabled.value) {
-      fetchCaptcha()
-    }
+    if (captchaEnabled.value) fetchCaptcha()
   } finally {
     loading.value = false
   }

@@ -1,3 +1,4 @@
+from django.test import override_settings
 from djangoadminx.tests.base import AdminXTestCase
 from djangoadminx.tests.factories import UserFactory
 
@@ -98,3 +99,44 @@ class TestIntrospect(AdminXTestCase):
             type("FakeUser", (), {"id": uid, "is_active": True})()
         )
         # 构造一个无效用户ID的token比较复杂，跳过，测试不存在的用户
+
+
+@override_settings(PASSWORD_POLICY_ENABLED=True)
+class TestUserCreate(AdminXTestCase):
+    def setUp(self):
+        self.admin = UserFactory.create_admin()
+        self.auth(self.admin)
+
+    def test_create_superuser(self):
+        from djangoadminx.accounts.models import User
+        user = User.objects.create_superuser("su_test", password="TestPass123!")
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.is_staff)
+        user.delete()
+
+    def test_create_user_with_weak_password_rejected(self):
+        resp = self.client.post("/api/v1/accounts/users/", {
+            "username": "weakuser",
+            "password": "123456",
+            "phone": "13800001111",
+        }, format="json")
+        self.assert_fail(resp, 400)
+
+    def test_create_user_password_policy_success(self):
+        resp = self.client.post("/api/v1/accounts/users/", {
+            "username": "gooduser",
+            "password": "GoodPass1!",
+            "phone": "13800001111",
+        }, format="json")
+        self.assert_created(resp)
+
+
+class TestLogoutData(AdminXTestCase):
+    def setUp(self):
+        self.user = UserFactory.create_admin()
+        self.auth(self.user)
+
+    def test_logout_returns_data_key(self):
+        resp = self.client.post("/api/v1/accounts/logout/", {"refresh": "dummy"})
+        data = self.assert_ok(resp)
+        self.assertEqual(data, None)

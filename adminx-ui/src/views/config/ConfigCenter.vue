@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import ConfigList from './ConfigList.vue'
 import ThemeSettings from '@/views/system/ThemeSettings.vue'

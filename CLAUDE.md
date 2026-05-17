@@ -16,17 +16,13 @@ python manage.py run_scheduler          # Start APScheduler standalone process
 # Just set REDIS_URL in .env, no code changes needed. Auto-detected at startup.
 
 # Tests
-python manage.py test                   # All tests
+python manage.py test                   # All tests (80 total)
 python manage.py test djangoadminx.accounts    # Single module
 
 # Frontend (adminx-ui/)
 cd adminx-ui && npm run dev             # Vite dev server (port 5173, proxies /api to :8000)
 cd adminx-ui && npm run build           # Production build
-cd adminx-ui && npm run type-check      # Vue/TS type checking
-
-# Production
-bash start-linux.sh                     # Gunicorn deployment (Linux)
-start-win.bat                           # Dev startup (Windows)
+cd adminx-ui && npm run type-check      # Vue/TS type checking (skip build)
 ```
 
 ## Project Structure
@@ -43,7 +39,7 @@ DjangoAdminX/
 │   ├── file_center/       #   File upload (Local/MinIO)
 │   ├── data_center/       #   Excel import/export
 │   ├── captcha/           #   Captcha
-│   ├── audit/             #   Audit log (signals-based)
+│   ├── audit/             #   Audit log (mixin + signals)
 │   ├── policy/            #   Password policy
 │   └── common/            #   Middleware, unified response/exception/pagination, scheduler, SSE logs, crypto_utils
 ├── adminx-ui/             # Frontend (Vue 3 + Ant Design Vue 4 + Pinia + Vite)
@@ -75,7 +71,17 @@ DjangoAdminX/
 - **Testing note**: `StandardJsonRenderer` forces all status_code to 200. Tests must call `response.render()` then parse JSON to check `data["code"]` instead of `response.status_code`.
 
 ### Config Center
-- KV config with 6 types: `string`, `int`, `bool`, `json`, `encrypted` (Fernet), `options` (option lists).
+- KV config with 5 types: `string`, `int`, `bool`, `json`, `options` (option lists).
+  - `encrypted` type removed — encryption is now an independent toggle via `is_encrypted` boolean.
+- **Encryption**: Each config has an `is_encrypted` switch. When enabled, the value is Fernet-encrypted in the database.
+  - API responses return `value: ""`, `display_value: "********"`, `is_encrypted: true`
+  - Internal reads (`parse_value()`, `get_value()`, `get_by_group()`) return the decrypted plaintext automatically.
+  - **FERNET_KEY must be configured** in `.env` for encryption to work:
+    ```
+    FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    ```
+  - Once enabled, encryption **cannot be disabled** on an existing config.
+  - If FERNET_KEY is missing, a warning is logged and values are stored as plaintext (not silently dropped).
 - Read via `Config.get_value("KEY", default=...)` or `Config.get_by_group("group_name")`.
 - Cached 1h in Redis; auto-cleared on save/delete. Falls back to LocMemCache if Redis unavailable.
 
@@ -91,6 +97,8 @@ DjangoAdminX/
   - **Reload notifications**: CRUD signals + reload button set `SchedulerHeartbeat.reload_pending=True`; scheduler process polls every 10s and calls `reload_all()`.
   - See [`SchedulerManager`](djangoadminx/common/scheduler.py) and [`SchedulerHeartbeat`](djangoadminx/webservice/models.py) for implementation.
 - **Anti-pattern (fixed)**: Before this approach, signals and reload called `reload_job()`/`reload_all()` directly on `SchedulerManager` singleton — this only affected the calling process (one Gunicorn worker) and was silently ignored by the actual scheduler process. **Never rely on in-process state for cross-process coordination.**
+- **Shell commands**: Use `shlex.split()` + `subprocess.run(shell=False)` to prevent command injection.
+- **Security**: `ScheduleJobViewSet` requires `IsAdminUser` permission.
 
 ### Encryption (djangoadminx/common/crypto_utils.py)
 - SM4 (ECB/CBC), AES (CBC/GCM), MD5, SHA256, HMAC-SHA256.
@@ -102,12 +110,20 @@ DjangoAdminX/
 - Router guards: `router/index.ts` checks `userStore.isLoggedIn` and redirects to `/login`.
 - TypeScript: one `types/index.ts` with all API interfaces.
 - All API calls use `/api/v1/` prefix (proxied by Vite in dev).
+- **Double error prevention**: Avoid `message.error()` in catch blocks — the global axios interceptor already shows errors. Use meaningful generic messages only for client-side validation.
+- **PATCH for partial updates**: Use `patchRole` (not `updateRole`) when only changing `menus` to avoid required field validation errors.
+- **Type conventions**:
+  - `id` is `number` for models with auto-increment PK (Config, Menu)
+  - `id` is `string` for models with UUID PK (User, Role, etc.)
+  - `Config.display_value` can be `string | any[]` (options type returns array)
+  - `Config.encrypted_value` field removed from frontend type
 
 ### Testing Patterns
 - Use `APITestCase` from `rest_framework.test`.
 - Set up shared data in `setUpTestData` classmethods, auth in `setUp`.
 - Always call `response.render()` and parse JSON: `json.loads(response.content)`.
 - Assert on `data["code"]` (not response.status_code) due to `StandardJsonRenderer`.
+- **80 total tests**: accounts (auth, login_lock, permission), audit, captcha, cluster, config_center, notification, policy, scheduler, common (crypto, renderer, scheduler).
 
 ### Business Container Development
 Business services run in separate containers and authenticate via JWT introspection:
@@ -124,35 +140,49 @@ Business services run in separate containers and authenticate via JWT introspect
 
 Roles and their permission/menu bindings are initialized in `init_data.py`. Run `python manage.py init_data` to apply.
 
-### Multi-Process Architecture Awareness
+## Known Bugs & Limitations
 
-This project uses **Gunicorn multi-worker** for HTTP + **separate scheduler process** (`run_scheduler`). Each is a distinct OS process with independent memory space.
+### Menu treebeard `path` field conflict
+`Menu.path` field (route path) shadows treebeard MP_Node's internal `path` column. Tree structure is rebuilt on the frontend from flat menu data (by path prefix matching in `menuTree.ts`). Treebeard's `move()` / `add_child()` operations are unsafe — they will corrupt the route path. The `move` endpoint returns an error explaining this limitation. Menu creation in `init_data.py` uses direct ORM with manually set `depth`/`numchild` values.
 
-**Key implications:**
+### Audit Signals
+- **UPDATE auditing via signals**: Uses `pre_save` + `post_save` pair to capture old/new values correctly. The `pre_save` signal snapshots the pre-save state; `post_save` computes the diff. `AuditLogMixin` (used directly by ViewSets) captures values before save via `perform_update`, so models using the mixin are unaffected.
+- **SELECT/query auditing**: Not implemented (only DML: create/update/delete).
+- **Audit log retention**: No automatic cleanup of old records.
 
-1. **Python singletons are per-process.** Module-level singletons (e.g., `SchedulerManager`, APScheduler's `BackgroundScheduler`) exist independently in every process. Modifying one does NOT affect others.
-2. **Signals are per-process.** Django signals fire in the process that handles the request. Signal handlers that modify in-memory state (e.g., `scheduler_manager.reload_job()`) have no effect on other processes.
-3. **Cross-process coordination requires shared storage.** Use the database for cross-process communication (not cache/Redis):
-   - **Status detection**: `SchedulerHeartbeat.last_heartbeat` written by scheduler process, checked by web workers via `is_alive()`.
-   - **Notifications**: `SchedulerHeartbeat.reload_pending` set by web workers (CRUD signals + reload button), polled by scheduler process.
-    - **Distributed locks**: use `RedisProxy().lock()` (Redis only, optional).
-4. **LocMemCache is per-process.** Django's `LocMemCache` is not shared between processes. Only `RedisCache` provides cross-process cache sharing. **Use DB instead of cache for any cross-process data that must work without Redis.**
-5. **CacheOps** is automatically disabled when Redis is unavailable (`CACHEOPS_REDIS = None`).
-6. **Never rely on in-process state for cross-process coordination.** If you need to communicate between processes, use the database (or Redis for performance-sensitive scenarios).
+### Data Import
+- Data import uses `update_or_create` with per-row savepoints, so failures in one row don't roll back successful rows.
+- Previously used `transaction.atomic()` wrapping all rows, making error reporting misleading (all rolled back but reported "success: N").
 
-**Pattern to follow** (see SchedulerManager and SchedulerHeartbeat for reference):
+### Password Policy
+- Password expiry reference date uses `date_joined` as fallback (not `last_login`) to avoid resetting the expiry clock on login.
+- `PasswordPolicy` check is enforced on user creation via `UserCreateSerializer.create()`.
+- `create_superuser()` uses `BaseUserManager.create_user()` (not the non-existent `all_objects.create_superuser`).
+
+### JWT & Refresh Tokens
+- `BLACKLIST_AFTER_ROTATION = True` requires `rest_framework_simplejwt.token_blacklist` in INSTALLED_APPS (added).
+- Token blacklist tables must be migrated: `python manage.py migrate token_blacklist`.
+- Access token: 30 min (configurable via `JWT_ACCESS_EXPIRE`).
+- Refresh token: 7 days (configurable via `JWT_REFRESH_EXPIRE`).
+
+### Production Security
+- Missing settings validated at startup: `SECRET_KEY`, `ALLOWED_HOSTS` (must be set, not default).
+- Production security headers: `SECURE_SSL_REDIRECT`, HSTS (31536000s), `SECURE_PROXY_SSL_HEADER`, `SECURE_REFERRER_POLICY`.
+- `SECURE_BROWSER_XSS_FILTER` removed (deprecated in Django 4.0+).
+- Console logger defaults to WARNING in production.
+- `rest_framework_simplejwt.token_blacklist` in INSTALLED_APPS (requires migration).
+
+## Common Issues
+
+### Login fails with "no such table: token_blacklist_..."
+Run `python manage.py migrate token_blacklist` after adding `token_blacklist` to INSTALLED_APPS.
+
+### Config encryption returns "<<解密失败>>"
+FERNET_KEY not configured. Set in `.env`:
 ```
-# Web process: write notification to DB
-MyModel.objects.update_or_create(id=FIXED_ID, defaults={"flag": True})
-
-# Worker process: poll DB and consume
-if MyModel.objects.filter(id=FIXED_ID, flag=True).exists():
-    do_work()
-    MyModel.objects.filter(id=FIXED_ID).update(flag=False)
+FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 ```
-### Menu Model Note
-`Menu.path` field conflicts with treebeard MP_Node's internal `path` field. The tree structure is rebuilt on the frontend from flat menu data (by path prefix matching in `menuTree.ts`), so treebeard's tree operations (`add_root`, `add_child`) are not used. Menu creation in `init_data.py` uses direct ORM with manually set `depth`/`numchild` values.
 
-### note
+## note
 - 禁止修改虚拟环境源码
 - 

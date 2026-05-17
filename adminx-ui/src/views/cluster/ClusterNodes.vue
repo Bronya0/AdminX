@@ -398,9 +398,7 @@ const handleDelete = async (record: ClusterNode) => {
     await clusterApi.deleteNode(record.id)
     message.success('删除成功')
     loadData()
-  } catch (e) {
-    message.error('删除失败')
-  }
+  } catch { /* interceptor handles error */ }
 }
 
 // 心跳

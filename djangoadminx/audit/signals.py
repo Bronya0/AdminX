@@ -56,17 +56,31 @@ class AuditSignalManager:
                 logger.warning(f"审计模型未找到: {model_path}")
                 continue
 
-            from django.db.models.signals import post_save, pre_delete
+            from django.db.models.signals import pre_save, post_save, pre_delete
 
-            uid_save = f"audit_save_{model_path}"
+            uid_pre_save = f"audit_pre_save_{model_path}"
+            uid_post_save = f"audit_post_save_{model_path}"
             uid_delete = f"audit_delete_{model_path}"
 
-            post_save.connect(_audit_save, sender=model, weak=False, dispatch_uid=uid_save)
+            pre_save.connect(_audit_save_pre, sender=model, weak=False, dispatch_uid=uid_pre_save)
+            post_save.connect(_audit_save_post, sender=model, weak=False, dispatch_uid=uid_post_save)
             pre_delete.connect(_audit_delete, sender=model, weak=False, dispatch_uid=uid_delete)
 
 
-def _audit_save(sender, instance, created, **kwargs):
-    """post_save — 记录 create/update"""
+def _audit_save_pre(sender, instance, **kwargs):
+    """pre_save — 保存旧值快照用于 UPDATE 审计"""
+    if instance.pk:
+        try:
+            old = sender.objects.get(pk=instance.pk)
+            instance._audit_old_vals = serialize_for_json(old)
+        except sender.DoesNotExist:
+            instance._audit_old_vals = None
+    else:
+        instance._audit_old_vals = None
+
+
+def _audit_save_post(sender, instance, created, **kwargs):
+    """post_save — 记录 create/update（update 使用 pre_save 捕获的旧值）"""
     from .models import AuditLog
 
     request = get_current_request()
@@ -86,12 +100,10 @@ def _audit_save(sender, instance, created, **kwargs):
             diff_summary=f"创建 {instance._meta.verbose_name}",
         )
     else:
-        try:
-            old_obj = sender.objects.get(pk=instance.pk)
-            old_vals = serialize_for_json(old_obj)
-            new_vals = serialize_for_json(instance)
-        except sender.DoesNotExist:
+        old_vals = getattr(instance, "_audit_old_vals", None)
+        if old_vals is None:
             return
+        new_vals = serialize_for_json(instance)
 
         diffs = {}
         for key in new_vals:

@@ -281,7 +281,7 @@ class Command(BaseCommand):
         from djangoadminx.webservice.models import ScheduleJob
 
         for j in DEFAULT_JOBS:
-            _, created = ScheduleJob.objects.get_or_create(
+            _, created = ScheduleJob.objects.update_or_create(
                 name=j["name"],
                 defaults=j,
             )

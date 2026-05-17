@@ -169,9 +169,7 @@ const handleClearCache = async () => {
     const res = await commonApi.cacheClear()
     message.success(`缓存已清理 (${res.cleared})`)
     await commonApi.cacheStats().then((c) => Object.assign(cacheStats, c))
-  } catch (e) {
-    message.error('清理缓存失败')
-  } finally {
+  } catch {
     clearing.value = false
   }
 }

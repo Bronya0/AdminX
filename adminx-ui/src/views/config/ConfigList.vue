@@ -23,7 +23,6 @@
             <a-select-option value="int">整数</a-select-option>
             <a-select-option value="bool">布尔</a-select-option>
             <a-select-option value="json">JSON</a-select-option>
-            <a-select-option value="encrypted">加密</a-select-option>
             <a-select-option value="options">选项列表</a-select-option>
           </a-select>
         </a-form-item>
@@ -45,6 +44,18 @@
             allow-clear
             @pressEnter="handleSearch"
           />
+        </a-form-item>
+        <a-form-item label="加密">
+          <a-select
+            v-model:value="searchForm.is_encrypted"
+            placeholder="全部"
+            allow-clear
+            style="width: 100px"
+            @change="handleSearch"
+          >
+            <a-select-option :value="true">是</a-select-option>
+            <a-select-option :value="false">否</a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="状态">
           <a-select
@@ -94,13 +105,18 @@
               {{ getTypeText(record.value_type) }}
             </a-tag>
           </template>
+          <template v-if="column.key === 'is_encrypted'">
+            <a-tag :color="record.is_encrypted ? 'orange' : 'default'">
+              {{ record.is_encrypted ? '是' : '否' }}
+            </a-tag>
+          </template>
           <template v-if="column.key === 'is_active'">
             <a-tag :color="record.is_active ? 'success' : 'error'">
               {{ record.is_active ? '启用' : '禁用' }}
             </a-tag>
           </template>
           <template v-if="column.key === 'display_value'">
-            <span v-if="record.value_type === 'encrypted'">
+            <span v-if="record.is_encrypted">
               <a-tag color="orange">********</a-tag>
             </span>
             <span v-else-if="record.value_type === 'bool'">
@@ -163,9 +179,9 @@
                 <a-select-option value="int">整数</a-select-option>
                 <a-select-option value="bool">布尔</a-select-option>
                 <a-select-option value="json">JSON</a-select-option>
-                <a-select-option value="encrypted">加密</a-select-option>
                 <a-select-option value="options">选项列表</a-select-option>
               </a-select>
+              <span class="encrypted-hint">如需加密存储，使用下方「加密存储」开关</span>
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -175,16 +191,22 @@
           </a-col>
         </a-row>
 
-        <a-form-item label="配置值" name="value" v-if="formState.value_type !== 'encrypted'">
+        <a-form-item label="配置值" name="value">
           <a-textarea
             v-model:value="formState.value"
-            placeholder="请输入配置值"
+            :placeholder="valuePlaceholder"
             :rows="formState.value_type === 'json' || formState.value_type === 'options' ? 6 : 3"
           />
         </a-form-item>
-
-        <a-form-item label="加密值" name="encrypted_value" v-if="formState.value_type === 'encrypted'">
-          <a-input-password v-model:value="formState.encrypted_value" placeholder="请输入加密值" />
+        <a-form-item label="加密存储" name="is_encrypted">
+          <a-switch
+            v-model:checked="formState.is_encrypted"
+            :disabled="isEdit && formState.is_encrypted"
+            checked-children="已加密"
+            un-checked-children="未加密"
+          />
+          <span class="encrypted-hint">开启后加密存储到数据库，API 返回 ***，编辑时不可见原值</span>
+          <span v-if="isEdit && formState.is_encrypted" class="encrypted-warning">已加密的配置不允许改回非加密</span>
         </a-form-item>
 
         <a-form-item label="描述" name="desc">
@@ -204,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
@@ -221,6 +243,7 @@ const columns = [
   { title: '配置键', dataIndex: 'key', key: 'key', width: 200 },
   { title: '类型', key: 'value_type', width: 100 },
   { title: '配置值', key: 'display_value', ellipsis: true },
+  { title: '加密', key: 'is_encrypted', width: 80, align: 'center' as const },
   { title: '分组', dataIndex: 'group', key: 'group', width: 120 },
   { title: '描述', dataIndex: 'desc', key: 'desc', ellipsis: true },
   { title: '状态', key: 'is_active', width: 100 },
@@ -242,6 +265,7 @@ const searchForm = reactive({
   group: '',
   value_type: undefined as string | undefined,
   desc: '',
+  is_encrypted: undefined as boolean | undefined,
   is_active: undefined as boolean | undefined,
 })
 
@@ -269,15 +293,62 @@ const formState = reactive({
   key: '',
   value: '',
   value_type: 'string',
-  encrypted_value: '',
+  is_encrypted: false,
   desc: '',
   group: 'default',
   is_active: true,
 })
 
+const valuePlaceholder = computed(() => {
+  const hints: Record<string, string> = {
+    string: '普通文本字符串',
+    int: '整数值，如 42',
+    bool: 'true 或 false',
+    json: 'JSON 对象，如 {"key": "value"}',
+    options: '选项列表 JSON 数组，如 [{"label": "男", "value": "male"}]',
+  }
+  return hints[formState.value_type] || '请输入配置值'
+})
+
+const valueValidator = (_rule: any, value: string) => {
+  if (formState.is_encrypted && !value) return Promise.resolve()
+  const t = formState.value_type
+  if (!value) {
+    if (t === 'options') return Promise.resolve()
+    return Promise.reject(new Error('请输入配置值'))
+  }
+  if (t === 'int') {
+    if (!/^-?\d+$/.test(value)) return Promise.reject(new Error('整数类型请输入整数值，如 42'))
+  } else if (t === 'bool') {
+    if (!['true', 'false'].includes(value.toLowerCase())) return Promise.reject(new Error('布尔类型请输入 true 或 false'))
+  } else if (t === 'json') {
+    try {
+      const parsed = JSON.parse(value)
+      if (parsed === null || typeof parsed !== 'object')
+        return Promise.reject(new Error('JSON 类型请输入对象 {} 或数组 []'))
+    } catch { return Promise.reject(new Error('JSON 格式无效，请检查语法')) }
+  } else if (t === 'options') {
+    try {
+      const arr = JSON.parse(value)
+      if (!Array.isArray(arr)) return Promise.reject(new Error('选项列表请输入 JSON 数组'))
+      if (!arr.every((i: any) => i && typeof i.label === 'string' && typeof i.value === 'string'))
+        return Promise.reject(new Error('选项列表格式：[{"label":"显示名","value":"值"}]'))
+    } catch { return Promise.reject(new Error('不是有效 JSON 数组')) }
+  }
+  return Promise.resolve()
+}
+
+// 切换值类型时重新校验 value 字段
+watch(() => formState.value_type, () => {
+  if (formRef.value && formState.value) {
+    formRef.value.validateFields('value').catch(() => {})
+  }
+})
+
 const formRules = {
   key: [{ required: true, message: '请输入配置键' }],
   value_type: [{ required: true, message: '请选择值类型' }],
+  value: [{ validator: valueValidator, trigger: 'change' }],
 }
 
 // 获取类型颜色
@@ -287,7 +358,6 @@ const getTypeColor = (type: string) => {
     int: 'green',
     bool: 'purple',
     json: 'orange',
-    encrypted: 'red',
     options: 'cyan',
   }
   return colors[type] || 'default'
@@ -300,7 +370,6 @@ const getTypeText = (type: string) => {
     int: '整数',
     bool: '布尔',
     json: 'JSON',
-    encrypted: '加密',
     options: '选项',
   }
   return texts[type] || type
@@ -317,6 +386,7 @@ const loadData = async () => {
       group: searchForm.group,
       value_type: searchForm.value_type,
       desc: searchForm.desc || undefined,
+      is_encrypted: searchForm.is_encrypted,
       is_active: searchForm.is_active,
     })
     tableData.value = res.results
@@ -338,6 +408,7 @@ const resetSearch = () => {
   searchForm.group = ''
   searchForm.value_type = undefined
   searchForm.desc = ''
+  searchForm.is_encrypted = undefined
   searchForm.is_active = undefined
   handleSearch()
 }
@@ -358,7 +429,7 @@ const handleAdd = () => {
     key: '',
     value: '',
     value_type: 'string',
-    encrypted_value: '',
+    is_encrypted: false,
     desc: '',
     group: 'default',
     is_active: true,
@@ -375,7 +446,7 @@ const handleEdit = (record: Config) => {
     key: record.key,
     value: record.value,
     value_type: record.value_type,
-    encrypted_value: '',
+    is_encrypted: record.is_encrypted,
     desc: record.desc,
     group: record.group,
     is_active: record.is_active,
@@ -389,9 +460,7 @@ const handleDelete = async (record: Config) => {
     await configApi.deleteConfig(record.id)
     message.success('删除成功')
     loadData()
-  } catch (e) {
-    message.error('删除失败')
-  }
+  } catch { /* interceptor handles error */ }
 }
 
 // 弹窗确认
@@ -401,12 +470,11 @@ const handleModalOk = async () => {
     modalLoading.value = true
 
     const data: any = { ...formState }
-    if (data.value_type === 'encrypted' && data.encrypted_value) {
-      data.value = data.encrypted_value
-    }
-    delete data.encrypted_value
 
     if (isEdit.value) {
+      if (data.is_encrypted && !data.value) {
+        delete data.value
+      }
       await configApi.updateConfig(currentId.value, data)
       message.success('更新成功')
     } else {
@@ -450,5 +518,17 @@ onMounted(() => {
 
 .table-toolbar {
   margin-bottom: 16px;
+}
+
+.encrypted-hint {
+  font-size: 12px;
+  color: #999;
+  margin-left: 8px;
+}
+
+.encrypted-warning {
+  font-size: 12px;
+  color: #ff4d4f;
+  margin-left: 8px;
 }
 </style>

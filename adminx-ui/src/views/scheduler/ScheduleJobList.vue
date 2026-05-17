@@ -394,33 +394,39 @@ const handleModalOk = async () => {
 }
 
 const handleDelete = async (job: ScheduleJob) => {
-  await scheduleJobApi.deleteJob(job.id)
-  message.success('已删除')
-  fetchData()
+  try {
+    await scheduleJobApi.deleteJob(job.id)
+    message.success('已删除')
+    fetchData()
+  } catch { /* interceptor handles error */ }
 }
 
 const handleRunOnce = async (job: ScheduleJob) => {
   try {
     const res = await scheduleJobApi.runOnce(job.id)
-    message.success(`执行完成: ${(res.result || '').substring(0, 100)}`)
+    const result = (res?.result || '').substring(0, 100)
+    message.success(`执行完成: ${result || '无输出'}`)
     fetchData()
     fetchSchedulerStatus()
   } catch {
-    // 错误提示已在 axios 拦截器中处理
     fetchData()
   }
 }
 
 const handleToggleActive = async (job: ScheduleJob, checked: boolean) => {
-  await scheduleJobApi.updateJob(job.id, { is_active: checked } as any)
-  job.is_active = checked
-  message.success(checked ? '任务已启用' : '任务已禁用')
+  try {
+    await scheduleJobApi.updateJob(job.id, { is_active: checked } as any)
+    job.is_active = checked
+    message.success(checked ? '任务已启用' : '任务已禁用')
+  } catch { /* revert on failure */ }
 }
 
 const handleReload = async () => {
-  await scheduleJobApi.reloadJobs()
-  message.success('调度器已重载')
-  fetchSchedulerStatus()
+  try {
+    await scheduleJobApi.reloadJobs()
+    message.success('调度器已重载')
+    fetchSchedulerStatus()
+  } catch { /* interceptor handles error */ }
 }
 
 // ── 格式化 ──

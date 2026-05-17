@@ -36,8 +36,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "password", "phone", "email", "avatar", "desc", "is_active", "roles"]
 
     def create(self, validated_data):
+        from djangoadminx.policy.models import PasswordPolicy
         roles = validated_data.pop("roles", [])
-        user = User.objects.create_user(**validated_data)
+        password = validated_data.pop("password", "")
+        policy = PasswordPolicy.get_instance()
+        if policy:
+            is_valid, errors = policy.validate(password)
+            if not is_valid:
+                raise serializers.ValidationError({"password": "; ".join(errors)})
+        user = User.objects.create_user(**validated_data, password=password)
         user.roles.set(roles)
         return user
 

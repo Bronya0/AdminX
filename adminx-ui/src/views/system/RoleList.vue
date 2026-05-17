@@ -152,6 +152,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
@@ -166,6 +167,8 @@ import { menuApi } from '@/api/menu'
 import { menusToTreeData, filterTreeBySearch } from '@/utils/menuTree'
 import { formatDateTime } from '@/utils/format'
 import type { Role } from '@/types'
+
+const route = useRoute()
 
 // 表格列定义
 const columns = [
@@ -304,7 +307,7 @@ const handleDelete = async (record: Role) => {
     await roleApi.deleteRole(record.id)
     message.success('删除成功')
     loadData()
-  } catch { message.error('删除失败') }
+  } catch { /* interceptor handles error */ }
 }
 
 // 菜单分配
@@ -340,21 +343,23 @@ const handlePermissionOk = async () => {
   if (!currentRole.value) return
   permissionModalLoading.value = true
   try {
-    await roleApi.updateRole(currentRole.value.id, {
-      name: currentRole.value.name,
-      code: currentRole.value.code,
-      desc: currentRole.value.desc,
-      is_active: currentRole.value.is_active,
+    await roleApi.patchRole(currentRole.value.id, {
       menus: selectedMenus.value,
-    })
+    } as any)
     message.success('菜单分配成功')
     permissionModalVisible.value = false
     loadData()
-  } catch { message.error('菜单分配失败') }
+  } catch { /* interceptor handles error */ }
   finally { permissionModalLoading.value = false }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  const search = route.query.search as string | undefined
+  if (search) {
+    searchForm.search = search
+  }
+  loadData()
+})
 </script>
 
 <style scoped>

@@ -170,7 +170,7 @@ const handleEdit = (key: string) => {
   Object.assign(formState, { name: node.title, code: node.code, icon: node.icon || '', path: node.path || '', allowed_paths: jsonPathsToLines(node.allowed_paths || '[]'), is_active: node.is_active ?? true, sort_order: node.sort_order ?? 0, parent: undefined })
   modalVisible.value = true
 }
-const handleDelete = async (key: string) => { try { await menuApi.deleteMenu(key); message.success('删除成功'); loadData() } catch { message.error('删除失败') } }
+const handleDelete = async (key: string) => { try { await menuApi.deleteMenu(key); message.success('删除成功'); loadData() } catch { /* interceptor handles error */ } }
 const handleModalOk = async () => {
   try {
     await formRef.value.validate()
@@ -186,14 +186,17 @@ const handleModalOk = async () => {
     }
     modalVisible.value = false
     loadData()
-  } catch (e) { /* validation error */ }
+  } catch (e: any) {
+    if (e?.errorFields) return /* 表单校验失败，已由 AntD 提示 */
+    console.error(e)
+  }
   finally { modalLoading.value = false }
 }
 const handleModalCancel = () => { modalVisible.value = false; formRef.value?.resetFields() }
 const handleMenuDrop = async (info: any) => {
   const { dragNode, node, dropPosition, dropToGap } = info
   const position = dropToGap ? (dropPosition === -1 ? 'left' : 'right') : 'first-child'
-  try { await menuApi.moveMenu({ id: dragNode.key, target_id: node.key, position }); message.success('移动成功'); loadData() } catch { message.error('移动失败') }
+  try { await menuApi.moveMenu({ id: dragNode.key, target_id: node.key, position }); message.success('移动成功'); loadData() } catch { /* interceptor handles error */ }
 }
 
 onMounted(() => { loadData() })

@@ -92,7 +92,8 @@
           </template>
           <template v-if="column.key === 'roles'">
             <a-space>
-              <a-tag v-for="role in record.role_names" :key="role" color="blue">
+              <a-tag v-for="role in record.role_names" :key="role" color="blue"
+                style="cursor: pointer" @click="router.push({ name: 'roles', query: { search: role } })">
                 {{ role }}
               </a-tag>
             </a-space>
@@ -196,6 +197,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
@@ -209,6 +211,8 @@ import { userApi } from '@/api/auth'
 import { roleApi } from '@/api/auth'
 import { formatDateTime } from '@/utils/format'
 import type { User, Role } from '@/types'
+
+const router = useRouter()
 
 // 表格列定义
 const columns = [
@@ -366,9 +370,7 @@ const handleDelete = async (record: User) => {
     await userApi.deleteUser(record.id)
     message.success('删除成功')
     loadData()
-  } catch (e) {
-    message.error('删除失败')
-  }
+  } catch { /* interceptor handles error */ }
 }
 
 // 弹窗确认
@@ -414,11 +416,10 @@ const handlePasswordOk = async () => {
   }
   passwordModalLoading.value = true
   try {
-    // 调用重置密码API（需要后端支持）
+    if (!currentUser.value) return
+    await userApi.updateUser(currentUser.value.id, { password: newPassword.value } as any)
     message.success('密码重置成功')
     passwordModalVisible.value = false
-  } catch (e) {
-    message.error('密码重置失败')
   } finally {
     passwordModalLoading.value = false
   }

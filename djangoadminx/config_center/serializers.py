@@ -10,14 +10,14 @@ class ConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = Config
         fields = [
-            "id", "key", "value", "value_type",
+            "id", "key", "value", "value_type", "is_encrypted",
             "desc", "group", "is_active", "display_value", "options",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_display_value(self, obj):
-        if obj.value_type == Config.TypeChoices.ENCRYPTED:
+        if obj.is_encrypted:
             return "********"
         if obj.value_type == Config.TypeChoices.OPTIONS:
             return obj.parse_value()
@@ -27,3 +27,9 @@ class ConfigSerializer(serializers.ModelSerializer):
         if obj.value_type == Config.TypeChoices.OPTIONS:
             return obj.parse_value()
         return None
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.is_encrypted:
+            data["value"] = ""
+        return data

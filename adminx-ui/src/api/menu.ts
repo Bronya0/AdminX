@@ -28,6 +28,6 @@ export const menuApi = {
     request.delete(`/menu/${id}/`),
 
   // 移动菜单
-  moveMenu: (data: { id: string; target_id: string; position: 'first-child' | 'left' | 'right' }): Promise<void> =>
+  moveMenu: (data: { id: string; target_id: string; position: 'first-child' | 'last-child' | 'left' | 'right' }): Promise<void> =>
     request.post('/menu/move/', data),
 }

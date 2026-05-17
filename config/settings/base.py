@@ -7,7 +7,7 @@ import environ
 env = environ.Env(
     # 默认值
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list, ["*"]),
+    ALLOWED_HOSTS=(list, []),
     CSRF_TRUSTED_ORIGINS=(list, []),
 )
 
@@ -20,8 +20,9 @@ if env_file.exists():
 
 # ---------- 核心 ----------
 SECRET_KEY = env("SECRET_KEY", default="django-insecure-change-me-in-production")
-DEBUG = env("DEBUG", default="True")
+DEBUG = env("DEBUG", default=False)
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
@@ -42,6 +43,7 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
     "drf_spectacular",

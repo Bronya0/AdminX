@@ -56,6 +56,9 @@ export const roleApi = {
   updateRole: (id: string, data: Partial<Role>): Promise<Role> =>
     request.put(`/accounts/roles/${id}/`, data),
 
+  patchRole: (id: string, data: Partial<Role>): Promise<Role> =>
+    request.patch(`/accounts/roles/${id}/`, data),
+
   deleteRole: (id: string): Promise<void> =>
     request.delete(`/accounts/roles/${id}/`),
 }

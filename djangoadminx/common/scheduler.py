@@ -177,7 +177,7 @@ class SchedulerManager:
                 return False
 
             self.scheduler.add_job(
-                func=self._execute_job_wrapper,
+                func=_execute_job_wrapper,
                 trigger=trigger,
                 id=str(job.id),
                 name=job.name,
@@ -201,30 +201,31 @@ class SchedulerManager:
             return DateTrigger(**config)
         return None
 
-    def _execute_job_wrapper(self, job_id):
-        from djangoadminx.webservice.models import JobLog, ScheduleJob
-
-        try:
-            job = ScheduleJob.objects.get(id=job_id, is_active=True)
-            started_at = timezone.now()
-            log = JobLog.objects.create(job=job, status="running", started_at=started_at)
-
-            try:
-                result = job.execute()
-                log.status = "success"
-                log.result = str(result)[:500] if result is not None else "ok"
-            except Exception as e:
-                log.status = "failed"
-                log.result = str(e)[:500]
-                logger.exception(f"Job {job.name} 执行失败")
-            log.finished_at = timezone.now()
-            log.save()
-        except ScheduleJob.DoesNotExist:
-            logger.warning(f"Job {job_id} 不存在或已禁用")
-
     def reload_all(self):
         self.scheduler.remove_all_jobs()
         self._load_jobs_from_db()
+
+
+def _execute_job_wrapper(job_id):
+    from djangoadminx.webservice.models import JobLog, ScheduleJob
+
+    try:
+        job = ScheduleJob.objects.get(id=job_id, is_active=True)
+        started_at = timezone.now()
+        log = JobLog.objects.create(job=job, status="running", started_at=started_at)
+
+        try:
+            result = job.execute()
+            log.status = "success"
+            log.result = str(result)[:500] if result is not None else "ok"
+        except Exception as e:
+            log.status = "failed"
+            log.result = str(e)[:500]
+            logger.exception(f"Job {job.name} 执行失败")
+        log.finished_at = timezone.now()
+        log.save()
+    except ScheduleJob.DoesNotExist:
+        logger.warning(f"Job {job_id} 不存在或已禁用")
 
 
 scheduler_manager = SchedulerManager()

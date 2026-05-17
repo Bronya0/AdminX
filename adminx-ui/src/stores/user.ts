@@ -39,13 +39,11 @@ export const useUserStore = defineStore(
     const isLoggedIn = computed(() => !!token.value)
     const username = computed(() => user.value?.username || '')
     const avatar = computed(() => user.value?.avatar || '')
-    const hasPermission = computed(() => {
-      return (code: string) => {
-        if (!code) return true
-        if (user.value?.is_superuser) return true
-        return permissions.value.includes(code)
-      }
-    })
+    const hasPermission = (code: string): boolean => {
+      if (!code) return true
+      if (user.value?.is_superuser) return true
+      return permissions.value.includes(code)
+    }
 
     // Actions
     const setToken = (access: string, refresh: string) => {
