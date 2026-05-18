@@ -69,8 +69,8 @@
             >
               <template #bodyCell="{ column, record: log }">
                 <template v-if="column.key === 'status'">
-                  <a-tag :color="{ running: 'processing', success: 'success', failed: 'error' }[log.status]">
-                    {{ { running: '运行中', success: '成功', failed: '失败' }[log.status] }}
+                  <a-tag :color="({ running: 'processing', success: 'success', failed: 'error' } as Record<string, string>)[log.status]">
+                    {{ ({ running: '运行中', success: '成功', failed: '失败' } as Record<string, string>)[log.status] }}
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'duration'">
@@ -104,13 +104,13 @@
             <span style="font-size: 12px;">{{ formatTrigger(record) }}</span>
           </template>
           <template v-if="column.key === 'is_active'">
-            <a-switch :checked="record.is_active" size="small" @change="(c) => handleToggleActive(record, c)" />
+            <a-switch :checked="record.is_active" size="small" @change="(c: boolean) => handleToggleActive(record, c)" />
           </template>
           <template v-if="column.key === 'last_result'">
             <template v-if="record.last_run">
               <div style="display: flex; align-items: center; gap: 4px;">
-                <a-tag :color="{ success: 'success', failed: 'error', running: 'processing' }[record.last_run.status]" style="font-size: 12px;">
-                  {{ { success: '成功', failed: '失败', running: '运行中' }[record.last_run.status] || record.last_run.status }}
+                <a-tag :color="({ success: 'success', failed: 'error', running: 'processing' } as Record<string, string>)[record.last_run.status]" style="font-size: 12px;">
+                  {{ ({ success: '成功', failed: '失败', running: '运行中' } as Record<string, string>)[record.last_run.status] || record.last_run.status }}
                 </a-tag>
                 <a-tooltip>
                   <template #title><pre style="max-height: 200px; overflow-y: auto; white-space: pre-wrap;">{{ record.last_run.result || '无输出' }}</pre></template>
@@ -247,7 +247,7 @@ const modalTitle = computed(() => editingId.value ? '编辑任务' : '新建任�
 const formState = ref({
   name: '', command_type: 'python' as 'python' | 'shell',
   handler: '', command: '',
-  trigger_type: 'interval', trigger_config: '{"hours": 1}', is_active: true,
+  trigger_type: 'interval' as 'cron' | 'interval' | 'date', trigger_config: '{"hours": 1}', is_active: true,
 })
 const formRules: Record<string, any> = { name: [{ required: true, message: '请输入任务名称' }] }
 

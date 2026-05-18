@@ -13,9 +13,9 @@ export const scheduleJobApi = {
     request.put(`/jobs/${id}/`, data),
   remove: (id: string) =>
     request.delete(`/jobs/${id}/`),
-  runOnce: (id: string) =>
+  runOnce: (id: string): Promise<{ result?: string }> =>
     request.post(`/jobs/${id}/run_once/`),
-  getStatus: () =>
+  getStatus: (): Promise<{ running: boolean; job_count: number }> =>
     request.get('/jobs/status/'),
   reload: () =>
     request.post('/jobs/reload/'),

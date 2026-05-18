@@ -269,7 +269,7 @@ const modalVisible = ref(false)
 const modalLoading = ref(false)
 const modalTitle = ref('新增配置')
 const isEdit = ref(false)
-const currentId = ref('')
+const currentId = ref<number | null>(null)
 const formRef = ref()
 
 const formState = reactive({
@@ -407,7 +407,7 @@ const handleTableChange = (pag: any) => {
 const handleAdd = () => {
   isEdit.value = false
   modalTitle.value = '新增配置'
-  currentId.value = ''
+  currentId.value = null
   Object.assign(formState, {
     key: '',
     value: '',
@@ -458,7 +458,7 @@ const handleModalOk = async () => {
       if (data.is_encrypted && !data.value) {
         delete data.value
       }
-      await configApi.updateConfig(currentId.value, data)
+      await configApi.updateConfig(currentId.value!, data)
       message.success('更新成功')
     } else {
       await configApi.createConfig(data)

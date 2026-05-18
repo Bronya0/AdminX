@@ -43,7 +43,6 @@ const router = createRouter({
     {
       path: '/',
       component: AdminLayout,
-      redirect: '/dashboard',
       children: [
         {
           path: 'dashboard',
@@ -177,11 +176,12 @@ router.beforeEach(async (to, from) => {
   const requiredPermission = to.meta.permission as string
   if (requiredPermission && !userStore.hasPermission(requiredPermission)) {
     message.error('没有权限访问该页面')
-    return '/dashboard'
+    const fallback = userStore.user?.home_page || userStore.menus?.[0]?.path
+    return fallback || '/login'
   }
 
-  // 访问根路径时跳转
-  if (to.path === '/') {
+  // 访问根路径或仪表盘时，按 home_page 跳转
+  if (to.path === '/' || to.path === '/dashboard') {
     if (userStore.user?.home_page) {
       return userStore.user.home_page
     }

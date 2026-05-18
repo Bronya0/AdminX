@@ -146,7 +146,7 @@
           <a-input-password v-model:value="whForm.secret" placeholder="HMAC-SHA256 密钥（可选）" />
         </a-form-item>
         <a-form-item label="触发事件">
-          <a-select v-model:value="whForm.events" mode="multiple" placeholder="选择触发事件" @change="v => whForm.events = v">
+          <a-select v-model:value="whForm.events" mode="multiple" placeholder="选择触发事件">
             <a-select-option value="info">信息</a-select-option>
             <a-select-option value="success">成功</a-select-option>
             <a-select-option value="warning">警告</a-select-option>

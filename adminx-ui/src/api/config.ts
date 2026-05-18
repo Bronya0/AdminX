@@ -4,11 +4,11 @@ import type { Config, PaginatedResponse } from '@/types'
 // 配置中心 API
 export const configApi = {
   // 获取配置列表
-  getConfigs: (params?: { page?: number; size?: number; search?: string; group?: string; value_type?: string; desc?: string; is_active?: boolean }): Promise<PaginatedResponse<Config>> =>
+  getConfigs: (params?: { page?: number; size?: number; search?: string; group?: string; value_type?: string; desc?: string; is_active?: boolean; is_encrypted?: boolean }): Promise<PaginatedResponse<Config>> =>
     request.get('/config/', { params }),
 
   // 获取配置详情
-  getConfig: (id: string): Promise<Config> =>
+  getConfig: (id: number): Promise<Config> =>
     request.get(`/config/${id}/`),
 
   // 创建配置
@@ -16,11 +16,11 @@ export const configApi = {
     request.post('/config/', data),
 
   // 更新配置
-  updateConfig: (id: string, data: Partial<Config>): Promise<Config> =>
+  updateConfig: (id: number, data: Partial<Config>): Promise<Config> =>
     request.put(`/config/${id}/`, data),
 
   // 删除配置
-  deleteConfig: (id: string): Promise<void> =>
+  deleteConfig: (id: number): Promise<void> =>
     request.delete(`/config/${id}/`),
 
   // 按分组获取配置

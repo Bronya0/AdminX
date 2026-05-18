@@ -218,8 +218,8 @@ const sidebarMenus = computed<SidebarItem[]>(() => {
   // 确保仪表盘在第一位
   const dashboardIdx = items.findIndex(m => m.key === '/dashboard')
   if (dashboardIdx > 0) {
-    const [dash] = items.splice(dashboardIdx, 1)
-    items.unshift(dash)
+    const dash = items.splice(dashboardIdx, 1)[0]
+    if (dash) items.unshift(dash)
   }
 
   return items
@@ -292,7 +292,7 @@ const handleTopMenuClick = (key: string) => {
   const parent = sidebarMenus.value.find(m => m.key === key)
   let target: string | undefined
   if (parent && parent.children && parent.children.length > 0) {
-    target = parent.children[0].key
+    target = parent.children[0]?.key
   } else if (parent) {
     target = parent.key
   }

@@ -12,7 +12,7 @@ export function flatMenusToTree(menus: Menu[]): Menu[] {
   if (!menus.length) return []
 
   const sorted = [...menus].sort((a, b) => a.sort_order - b.sort_order)
-  const nodeMap = new Map<string, Menu & { children: Menu[] }>()
+  const nodeMap = new Map<number, Menu & { children: Menu[] }>()
   const roots: Menu[] = []
 
   for (const menu of sorted) {
@@ -37,7 +37,7 @@ export function flatMenusToTree(menus: Menu[]): Menu[] {
 function _findParentByPathPrefix(
   menu: Menu,
   allMenus: Menu[],
-  nodeMap: Map<string, Menu & { children: Menu[] }>,
+  nodeMap: Map<number, Menu & { children: Menu[] }>,
 ): (Menu & { children: Menu[] }) | null {
   const p = menu.path
   if (!p || p === '/') return null
@@ -68,7 +68,7 @@ export function flatMenusToTreeByDepth(menus: Menu[]): Menu[] {
   })
 
   const roots: Menu[] = []
-  const nodeMap = new Map<string, Menu & { children: Menu[] }>()
+  const nodeMap = new Map<number, Menu & { children: Menu[] }>()
 
   for (const menu of sorted) {
     const node: Menu & { children: Menu[] } = { ...menu, children: [] }
