@@ -107,35 +107,84 @@ sudo supervisorctl start all
 # ── 8. Nginx ──
 echo ""
 echo ">>> 配置 Nginx..."
-sudo tee /etc/nginx/sites-available/djangoadminx > /dev/null <<'NGINX'
+sudo tee /etc/nginx/sites-available/djangoadminx > /dev/null <<NGINX
 upstream django_backend {
     server 127.0.0.1:8000;
 }
+
+limit_req_zone \$binary_remote_addr zone=djangoadminx_api:10m rate=10r/s;
+
 server {
     listen 80;
     server_name _;
     client_max_body_size 100M;
 
-    location /static/ {
-        alias /app/staticfiles/;
+    location = /djangoadminx {
+        return 301 /djangoadminx/;
+    }
+
+    location ^~ /djangoadminx/assets/ {
+        alias $APP_DIR/adminx-ui/dist/assets/;
+        expires 7d;
+        add_header Cache-Control "public";
+        try_files \$uri =404;
+    }
+
+    location = /djangoadminx/favicon.ico {
+        alias $APP_DIR/adminx-ui/dist/favicon.ico;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    location ^~ /djangoadminx/static/ {
+        alias $APP_DIR/staticfiles/;
         expires 7d;
     }
-    location /media/ {
-        alias /app/media/;
+
+    location ^~ /djangoadminx/media/ {
+        alias $APP_DIR/media/;
         expires 30d;
     }
-    location /api/ {
-        proxy_pass http://django_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    location ^~ /djangoadminx/api/ {
+        limit_req zone=djangoadminx_api burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass http://django_backend/api/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
-    location /ws/ {
-        proxy_pass http://django_backend;
+
+    location ^~ /djangoadminx/admin/ {
+        proxy_pass http://django_backend/admin/;
+        proxy_redirect /admin/ /djangoadminx/admin/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ^~ /djangoadminx/ws/ {
+        proxy_pass http://django_backend/ws/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location = /djangoadminx/health/ {
+        proxy_pass http://django_backend/api/v1/common/health/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ^~ /djangoadminx/ {
+        alias $APP_DIR/adminx-ui/dist/;
+        try_files \$uri \$uri/ /djangoadminx/index.html;
     }
 }
 NGINX

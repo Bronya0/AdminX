@@ -4,8 +4,12 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
+const appBase = '/djangoadminx/'
+const apiProxyPrefix = `${appBase}api`
+
 // https://vite.dev/config/
 export default defineConfig({
+  base: appBase,
   plugins: [
     vue(),
     vueDevTools(),
@@ -18,9 +22,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
+      [apiProxyPrefix]: {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/djangoadminx\/api/, '/api'),
       },
     },
   },

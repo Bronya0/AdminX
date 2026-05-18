@@ -51,6 +51,62 @@
 | 加密 | Cryptography Fernet（配置加密字段）+ GMSSL（SM4） |
 | 调度 | APScheduler 3.x（独立进程） |
 
+## 部署要求
+
+### 运行环境
+
+| 组件 | 最低版本 | 说明 |
+|------|---------|------|
+| Python | 3.12 | 后端运行时 |
+| Node.js | 20.19 / 22.12+ | 仅构建前端，生产服务器不需要 |
+| PostgreSQL | 16 | 生产数据库；开发可用 SQLite |
+| Redis | 7 | 可选，无 Redis 自动降级 LocMemCache |
+
+### 硬件建议
+
+| 规格 | 最低 | 推荐 |
+|------|------|------|
+| CPU | 1 核 | 2 核+ |
+| 内存 | 512 MB | 1 GB+（4 Gunicorn workers） |
+| 磁盘 | 2 GB | 10 GB+（含日志 / 媒体文件） |
+
+### 必填环境变量（生产）
+
+| 变量 | 说明 |
+|------|------|
+| `SECRET_KEY` | Django 密钥，随机生成 |
+| `DATABASE_URL` | 如 `postgres://user:pass@host:5432/db` |
+| `ALLOWED_HOSTS` | 允许的域名/IP，如 `10.0.0.1,example.com` |
+| `DJANGO_SETTINGS_MODULE` | 固定为 `config.settings.prod` |
+
+### 可选环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis 地址 |
+| `FERNET_KEY` | 无 | 配置中心加密密钥，启用加密字段时必填 |
+| `JWT_ACCESS_EXPIRE` | `30` | Access Token 有效期（分钟） |
+| `JWT_REFRESH_EXPIRE` | `7` | Refresh Token 有效期（天） |
+| `THROTTLE_ANON` | `30/minute` | 匿名用户限流 |
+| `THROTTLE_USER` | `200/minute` | 登录用户限流 |
+| `CORS_ALLOWED_ORIGINS` | — | 允许跨域的前端地址 |
+
+### Python 依赖
+
+```bash
+pip install -r requirements.txt
+# 若使用 proxy.py（无 Nginx 场景）额外需要
+pip install aiohttp
+```
+
+### 端口
+
+| 服务 | 默认端口 | 说明 |
+|------|---------|------|
+| Gunicorn | 9999 | 后端 API |
+| proxy.py | 8888 | 反向代理（无 Nginx 时使用） |
+| Vite dev | 5173 | 仅开发环境 |
+
 ## 快速开始
 
 ```bash

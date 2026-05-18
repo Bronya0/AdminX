@@ -3,9 +3,12 @@ import { message } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
 import router from '@/router'
 
+const appBase = import.meta.env.BASE_URL.replace(/\/$/, '')
+const defaultApiBaseURL = `${appBase}/api/v1`
+
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL || defaultApiBaseURL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

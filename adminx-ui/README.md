@@ -136,9 +136,10 @@ npm run type-check
 server: {
   port: 5173,
   proxy: {
-    '/api': {
+    '/djangoadminx/api': {
       target: 'http://localhost:8000',  // Django 后端地址
       changeOrigin: true,
+      rewrite: (path) => path.replace(/^\/djangoadminx\/api/, '/api'),
     },
   },
 }
@@ -149,7 +150,7 @@ server: {
 创建 `.env` 文件：
 
 ```
-VITE_API_BASE_URL=/api/v1
+VITE_API_BASE_URL=/djangoadminx/api/v1
 ```
 
 ## 主要特性
