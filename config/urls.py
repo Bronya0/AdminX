@@ -9,7 +9,6 @@ api_patterns = [
     path("monitor/", include("djangoadminx.monitor.urls")),
     path("cluster/", include("djangoadminx.cluster.urls")),
     path("jobs/", include("djangoadminx.jobs.job_urls")),
-    path("job-logs/", include("djangoadminx.jobs.job_log_urls")),
     path("common/", include("djangoadminx.common.urls")),
     path("audit/", include("djangoadminx.audit.urls")),
     path("files/", include("djangoadminx.file_center.urls")),
