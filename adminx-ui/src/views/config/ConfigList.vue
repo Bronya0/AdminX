@@ -26,6 +26,18 @@
             <a-select-option value="options">选项列表</a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item label="加密">
+          <a-select
+            v-model:value="searchForm.is_encrypted"
+            placeholder="全部"
+            allow-clear
+            style="width: 80px"
+            @change="handleSearch"
+          >
+            <a-select-option :value="true">是</a-select-option>
+            <a-select-option :value="false">否</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item label="分组">
           <a-select
             v-model:value="searchForm.group"
@@ -44,30 +56,6 @@
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item label="加密">
-          <a-select
-            v-model:value="searchForm.is_encrypted"
-            placeholder="全部"
-            allow-clear
-            style="width: 100px"
-            @change="handleSearch"
-          >
-            <a-select-option :value="true">是</a-select-option>
-            <a-select-option :value="false">否</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="状态">
-          <a-select
-            v-model:value="searchForm.is_active"
-            placeholder="全部"
-            allow-clear
-            style="width: 100px"
-            @change="handleSearch"
-          >
-            <a-select-option :value="true">启用</a-select-option>
-            <a-select-option :value="false">禁用</a-select-option>
-          </a-select>
         </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
