@@ -3,7 +3,8 @@ import logging
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
+from djangoadminx.accounts.permissions import RBACPermission
 from rest_framework.response import Response
 
 from djangoadminx.audit.mixins import AuditLogMixin
@@ -17,7 +18,7 @@ class ScheduleJobViewSet(AuditLogMixin, viewsets.ModelViewSet):
     """定时任务 CRUD"""
     queryset = ScheduleJob.objects.all()
     serializer_class = ScheduleJobSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, RBACPermission]
     search_fields = ["name", "handler", "command"]
     ordering_fields = ["name", "created_at"]
     filterset_fields = ["command_type", "trigger_type", "is_active"]
@@ -93,5 +94,6 @@ class JobLogViewSet(viewsets.ReadOnlyModelViewSet):
     """任务日志"""
     queryset = JobLog.objects.select_related("job").all()
     serializer_class = JobLogSerializer
+    permission_classes = [IsAuthenticated, RBACPermission]
     ordering = ["-started_at"]
     filterset_fields = ["job"]

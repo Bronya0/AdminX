@@ -73,6 +73,7 @@
                       <template #icon><UserOutlined /></template>
                     </a-avatar>
                     <span style="font-size: 14px; color: #333;">{{ username }}</span>
+                    <span v-if="userRoles" style="font-size: 12px; color: #999; margin-right: 0;">({{ userRoles }})</span>
                     <DownOutlined style="font-size: 12px; color: #999;" />
                   </a-space>
                   <template #overlay>
@@ -123,6 +124,7 @@
                   <template #icon><UserOutlined /></template>
                 </a-avatar>
                 <span style="font-size: 14px; color: #333;">{{ username }}</span>
+                <span v-if="userRoles" style="font-size: 12px; color: #999; margin-right: 0;">({{ userRoles }})</span>
                 <DownOutlined style="font-size: 12px; color: #999;" />
               </a-space>
               <template #overlay>
@@ -162,7 +164,7 @@ import {
   FullscreenOutlined,
   DownOutlined,
 } from '@ant-design/icons-vue'
-import { routesToSidebar } from '@/utils/menuTree'
+import { flatMenusToTreeByDepth, menusToSidebarItems } from '@/utils/menuTree'
 import BreadcrumbNav from '@/components/BreadcrumbNav.vue'
 import SideBar from './SideBar.vue'
 import TopNav from './TopNav.vue'
@@ -183,6 +185,7 @@ const showBreadcrumb = computed(() => userStore.theme.showBreadcrumb !== false)
 const selectedKeys = ref<string[]>([])
 const openKeys = ref<string[]>([])
 const username = computed(() => userStore.username || '未登录')
+const userRoles = computed(() => userStore.user?.role_names?.join(', ') || '')
 
 // 未读通知数量
 const unreadCount = ref(0)
@@ -197,10 +200,10 @@ const fetchUnreadCount = async () => {
 }
 
 const sidebarMenus = computed<SidebarItem[]>(() => {
-  const childRoutes = router.options.routes.find(r => r.path === '/')?.children || []
-  const items = routesToSidebar(childRoutes, (code: string) => userStore.hasPermission(code))
+  const tree = flatMenusToTreeByDepth(userStore.menus || [])
+  const items = menusToSidebarItems(tree, (code: string) => userStore.hasPermission(code))
 
-  // 合并外部菜单（来自动态注册，path 以 http 开头）
+  // 合并外部菜单（path 以 http 开头的动态注册菜单）
   if (userStore.menus && userStore.menus.length > 0) {
     for (const menu of userStore.menus) {
       if (menu.path && menu.path.startsWith('http') && menu.is_visible && menu.is_active) {
@@ -213,13 +216,6 @@ const sidebarMenus = computed<SidebarItem[]>(() => {
         }
       }
     }
-  }
-
-  // 确保仪表盘在第一位
-  const dashboardIdx = items.findIndex(m => m.key === '/dashboard')
-  if (dashboardIdx > 0) {
-    const dash = items.splice(dashboardIdx, 1)[0]
-    if (dash) items.unshift(dash)
   }
 
   return items

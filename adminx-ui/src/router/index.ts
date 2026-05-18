@@ -177,18 +177,14 @@ router.beforeEach(async (to, from) => {
   if (requiredPermission && !userStore.hasPermission(requiredPermission)) {
     message.error('没有权限访问该页面')
     const fallback = userStore.user?.home_page || userStore.menus?.[0]?.path
-    return fallback || '/login'
+    if (fallback && fallback !== to.path) return fallback
+    return '/dashboard'
   }
 
-  // 访问根路径或仪表盘时，按 home_page 跳转
-  if (to.path === '/' || to.path === '/dashboard') {
-    if (userStore.user?.home_page) {
-      return userStore.user.home_page
-    }
-    const firstPath = userStore.menus?.[0]?.path
-    if (firstPath) {
-      return firstPath
-    }
+  // 访问根路径时，按 home_page 跳转
+  if (to.path === '/') {
+    const target = userStore.user?.home_page || userStore.menus?.[0]?.path || '/dashboard'
+    if (target !== to.path) return target
   }
 
   return true

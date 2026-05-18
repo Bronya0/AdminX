@@ -354,9 +354,26 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
             menus_qs = Menu.objects.filter(is_active=True).order_by("sort_order")
         else:
             role_ids = user.roles.values_list("id", flat=True)
-            menus_qs = Menu.objects.filter(
+            direct = Menu.objects.filter(
                 is_active=True, roles__id__in=role_ids
-            ).distinct().order_by("sort_order")
+            ).distinct()
+
+            # 补全祖先菜单：路由路径前缀匹配，确保父级分组节点也被包含
+            ancestor_ids: set[int] = set()
+            all_menus = {m.id: m for m in Menu.objects.filter(is_active=True)}
+            for menu in direct:
+                parts = menu.path.strip("/").split("/")
+                for i in range(1, len(parts)):
+                    prefix = "/" + "/".join(parts[:i])
+                    for m in all_menus.values():
+                        if m.path == prefix:
+                            ancestor_ids.add(m.id)
+
+            direct_ids = set(direct.values_list("id", flat=True))
+            all_ids = direct_ids | ancestor_ids
+            menus_qs = Menu.objects.filter(
+                id__in=all_ids
+            ).order_by("sort_order")
 
         from djangoadminx.menu.serializers import MenuFlatSerializer
         menu_ser = MenuFlatSerializer(menus_qs, many=True)

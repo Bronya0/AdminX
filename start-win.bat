@@ -24,7 +24,7 @@ start "DjangoAdminX Scheduler" cmd /c "cd /d %~dp0 && call .venv\Scripts\activat
 echo ^>^>^> 执行数据库迁移...
 python manage.py migrate --noinput
 
-echo ^>^>^> 启动开发服务器 (127.0.0.1:8000)...
-python manage.py runserver 127.0.0.1:8000
+echo ^>^>^> 启动开发服务器 (127.0.0.1:9999)...
+python manage.py runserver 127.0.0.1:9999
 
 pause

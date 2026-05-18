@@ -119,8 +119,7 @@
           </div>
           <div class="tree-scroll">
             <a-tree v-model:checkedKeys="selectedMenus" v-model:expandedKeys="menuExpandedKeys"
-              checkable :tree-data="filteredMenuTreeData" :default-expand-all="false" :block-node="true"
-              :check-strictly="viewOnly">
+              checkable :tree-data="filteredMenuTreeData" :default-expand-all="false" :block-node="true">
               <template #title="{ title, path }">
                 <span class="menu-node">
                   <span class="menu-name">{{ title }}</span>

@@ -26,6 +26,7 @@ CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
+FORCE_SCRIPT_NAME = "/djangoadminx"
 
 # ---------- 默认主键 ----------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

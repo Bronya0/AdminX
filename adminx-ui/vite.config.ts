@@ -23,7 +23,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       [apiProxyPrefix]: {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:9999',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/djangoadminx\/api/, '/api'),
       },

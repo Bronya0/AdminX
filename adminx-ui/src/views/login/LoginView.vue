@@ -137,8 +137,9 @@ const handleSubmit = async () => {
       captchaEnabled.value ? formState.captchaText : undefined
     )
 
+    await Promise.all([userStore.fetchUserInfo(), userStore.fetchSiteInfo()])
     message.success('登录成功')
-    router.push(result.user.home_page || '/')
+    router.push(userStore.user?.home_page || '/')
   } catch (e: any) {
     if (captchaEnabled.value) fetchCaptcha()
     message.error(e?.message || '登录失败')
