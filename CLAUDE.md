@@ -6,11 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Backend
-python manage.py runserver              # Dev server (settings: config.settings.dev)
 python manage.py migrate                # DB migrations
-python manage.py init_data              # Init roles, menus, configs
 python manage.py init_data --superuser --username admin --password admin123  # Seed superuser
 python manage.py run_scheduler          # Start APScheduler standalone process
+python manage.py runserver              # Dev server (settings: config.settings.dev)
 
 # Redis (optional - see README "启用 Redis" section)
 # Just set REDIS_URL in .env, no code changes needed. Auto-detected at startup.
