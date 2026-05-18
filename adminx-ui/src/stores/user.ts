@@ -84,6 +84,11 @@ export const useUserStore = defineStore(
         siteLogo.value = res.site_logo
         idleTimeout.value = res.idle_timeout ?? 30
         appVersion.value = res.app_version || '1.0.0'
+        if (res.site_name) document.title = res.site_name
+        if (res.favicon) {
+          const link = document.querySelector('link[rel="icon"]') as HTMLLinkElement
+          if (link) link.href = res.favicon
+        }
         // 注：主题色/布局等由前端主题设置页面管理，不再从配置中心同步
       } catch (e) {
         // 使用默认值

@@ -9,11 +9,35 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
 
-@api_view(["GET"])
+_SITE_FIELD_MAP = {
+    "site_name": ("SITE_NAME", "string"),
+    "site_desc": ("SITE_DESC", "string"),
+    "site_logo": ("SITE_LOGO", "string"),
+    "favicon": ("SITE_FAVICON", "string"),
+    "idle_timeout": ("SESSION_IDLE_TIMEOUT", "int"),
+    "login_bg_image": ("LOGIN_BG_IMAGE", "string"),
+    "app_version": ("APP_VERSION", "string"),
+}
+
+
+@api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 def site_info(request):
-    """站点信息（公开）— 供前端登录页/顶栏/侧栏使用"""
+    """站点信息 — GET 公开读取，POST 管理员更新"""
     from djangoadminx.config_center.models import Config
+
+    if request.method == "POST":
+        if not request.user or not request.user.is_authenticated or not request.user.is_staff:
+            return JsonResponse({"code": 403, "msg": "权限不足"})
+        for field, (key, value_type) in _SITE_FIELD_MAP.items():
+            if field in request.data:
+                val = request.data[field]
+                Config.objects.update_or_create(
+                    key=key,
+                    defaults={"value": str(val), "value_type": value_type, "is_active": True, "group": "site"},
+                )
+        return JsonResponse({"code": 200, "msg": "保存成功", "data": {}})
+
     return JsonResponse({
         "code": 200,
         "msg": "success",
@@ -25,6 +49,7 @@ def site_info(request):
             "idle_timeout": Config.get_value("SESSION_IDLE_TIMEOUT", default=30),
             "login_bg_image": Config.get_value("LOGIN_BG_IMAGE", default=""),
             "app_version": Config.get_value("APP_VERSION", default="1.0.0"),
+            "favicon": Config.get_value("SITE_FAVICON", default=""),
         },
     })
 

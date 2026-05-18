@@ -272,6 +272,9 @@
           </div>
         </a-tab-pane>
       </a-tabs>
+      <div style="margin-top: 20px; text-align: right; border-top: 1px solid #f0f0f0; padding-top: 16px;">
+        <a-button type="primary" :loading="saving" @click="saveAll">保存设置</a-button>
+      </div>
   </div>
 </template>
 
@@ -377,11 +380,8 @@ const updateTheme = () => {
   })
 }
 
-// ---- 各字段处理 ----
-const onLayoutChange = () => {
-  updateTheme()
-  message.success(`已切换为 ${layoutDesc(form.layout)}`)
-}
+// ---- 各字段处理（仅保留即时 CSS 视觉反馈，持久化统一由 saveAll 完成）----
+const onLayoutChange = () => { /* 预览 tab 实时响应 form 变化，无需额外操作 */ }
 
 const onDarkChange = () => {
   if (form.isDark) {
@@ -389,12 +389,10 @@ const onDarkChange = () => {
   } else {
     document.documentElement.classList.remove('dark')
   }
-  updateTheme()
 }
 
 const onPrimaryColorChange = () => {
   document.documentElement.style.setProperty('--primary-color', form.primaryColor)
-  updateTheme()
 }
 
 const selectPresetColor = (color: string) => {
@@ -407,31 +405,17 @@ const resetPrimaryColor = () => {
   onPrimaryColorChange()
 }
 
-const onCollapsedChange = () => {
-  updateTheme()
-}
-
-const onBorderRadiusChange = () => {
-  updateTheme()
-}
+const onCollapsedChange = () => {}
+const onBorderRadiusChange = () => {}
 
 const onFontSizeChange = () => {
   document.documentElement.style.fontSize = form.fontSize + 'px'
-  updateTheme()
 }
 
-const onSiteNameChange = () => {
-  userStore.siteName = form.siteName
-  document.title = form.siteName
-}
+const onSiteNameChange = () => { document.title = form.siteName }
 
-const onSiteDescChange = () => {
-  userStore.siteDesc = form.siteDesc
-}
-
-const onSiteLogoChange = () => {
-  userStore.siteLogo = form.siteLogo
-}
+const onSiteDescChange = () => {}
+const onSiteLogoChange = () => {}
 
 const onFaviconChange = () => {
   const link = document.querySelector('link[rel="icon"]') as HTMLLinkElement
@@ -445,20 +429,50 @@ const onFaviconChange = () => {
   }
 }
 
-const onLoginBgChange = () => {
-  if (form.loginBgImage) {
-    localStorage.setItem('login_bg_image', form.loginBgImage)
-  } else {
-    localStorage.removeItem('login_bg_image')
-  }
-}
+const onLoginBgChange = () => {}
+const onIdleTimeoutChange = () => {}
+const onAppVersionChange = () => {}
 
-const onIdleTimeoutChange = () => {
-  userStore.idleTimeout = form.idleTimeout
-}
-
-const onAppVersionChange = () => {
-  userStore.appVersion = form.appVersion
+// ---- 统一保存 ----
+const saving = ref(false)
+const saveAll = async () => {
+  saving.value = true
+  try {
+    // 主题持久化到 Pinia（localStorage）
+    updateTheme()
+    // 站点信息持久化到后端配置中心
+    await commonApi.saveSiteInfo({
+      site_name: form.siteName,
+      site_desc: form.siteDesc,
+      site_logo: form.siteLogo,
+      favicon: form.favicon,
+      idle_timeout: form.idleTimeout,
+      login_bg_image: form.loginBgImage,
+      app_version: form.appVersion,
+    })
+    // 同步 store 中的站点信息字段
+    userStore.siteName = form.siteName
+    userStore.siteDesc = form.siteDesc
+    userStore.siteLogo = form.siteLogo
+    userStore.idleTimeout = form.idleTimeout
+    userStore.appVersion = form.appVersion
+    // 登录背景到 localStorage
+    if (form.loginBgImage) {
+      localStorage.setItem('login_bg_image', form.loginBgImage)
+    } else {
+      localStorage.removeItem('login_bg_image')
+    }
+    // NTP 配置到 localStorage
+    if (ntpForm.enabled) {
+      localStorage.setItem('ntp_enabled', '1')
+    } else {
+      localStorage.removeItem('ntp_enabled')
+    }
+    localStorage.setItem('ntp_server', ntpForm.server)
+    localStorage.setItem('ntp_interval', String(ntpForm.interval))
+    message.success('设置已保存')
+  } catch { /* interceptor handles error */ }
+  finally { saving.value = false }
 }
 
 // ─── NTP 时间同步 ───
@@ -472,21 +486,12 @@ const ntpSyncing = ref(false)
 const ntpResult = ref<{ success: boolean; offset?: number; error?: string } | null>(null)
 
 const onNtpEnabledChange = () => {
-  if (ntpForm.enabled) {
-    localStorage.setItem('ntp_enabled', '1')
-  } else {
-    localStorage.removeItem('ntp_enabled')
-    ntpResult.value = null
-  }
+  if (!ntpForm.enabled) ntpResult.value = null
 }
 
-const onNtpServerChange = () => {
-  localStorage.setItem('ntp_server', ntpForm.server)
-}
+const onNtpServerChange = () => {}
 
-const onNtpIntervalChange = () => {
-  localStorage.setItem('ntp_interval', String(ntpForm.interval))
-}
+const onNtpIntervalChange = () => {}
 
 const syncNtpNow = async () => {
   ntpSyncing.value = true

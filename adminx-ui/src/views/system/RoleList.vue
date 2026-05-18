@@ -131,6 +131,13 @@
           </div>
         </a-tab-pane>
       </a-tabs>
+      <a-alert
+        v-if="viewOnly"
+        message="系统内置角色不可编辑"
+        type="warning"
+        show-icon
+        style="margin-top: 16px"
+      />
     </a-modal>
   </div>
 </template>
