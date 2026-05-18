@@ -30,9 +30,8 @@ def sample_task():
 
 def system_resource_monitor():
     """系统资源监控 — 定时检查 CPU/内存/磁盘使用率"""
-    import psutil
-
     from djangoadminx.config_center.models import Config
+    from djangoadminx.monitor.utils import SystemMonitor
     from djangoadminx.notification.utils import create_notification
 
     thresholds = {
@@ -52,7 +51,11 @@ def system_resource_monitor():
 
     alerts = []
 
-    cpu_percent = psutil.cpu_percent(interval=1)
+    _, snapshot = SystemMonitor.record_snapshot(sample_interval=1)
+    disk_usage = snapshot.get("disk_usage") or {}
+    memory = snapshot.get("memory") or {}
+
+    cpu_percent = snapshot["cpu"].get("percent", 0)
     if cpu_percent >= thresholds["cpu"]["crit"]:
         alerts.append(("error", "CPU 使用率严重过高",
                        f"当前 CPU 使用率 {cpu_percent}%，超过严重阈值 {thresholds['cpu']['crit']}%"))
@@ -60,10 +63,9 @@ def system_resource_monitor():
         alerts.append(("warning", "CPU 使用率偏高",
                        f"当前 CPU 使用率 {cpu_percent}%，超过警告阈值 {thresholds['cpu']['warn']}%"))
 
-    mem = psutil.virtual_memory()
-    mem_percent = mem.percent
-    mem_used_gb = mem.used / 1024 ** 3
-    mem_total_gb = mem.total / 1024 ** 3
+    mem_percent = memory.get("percent", 0)
+    mem_used_gb = memory.get("used", 0) / 1024 ** 3
+    mem_total_gb = memory.get("total", 0) / 1024 ** 3
     if mem_percent >= thresholds["mem"]["crit"]:
         alerts.append(("error", "内存使用率严重过高",
                        f"当前内存使用率 {mem_percent:.1f}%（已用 {mem_used_gb:.1f}GB / 总计 {mem_total_gb:.1f}GB），超过严重阈值 {thresholds['mem']['crit']}%"))
@@ -71,14 +73,9 @@ def system_resource_monitor():
         alerts.append(("warning", "内存使用率偏高",
                        f"当前内存使用率 {mem_percent:.1f}%（已用 {mem_used_gb:.1f}GB / 总计 {mem_total_gb:.1f}GB），超过警告阈值 {thresholds['mem']['warn']}%"))
 
-    disk_percent = disk_used_gb = disk_total_gb = 0
-    try:
-        disk = psutil.disk_usage("/")
-        disk_percent = disk.percent
-        disk_used_gb = disk.used / 1024 ** 3
-        disk_total_gb = disk.total / 1024 ** 3
-    except Exception as e:
-        logger.warning("获取磁盘使用率失败: %s", e)
+    disk_percent = disk_usage.get("percent", 0)
+    disk_used_gb = disk_usage.get("used", 0) / 1024 ** 3
+    disk_total_gb = disk_usage.get("total", 0) / 1024 ** 3
 
     if disk_percent >= thresholds["disk"]["crit"]:
         alerts.append(("error", "磁盘使用率严重过高",

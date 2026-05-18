@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.views import APIView
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
@@ -314,6 +315,8 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
     filterset_fields = ["is_active"]
 
     def perform_destroy(self, instance):
+        if instance.pk == self.request.user.pk:
+            raise PermissionDenied("不能删除当前登录用户")
         from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
         OutstandingToken.objects.filter(user=instance).delete()
         instance.delete()
@@ -439,7 +442,6 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
     def _check_system_role(self, role):
         if role.is_system:
-            from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("系统内置角色不可编辑或删除")
 
     def perform_update(self, serializer):

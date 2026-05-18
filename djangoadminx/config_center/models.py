@@ -83,6 +83,11 @@ class Config(models.Model):
         verbose_name = "配置"
         verbose_name_plural = "配置"
         ordering = ["group", "key"]
+        indexes = [
+            models.Index(fields=["group", "is_active", "key"], name="config_group_active_key_idx"),
+            models.Index(fields=["is_active", "value_type", "created_at"], name="config_active_type_created_idx"),
+            models.Index(fields=["is_active", "is_encrypted", "created_at"], name="config_act_enc_created_idx"),
+        ]
 
     def __str__(self):
         return f"{self.key}={self.parse_value()}"

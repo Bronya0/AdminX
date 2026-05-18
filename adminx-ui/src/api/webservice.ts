@@ -20,10 +20,10 @@ export const scheduleJobApi = {
   reload: () =>
     request.post('/jobs/reload/'),
   getLogs: (params?: Record<string, any>) =>
-    request.get('/job-logs/', { params }),
+    request.get('/jobs/logs/', { params }),
 }
 
 export const jobLogApi = {
   list: (params?: Record<string, any>): Promise<PaginatedResponse<JobLog>> =>
-    request.get('/job-logs/', { params }),
+    request.get('/jobs/logs/', { params }),
 }

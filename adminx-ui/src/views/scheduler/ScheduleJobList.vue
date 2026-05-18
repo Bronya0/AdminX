@@ -128,7 +128,7 @@
           <template v-if="column.key === 'action'">
             <a-space>
               <a-button type="link" size="small" @click="handleEdit(record)"><EditOutlined /> 编辑</a-button>
-              <a-button type="link" size="small" @click="handleRunOnce(record)"><PlayCircleOutlined /> 执行</a-button>
+              <a-button type="link" size="small" :loading="runLoadingMap[record.id]" style="width: 72px" @click="handleRunOnce(record)"><template v-if="!runLoadingMap[record.id]"><PlayCircleOutlined /></template> 执行</a-button>
               <a-popconfirm title="确定删除？" @confirm="handleDelete(record)">
                 <a-button type="link" danger size="small"><DeleteOutlined /> 删除</a-button>
               </a-popconfirm>
@@ -234,6 +234,7 @@ const loading = ref(false)
 const pagination = ref({ current: 1, pageSize: 10, total: 0, showTotal: (total: number) => `共 ${total} 条` })
 const schedulerRunning = ref(false)
 const schedulerJobCount = ref<number | null>(null)
+const runLoadingMap = reactive<Record<string, boolean>>({})
 
 // 展开行日志
 const expandedRows = ref<string[]>([])
@@ -402,14 +403,17 @@ const handleDelete = async (job: ScheduleJob) => {
 }
 
 const handleRunOnce = async (job: ScheduleJob) => {
+  runLoadingMap[job.id] = true
   try {
     const res = await scheduleJobApi.runOnce(job.id)
     const result = (res?.result || '').substring(0, 100)
     message.success(`执行完成: ${result || '无输出'}`)
-    fetchData()
-    fetchSchedulerStatus()
+    await fetchData()
+    await fetchSchedulerStatus()
   } catch {
-    fetchData()
+    await fetchData()
+  } finally {
+    runLoadingMap[job.id] = false
   }
 }
 

@@ -102,6 +102,7 @@
                 <KeyOutlined /> 重置密码
               </a-button>
               <a-popconfirm
+                v-if="!isCurrentUser(record)"
                 title="确定要删除该用户吗？"
                 @confirm="handleDelete(record)"
               >
@@ -109,6 +110,11 @@
                   <DeleteOutlined /> 删除
                 </a-button>
               </a-popconfirm>
+              <a-tooltip v-else title="不能删除当前登录用户">
+                <a-button type="link" danger size="small" disabled>
+                  <DeleteOutlined /> 删除
+                </a-button>
+              </a-tooltip>
             </a-space>
           </template>
         </template>
@@ -168,11 +174,13 @@
           />
         </a-form-item>
         <a-form-item label="首页">
-          <a-select v-model:value="formState.home_page" placeholder="默认" allow-clear style="width: 100%">
-            <a-select-option v-for="item in menuOptions" :key="item.path" :value="item.path">
-              {{ item.label }}
-            </a-select-option>
-          </a-select>
+          <a-tree-select
+            v-model:value="formState.home_page"
+            :tree-data="menuTreeOptions"
+            placeholder="默认"
+            allow-clear
+            style="width: 100%"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -210,10 +218,12 @@ import {
   KeyOutlined,
 } from '@ant-design/icons-vue'
 import { userApi, roleApi } from '@/api/auth'
+import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
-import type { User } from '@/types'
+import type { Menu, User } from '@/types'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 // 表格列定义
 const columns = [
@@ -248,43 +258,66 @@ const searchForm = reactive({
 // 角色选项
 const roleOptions = ref<{ label: string; value: string }[]>([])
 
-// 完整菜单树（用于计算多级菜单名）
-const fullMenuTree = ref<any[]>([])
-const menuPathLabelMap = ref<Record<string, string>>({})
+// 完整菜单树（用于用户首页树形选择）
+const fullMenuTree = ref<Menu[]>([])
+type TreeSelectOption = {
+  title: string,
+  value: string,
+  key: string,
+  selectable?: boolean,
+  children?: TreeSelectOption[],
+}
+const menuTreeOptions = ref<TreeSelectOption[]>([])
+
+const buildMenuTreeOptions = (items: Menu[], allowedPaths: Set<string>): TreeSelectOption[] => {
+  return items.flatMap((item) => {
+    const children = buildMenuTreeOptions(item.children || [], allowedPaths)
+    const isSelectable = Boolean(item.path && item.path !== '/dashboard' && allowedPaths.has(item.path))
+
+    if (!isSelectable && !children.length) {
+      return []
+    }
+
+    return [{
+      title: item.name,
+      value: isSelectable ? item.path : `__group__:${item.code}`,
+      key: item.code,
+      selectable: isSelectable,
+      children: children.length ? children : undefined,
+    }]
+  })
+}
 
 const loadFullMenuTree = async () => {
   try {
-    const tree = await roleApi.getMenuTree()
-    fullMenuTree.value = tree
-    const map: Record<string, string> = {}
-    const walk = (items: any[], prefix: string) => {
-      for (const item of items) {
-        const label = prefix ? `${prefix} / ${item.name}` : item.name
-        if (item.path && (!item.children || !item.children.length)) {
-          map[item.path] = label
-        }
-        if (item.children) walk(item.children, label)
-      }
-    }
-    walk(tree, '')
-    menuPathLabelMap.value = map
+    fullMenuTree.value = await roleApi.getMenuTree()
   } catch (e) {
     console.error('加载菜单树失败', e)
   }
 }
 
 // 菜单首页选项（根据选中角色过滤）
-const menuOptions = ref<{ label: string; path: string }[]>([])
 const loadMenuOptions = async (roles: string[]) => {
   if (!roles.length) {
-    menuOptions.value = []
+    menuTreeOptions.value = []
+    formState.home_page = ''
     return
   }
+    if (!fullMenuTree.value.length) {
+      await loadFullMenuTree()
+    }
   try {
     const menus = await roleApi.accessibleMenus(roles)
-    menuOptions.value = menus
-      .filter(m => m.path && m.path !== '/dashboard')
-      .map(m => ({ label: menuPathLabelMap.value[m.path] || m.name, path: m.path }))
+    const allowedPaths = new Set(
+      menus
+        .filter(m => m.path && m.path !== '/dashboard')
+        .map(m => m.path)
+    )
+    menuTreeOptions.value = buildMenuTreeOptions(fullMenuTree.value, allowedPaths)
+
+    if (formState.home_page && !allowedPaths.has(formState.home_page)) {
+      formState.home_page = ''
+    }
   } catch (e) {
     console.error('加载菜单失败', e)
   }
@@ -425,6 +458,8 @@ const handleDelete = async (record: User) => {
     loadData()
   } catch { /* interceptor handles error */ }
 }
+
+const isCurrentUser = (record: User) => record.id === userStore.user?.id
 
 // 弹窗确认
 const handleModalOk = async () => {

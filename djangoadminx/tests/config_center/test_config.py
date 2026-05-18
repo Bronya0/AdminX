@@ -49,6 +49,12 @@ class TestConfigRead(AdminXTestCase):
         self.assertIsInstance(data["value"], bool)
         self.assertTrue(data["value"])
 
+    def test_model_has_query_indexes(self):
+        index_names = {index.name for index in Config._meta.indexes}
+        self.assertIn("config_group_active_key_idx", index_names)
+        self.assertIn("config_active_type_created_idx", index_names)
+        self.assertIn("config_act_enc_created_idx", index_names)
+
 
 @override_settings(FERNET_KEY=TEST_FERNET_KEY)
 class TestConfigCrud(AdminXTestCase):

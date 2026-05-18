@@ -1,3 +1,5 @@
+import json
+
 from rest_framework import serializers
 
 from .models import Menu
@@ -63,6 +65,18 @@ class MenuSerializer(serializers.ModelSerializer):
             return MenuSerializer(children, many=True).data
         return []
 
+
+    def validate_allowed_paths(self, value):
+        if not value:
+            return '[]'
+        try:
+            items = json.loads(value) if isinstance(value, str) else value
+            if not isinstance(items, list):
+                return value
+            cleaned = [s.strip() for s in items if isinstance(s, str) and s.strip()]
+            return json.dumps(cleaned)
+        except (json.JSONDecodeError, TypeError):
+            return value
 
 class MenuTreeSerializer(serializers.ModelSerializer):
     """树形菜单 — 用于前端路由加载"""

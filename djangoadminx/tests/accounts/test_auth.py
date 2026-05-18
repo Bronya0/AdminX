@@ -131,6 +131,28 @@ class TestUserCreate(AdminXTestCase):
         self.assert_created(resp)
 
 
+class TestUserDelete(AdminXTestCase):
+    def setUp(self):
+        self.admin = UserFactory.create_admin()
+        self.auth(self.admin)
+
+    def test_cannot_delete_current_logged_in_user(self):
+        resp = self.client.delete(f"/api/v1/accounts/users/{self.admin.id}/")
+        self.assert_fail(resp, 403)
+
+        from djangoadminx.accounts.models import User
+        self.assertTrue(User.objects.filter(id=self.admin.id).exists())
+
+    def test_can_delete_other_user(self):
+        target = UserFactory.create_user(username="delete_target")
+
+        resp = self.client.delete(f"/api/v1/accounts/users/{target.id}/")
+        self.assert_no_content(resp)
+
+        from djangoadminx.accounts.models import User
+        self.assertFalse(User.objects.filter(id=target.id).exists())
+
+
 class TestLogoutData(AdminXTestCase):
     def setUp(self):
         self.user = UserFactory.create_admin()

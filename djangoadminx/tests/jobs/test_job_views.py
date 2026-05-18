@@ -34,7 +34,7 @@ class TestScheduleJobViews(AdminXTestCase):
         self.assert_fail(resp, 404)
 
     def test_list_job_logs(self):
-        resp = self.client.get("/api/v1/job-logs/")
+        resp = self.client.get("/api/v1/jobs/logs/")
         self.assert_ok(resp)
 
 

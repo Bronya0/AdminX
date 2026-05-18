@@ -51,10 +51,10 @@ DEFAULT_MENUS = [
             {"code": "system:role", "name": "角色管理", "icon": "Shield", "path": "/system/roles", "component": "system/role/index", "permission_code": "accounts:role:list", "menu_type": "menu", "sort_order": 2, "allowed_paths": '["/djangoadminx/api/v1/accounts/roles/*"]'},
             {"code": "system:permission", "name": "权限管理", "icon": "Safety", "path": "/system/permissions", "component": "system/permissions/index", "permission_code": "accounts:permission:list", "menu_type": "menu", "sort_order": 3, "allowed_paths": '["/djangoadminx/api/v1/menu/*"]'},
             {"code": "system:config", "name": "配置中心", "icon": "Setting", "path": "/system/config", "component": "config/list/index", "permission_code": "config_center:config:list", "menu_type": "menu", "sort_order": 4, "allowed_paths": '["/djangoadminx/api/v1/config/*"]'},
-            {"code": "system:resource", "name": "系统资源", "icon": "Cpu", "path": "/system/resources", "component": "monitor/resource/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 5, "allowed_paths": '["GET:/djangoadminx/api/v1/monitor/resources/", "GET:/djangoadminx/api/v1/monitor/netstat/"]'},
+            {"code": "system:resource", "name": "系统资源", "icon": "Cpu", "path": "/system/resources", "component": "monitor/resource/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 5, "allowed_paths": '["/djangoadminx/api/v1/monitor/*"]'},
             {"code": "system:component", "name": "组件管理", "icon": "Appstore", "path": "/system/components", "component": "monitor/component/index", "permission_code": "monitor:resource:list", "menu_type": "menu", "sort_order": 6, "allowed_paths": '["GET:/djangoadminx/api/v1/common/health/", "GET:/djangoadminx/api/v1/common/cache/stats/", "POST:/djangoadminx/api/v1/common/cache/clear/", "GET:/djangoadminx/api/v1/cluster/nodes/overview/"]'},
             {"code": "system:cluster", "name": "节点管理", "icon": "Hdd", "path": "/system/nodes", "component": "cluster/nodes/index", "permission_code": "cluster:node:list", "menu_type": "menu", "sort_order": 7, "allowed_paths": '["/djangoadminx/api/v1/cluster/*"]'},
-            {"code": "system:scheduler", "name": "定时任务", "icon": "ClockCircle", "path": "/system/scheduler", "component": "scheduler/index", "permission_code": "webservice:schedulejob:list", "menu_type": "menu", "sort_order": 8, "allowed_paths": '["/djangoadminx/api/v1/jobs/*", "/djangoadminx/api/v1/job-logs/*"]'},
+            {"code": "system:scheduler", "name": "定时任务", "icon": "ClockCircle", "path": "/system/scheduler", "component": "scheduler/index", "permission_code": "webservice:schedulejob:list", "menu_type": "menu", "sort_order": 8, "allowed_paths": '["/djangoadminx/api/v1/jobs/*"]'},
             {"code": "system:notification", "name": "通知中心", "icon": "Bell", "path": "/system/notification", "component": "notification/index", "permission_code": "notification:notification:list", "menu_type": "menu", "sort_order": 9, "allowed_paths": '["/djangoadminx/api/v1/notification/*"]'},
         ],
     },
@@ -115,7 +115,7 @@ DEFAULT_CONFIGS = [
 
 # ========== 默认定时任务 ==========
 DEFAULT_JOBS = [
-    {"name": "系统资源监控", "handler": "djangoadminx.jobs.tasks.system_resource_monitor", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 5}', "is_active": True},
+    {"name": "系统资源监控", "handler": "djangoadminx.jobs.tasks.system_resource_monitor", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 1}', "is_active": True},
     {"name": "NTP 时间同步", "handler": "djangoadminx.jobs.tasks.ntp_sync", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"hours": 1}', "is_active": True},
     {"name": "示例任务", "handler": "djangoadminx.jobs.tasks.sample_task", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 10}', "is_active": True},
 ]

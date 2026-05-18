@@ -203,6 +203,23 @@ export interface SystemResources {
   timestamp: number
 }
 
+export interface MonitorHistoryPoint {
+  timestamp: number
+  cpu_percent: number
+  memory_percent: number
+  disk_percent: number
+  disk_read_mbps: number
+  disk_write_mbps: number
+}
+
+export interface SystemResourceHistory {
+  range: string
+  interval: string
+  from: number
+  to: number
+  points: MonitorHistoryPoint[]
+}
+
 export interface NetstatInfo {
   LISTEN: number
   ESTABLISHED: number
