@@ -6,6 +6,9 @@ import router from '@/router'
 const appBase = import.meta.env.BASE_URL.replace(/\/$/, '')
 const defaultApiBaseURL = `${appBase}/api/v1`
 
+// 防止并发 401 响应导致重复跳转登录页
+let isRedirectingToLogin = false
+
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || defaultApiBaseURL,
@@ -39,10 +42,16 @@ apiClient.interceptors.response.use(
       return data
     }
 
-    // 认证失败（token 过期/无效）→ 静默清理，由路由守卫统一引导到登录页
+    // 认证失败（token 过期/无效）→ 清理本地状态并跳转登录页
     if (code === 401) {
       const userStore = useUserStore()
-      userStore.logout()
+      userStore.clearToken()
+      if (!isRedirectingToLogin) {
+        isRedirectingToLogin = true
+        router.push('/login').finally(() => {
+          isRedirectingToLogin = false
+        })
+      }
       return Promise.reject(new Error(msg || '认证失败'))
     }
 
@@ -62,8 +71,13 @@ apiClient.interceptors.response.use(
         case 401:
           message.error('登录已过期，请重新登录')
           const userStore = useUserStore()
-          userStore.logout()
-          router.push('/login')
+          userStore.clearToken()
+          if (!isRedirectingToLogin) {
+            isRedirectingToLogin = true
+            router.push('/login').finally(() => {
+              isRedirectingToLogin = false
+            })
+          }
           break
         case 403:
           message.error('没有权限执行此操作')

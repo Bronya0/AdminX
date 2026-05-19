@@ -10,7 +10,7 @@ export const scheduleJobApi = {
   create: (data: Partial<ScheduleJob>) =>
     request.post('/jobs/', data),
   update: (id: string, data: Partial<ScheduleJob>) =>
-    request.put(`/jobs/${id}/`, data),
+    request.patch(`/jobs/${id}/`, data),
   remove: (id: string) =>
     request.delete(`/jobs/${id}/`),
   runOnce: (id: string): Promise<{ result?: string }> =>

@@ -155,6 +155,7 @@ import { useUserStore } from '@/stores/user'
 import { message, Modal } from 'ant-design-vue'
 import IdleWatcher from '@/components/IdleWatcher.vue'
 import { notificationApi } from '@/api/notification'
+import { authApi } from '@/api/auth'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -314,9 +315,12 @@ const handleLogout = () => {
     title: '确认退出',
     content: '确定要退出登录吗？',
     onOk: async () => {
-      await userStore.logout()
-      router.push('/login')
+      await router.replace('/login').catch(() => {})
       message.success('已退出登录')
+      if (userStore.refreshToken) {
+        try { await authApi.logout(userStore.refreshToken) } catch { /* ignore */ }
+      }
+      userStore.clearToken()
     },
   })
 }

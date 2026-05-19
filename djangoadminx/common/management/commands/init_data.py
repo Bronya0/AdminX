@@ -112,12 +112,15 @@ DEFAULT_CONFIGS = [
     {"key": "MEM_CRIT_THRESHOLD", "value": "90", "value_type": "int", "desc": "内存严重阈值（%）：超过此值创建严重通知", "group": "monitor"},
     {"key": "DISK_WARN_THRESHOLD", "value": "85", "value_type": "int", "desc": "磁盘警告阈值（%）：超过此值创建警告通知", "group": "monitor"},
     {"key": "DISK_CRIT_THRESHOLD", "value": "95", "value_type": "int", "desc": "磁盘严重阈值（%）：超过此值创建严重通知", "group": "monitor"},
+    {"key": "JOB_LOG_RETENTION_DAYS", "value": "30", "value_type": "int", "desc": "任务日志保留天数：超过此天数的日志会被自动清理", "group": "system"},
 ]
 
 # ========== 默认定时任务 ==========
 DEFAULT_JOBS = [
     {"name": "系统资源监控", "handler": "djangoadminx.jobs.tasks.system_resource_monitor", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 1}', "is_active": True},
+    {"name": "组件健康监控", "handler": "djangoadminx.jobs.tasks.component_health_monitor", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 2}', "is_active": True},
     {"name": "NTP 时间同步", "handler": "djangoadminx.jobs.tasks.ntp_sync", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"hours": 1}', "is_active": True},
+    {"name": "清理任务日志", "handler": "djangoadminx.jobs.tasks.cleanup_job_logs", "command_type": "python", "trigger_type": "cron", "trigger_config": '{"hour": 3, "minute": 0}', "is_active": True},
     {"name": "示例任务", "handler": "djangoadminx.jobs.tasks.sample_task", "command_type": "python", "trigger_type": "interval", "trigger_config": '{"minutes": 10}', "is_active": True},
 ]
 
