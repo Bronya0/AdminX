@@ -341,3 +341,44 @@ export interface ThemeConfig {
   borderRadius: number
   fontSize: number
 }
+
+// 业务组件
+export interface ServiceComponent {
+  id: string
+  app_label: string
+  name: string
+  version: string
+  host: string
+  description: string
+  last_heartbeat: string | null
+  status: 'online' | 'offline'
+  has_pending_upgrade: boolean
+  has_pending_uninstall: boolean
+  pending_command: 'upgrade' | 'uninstall' | null
+  upgrade_version: string
+  upgrade_url: string
+  upgrade_checksum: string
+  uninstall_pending: boolean
+  extra_info: Record<string, any>
+  registered_at: string
+  updated_at: string
+}
+
+// 系统组件（DB/Redis/调度器）
+export interface SystemComponentItem {
+  key: string
+  name: string
+  type: 'system'
+  status: 'ok' | 'error' | 'offline'
+  backend?: string
+  message: string
+}
+
+export interface SystemComponentsData {
+  platform: {
+    python_version: string
+    django_version: string
+    os: string
+  }
+  components: SystemComponentItem[]
+}

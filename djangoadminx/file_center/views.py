@@ -22,6 +22,9 @@ ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/zip",
     "text/plain", "text/csv", "text/xml", "text/json", "application/json",
+    # 升级包
+    "application/x-tar", "application/gzip", "application/x-gzip",
+    "application/x-bzip2", "application/x-xz",
 }
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 

@@ -1,5 +1,6 @@
 """FastAPI 业务服务 — 示例三方业务对接"""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import SERVICE_PORT, CORS_ORIGINS, DEBUG, LOG_LEVEL
 from routers import posts, register
+from routers import component as comp_module
 from auth import introspect_token
 
 logging.basicConfig(
@@ -21,14 +23,28 @@ logger = logging.getLogger("business")
 
 HERE = Path(__file__).resolve().parent
 
+_heartbeat_task: asyncio.Task | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时自动注册菜单（幂等）"""
+    global _heartbeat_task
+    # 注册菜单（原有逻辑）
     logger.info("正在注册菜单到平台 %s ...", register.PLATFORM_URL)
     result = await register.register_menu()
     logger.info("注册结果: %s", result.get("msg", result))
+
+    # 注册组件 + 启动心跳
+    await comp_module.register()
+    _heartbeat_task = asyncio.create_task(comp_module.heartbeat_loop())
+
     yield
+
+    # 关闭时注销
+    if _heartbeat_task:
+        _heartbeat_task.cancel()
+    await comp_module.unregister()
+
 
 
 app = FastAPI(

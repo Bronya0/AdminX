@@ -5,6 +5,7 @@ from . import views
 
 router = DefaultRouter()
 router.register("nodes", views.ClusterNodeViewSet)
+router.register("components", views.ServiceComponentViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),

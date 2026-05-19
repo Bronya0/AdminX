@@ -6,7 +6,7 @@ from django.conf import settings
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_GET
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 
 
 _SITE_FIELD_MAP = {
@@ -202,5 +202,86 @@ def dashboard_stats(request):
             "offline_nodes": offline_nodes,
             "maintenance_nodes": maintenance_nodes,
             "recent_logs": recent_logs,
+        },
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def system_components(request):
+    """系统内置组件状态（DB / Redis / 调度器）"""
+    import django
+    import sys
+    import platform
+
+    # DB
+    db_status = "ok"
+    db_msg = ""
+    try:
+        from django.db import connection
+        connection.ensure_connection()
+    except Exception as e:
+        db_status = "error"
+        db_msg = str(e)
+
+    # Redis / Cache
+    cache_status = "ok"
+    cache_backend = "locmem"
+    cache_msg = ""
+    try:
+        from django.core.cache import cache
+        cache.set("__ping__", "1", 5)
+        backend_cls = type(cache).__name__
+        if "Redis" in backend_cls:
+            cache_backend = "redis"
+        elif "Memcache" in backend_cls:
+            cache_backend = "memcache"
+    except Exception as e:
+        cache_status = "error"
+        cache_msg = str(e)
+
+    # 调度器
+    from djangoadminx.common.scheduler import SchedulerManager
+    scheduler_alive = SchedulerManager.is_alive()
+
+    return JsonResponse({
+        "code": 200,
+        "msg": "success",
+        "data": {
+            "platform": {
+                "python_version": sys.version.split()[0],
+                "django_version": django.__version__,
+                "os": platform.system() + " " + platform.release(),
+            },
+            "components": [
+                {
+                    "key": "database",
+                    "name": "数据库",
+                    "type": "system",
+                    "status": "ok",
+                    "message": db_msg or "连接正常",
+                } if db_status == "ok" else {
+                    "key": "database",
+                    "name": "数据库",
+                    "type": "system",
+                    "status": "error",
+                    "message": db_msg,
+                },
+                {
+                    "key": "cache",
+                    "name": "缓存服务",
+                    "type": "system",
+                    "status": cache_status,
+                    "backend": cache_backend,
+                    "message": cache_msg or cache_backend,
+                },
+                {
+                    "key": "scheduler",
+                    "name": "调度器",
+                    "type": "system",
+                    "status": "ok" if scheduler_alive else "offline",
+                    "message": "运行中" if scheduler_alive else "未运行",
+                },
+            ],
         },
     })
