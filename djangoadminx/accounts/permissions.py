@@ -5,7 +5,11 @@ from rest_framework.permissions import BasePermission
 
 
 def _match_path(request, rule: str) -> bool:
-    """检查请求是否匹配白名单规则（如 'GET:/api/v1/accounts/users/*'）"""
+    """检查请求是否匹配白名单规则（如 'GET:/api/v1/accounts/users/*'）
+
+    使用 request.path_info 而非 request.path，
+    以兼容 FORCE_SCRIPT_NAME 场景（如子路径部署）。
+    """
     rl = rule.strip()
     rl_method = ""
     rl_path = rl
@@ -15,7 +19,7 @@ def _match_path(request, rule: str) -> bool:
         rl_path = parts[1].strip()
     if rl_method and rl_method != request.method.upper():
         return False
-    return fnmatch.fnmatch(request.path, rl_path)
+    return fnmatch.fnmatch(request.path_info, rl_path)
 
 
 class RBACPermission(BasePermission):

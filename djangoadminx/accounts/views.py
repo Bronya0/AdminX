@@ -369,14 +369,17 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
             # 补全祖先菜单：路由路径前缀匹配，确保父级分组节点也被包含
             ancestor_ids: set[int] = set()
-            all_menus = {m.id: m for m in Menu.objects.filter(is_active=True)}
+            path_to_id = {
+                m.path: m.id
+                for m in Menu.objects.filter(is_active=True).only("id", "path")
+            }
             for menu in direct:
                 parts = menu.path.strip("/").split("/")
                 for i in range(1, len(parts)):
                     prefix = "/" + "/".join(parts[:i])
-                    for m in all_menus.values():
-                        if m.path == prefix:
-                            ancestor_ids.add(m.id)
+                    aid = path_to_id.get(prefix)
+                    if aid is not None:
+                        ancestor_ids.add(aid)
 
             direct_ids = set(direct.values_list("id", flat=True))
             all_ids = direct_ids | ancestor_ids

@@ -32,6 +32,9 @@ SECURE_HSTS_PRELOAD = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_REFERRER_POLICY = "same-origin"
 
+# 生产环境在反向代理后面，信任 X-Forwarded-For
+TRUST_PROXY_HEADERS = True
+
 LOGGING["handlers"]["file"]["level"] = "INFO"  # noqa: F405
 LOGGING["handlers"]["error_file"]["level"] = "ERROR"  # noqa: F405
 LOGGING["handlers"]["console"]["level"] = "WARNING"  # noqa: F405

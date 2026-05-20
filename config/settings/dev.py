@@ -14,3 +14,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 # 开发环境关闭登录锁定检测
 LOGIN_LOCK_ENABLED = False
+
+# 开发环境不信任代理头（直连 Django，无反向代理）
+TRUST_PROXY_HEADERS = False
