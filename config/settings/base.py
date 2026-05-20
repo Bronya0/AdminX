@@ -51,7 +51,6 @@ THIRD_PARTY_APPS = [
     "channels",
     "treebeard",
     "safedelete",
-    "cacheops",
 ]
 
 LOCAL_APPS = [
@@ -123,13 +122,6 @@ try:
 except Exception:
     pass
 
-# cacheops — 可选, 需要 Redis
-CACHEOPS_REDIS = REDIS_URL
-CACHEOPS_DEGRADE_ON_FAILURE = True
-CACHEOPS_DEFAULT_TIMEOUT = 60 * 60
-if not CACHES["default"]["BACKEND"].startswith("django_redis"):
-    CACHEOPS_REDIS = None  # 无 Redis 时禁用 cacheops
-
 # ---------- DRF ----------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -157,6 +149,9 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": env("THROTTLE_ANON", default="30/minute"),
         "user": env("THROTTLE_USER", default="200/minute"),
+        # introspect: 业务容器调用 TokenIntrospectView 的限速
+        # 多进程部署时需要 Redis cache 才能跨进程生效
+        "introspect": env("THROTTLE_INTROSPECT", default="300/minute"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "djangoadminx.common.exceptions.custom_exception_handler",

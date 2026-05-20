@@ -19,6 +19,8 @@ from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from djangoadminx.audit.mixins import AuditLogMixin
+from djangoadminx.common.ip_utils import get_client_ip
+from djangoadminx.common.throttles import IntrospectThrottle
 from .models import BusinessCommand, BusinessPermission, LoginLock, Role, User, UserLoginLog
 from djangoadminx.captcha.views import verify_captcha
 from .serializers import (
@@ -39,7 +41,7 @@ def _record_login_log(user, request, success, message=""):
     UserLoginLog.objects.create(
         user=user if success else None,
         username=request.data.get("username", ""),
-        ip=request.META.get("REMOTE_ADDR", ""),
+        ip=get_client_ip(request),
         user_agent=request.META.get("HTTP_USER_AGENT", ""),
         success=success,
         message=message,
@@ -89,9 +91,13 @@ class TokenIntrospectView(APIView):
 
     业务容器在收到前端请求后，将 JWT 转发给此接口。
     平台返回用户身份、角色、权限，业务容器据此执行本地鉴权。
+
+    限速：300/min（可通过 THROTTLE_INTROSPECT 环境变量调整）。
+    多进程部署时需要 Redis cache 才能保证跨进程计数准确。
     """
     permission_classes = [AllowAny]
     authentication_classes = []  # 业务容器没有用户上下文，裸调
+    throttle_classes = [IntrospectThrottle]
 
     # 平台登录页地址，业务容器收到 401 后可引导用户跳转
     login_url = getattr(settings, "LOGIN_URL", "/login")
@@ -480,9 +486,10 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
 
 class BusinessPermissionViewSet(viewsets.ModelViewSet):
-    """业务权限 — 供业务容器注册/查询"""
+    """业务权限 — 供业务容器注册/查询（需要管理员账号）"""
     queryset = BusinessPermission.objects.all()
     serializer_class = BusinessPermissionSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
     search_fields = ["name", "codename", "app_label"]
     ordering_fields = ["app_label", "codename"]
     filterset_fields = ["app_label"]
@@ -522,9 +529,10 @@ class LoginLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class BusinessCommandViewSet(viewsets.ModelViewSet):
-    """业务命令 — 供业务容器注册菜单 + 路径白名单"""
+    """业务命令 — 供业务容器注册菜单 + 路径白名单（需要管理员账号）"""
     queryset = BusinessCommand.objects.all()
     serializer_class = BusinessCommandSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
     search_fields = ["name", "app_label", "menu_path"]
     ordering_fields = ["app_label", "name"]
     filterset_fields = ["app_label", "is_active"]

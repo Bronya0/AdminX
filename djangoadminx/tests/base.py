@@ -7,7 +7,7 @@ from rest_framework.throttling import SimpleRateThrottle
 
 
 @override_settings(
-    DEFAULT_THROTTLE_RATES={"anon": None, "user": None},
+    DEFAULT_THROTTLE_RATES={"anon": None, "user": None, "introspect": None},
 )
 class AdminXTestCase(APITestCase):
     """测试基类"""
@@ -16,7 +16,7 @@ class AdminXTestCase(APITestCase):
     def setUpClass(cls):
         super().setUpClass()
         # DRF 实例化时会缓存 THROTTLE_RATES，强制覆盖
-        SimpleRateThrottle.THROTTLE_RATES = {"anon": None, "user": None}
+        SimpleRateThrottle.THROTTLE_RATES = {"anon": None, "user": None, "introspect": None}
 
     def parse(self, response):
         response.render()

@@ -3,6 +3,8 @@ import time
 
 from django.conf import settings
 
+from djangoadminx.common.ip_utils import get_client_ip
+
 logger = logging.getLogger("djangoadminx.request")
 
 
@@ -31,7 +33,7 @@ class RequestLogMiddleware:
         user = getattr(request.user, "username", "anonymous") if hasattr(request, "user") else "anonymous"
         logger.info(
             f"[{cost:.0f}ms] {request.method} {request.path} "
-            f"user={user} ip={request.META.get('REMOTE_ADDR', '')}"
+            f"user={user} ip={get_client_ip(request)}"
         )
         return response
 
@@ -51,7 +53,7 @@ class IPBlockMiddleware:
                 return self.get_response(request)
             from djangoadminx.config_center.models import Config
 
-            client_ip = request.META.get("REMOTE_ADDR", "")
+            client_ip = get_client_ip(request)
 
             whitelist = Config.get_value("IP_WHITELIST", default="")
             if whitelist:

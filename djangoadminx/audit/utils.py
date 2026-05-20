@@ -2,6 +2,8 @@
 
 import json
 
+from djangoadminx.common.ip_utils import get_client_ip
+
 
 def serialize_for_json(obj):
     """将模型实例转为 JSON 可序列化的 dict"""
@@ -27,5 +29,5 @@ def get_operator(request):
 
 def get_operator_ip(request):
     if request:
-        return request.META.get("REMOTE_ADDR", "")
+        return get_client_ip(request)
     return ""

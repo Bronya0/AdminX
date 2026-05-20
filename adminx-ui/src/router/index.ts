@@ -2,34 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { message } from 'ant-design-vue'
 
-// 布局组件
+// 布局组件（始终需要，保持静态导入）
 import AdminLayout from '@/layouts/AdminLayout.vue'
-
-// 页面组件
-import LoginView from '@/views/login/LoginView.vue'
-
-// 系统管理
-import UserList from '@/views/system/UserList.vue'
-import RoleList from '@/views/system/RoleList.vue'
-import PermissionList from '@/views/system/PermissionList.vue'
-
-import ConfigCenter from '@/views/config/ConfigCenter.vue'
-
-// 监控
-import DashboardView from '@/views/dashboard/DashboardView.vue'
-import SystemMonitor from '@/views/monitor/SystemMonitor.vue'
-import ComponentStatus from '@/views/monitor/ComponentStatus.vue'
-import ClusterNodes from '@/views/cluster/ClusterNodes.vue'
-
-// 通知中心
-import NotificationCenter from '@/views/notification/NotificationCenter.vue'
-
-// 定时任务
-import ScheduleJobList from '@/views/scheduler/ScheduleJobList.vue'
-
-// 审计
-import AuditLogList from '@/views/audit/AuditLogList.vue'
-import LoginLogList from '@/views/audit/LoginLogList.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -37,7 +11,7 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: LoginView,
+      component: () => import('@/views/login/LoginView.vue'),
       meta: { public: true },
     },
     {
@@ -47,7 +21,7 @@ const router = createRouter({
         {
           path: 'dashboard',
           name: 'dashboard',
-          component: DashboardView,
+          component: () => import('@/views/dashboard/DashboardView.vue'),
           meta: { title: '仪表盘', icon: 'DashboardOutlined' },
         },
         {
@@ -58,55 +32,55 @@ const router = createRouter({
             {
               path: 'users',
               name: 'users',
-              component: UserList,
+              component: () => import('@/views/system/UserList.vue'),
               meta: { title: '用户管理', permission: 'accounts:user:list' },
             },
             {
               path: 'roles',
               name: 'roles',
-              component: RoleList,
+              component: () => import('@/views/system/RoleList.vue'),
               meta: { title: '角色管理', permission: 'accounts:role:list' },
             },
             {
               path: 'permissions',
               name: 'permissions',
-              component: PermissionList,
+              component: () => import('@/views/system/PermissionList.vue'),
               meta: { title: '权限管理', icon: 'SafetyOutlined', permission: 'accounts:permission:list' },
             },
             {
               path: 'config',
               name: 'system-config',
-              component: ConfigCenter,
+              component: () => import('@/views/config/ConfigCenter.vue'),
               meta: { title: '配置中心', icon: 'ControlOutlined', permission: 'config_center:config:list' },
             },
             {
               path: 'resources',
               name: 'system-resources',
-              component: SystemMonitor,
+              component: () => import('@/views/monitor/SystemMonitor.vue'),
               meta: { title: '系统资源', permission: 'monitor:resource:list' },
             },
             {
               path: 'components',
               name: 'system-components',
-              component: ComponentStatus,
+              component: () => import('@/views/monitor/ComponentStatus.vue'),
               meta: { title: '组件管理', permission: 'monitor:resource:list' },
             },
             {
               path: 'nodes',
               name: 'system-nodes',
-              component: ClusterNodes,
+              component: () => import('@/views/cluster/ClusterNodes.vue'),
               meta: { title: '节点管理', permission: 'cluster:node:list' },
             },
             {
               path: 'scheduler',
               name: 'system-scheduler',
-              component: ScheduleJobList,
+              component: () => import('@/views/scheduler/ScheduleJobList.vue'),
               meta: { title: '定时任务', icon: 'ClockCircleOutlined', permission: 'webservice:schedulejob:list' },
             },
             {
               path: 'notification',
               name: 'system-notification',
-              component: NotificationCenter,
+              component: () => import('@/views/notification/NotificationCenter.vue'),
               meta: { title: '通知中心', icon: 'BellOutlined', permission: 'notification:notification:list' },
             },
             {
@@ -123,13 +97,13 @@ const router = createRouter({
             {
               path: 'log',
               name: 'audit-log',
-              component: AuditLogList,
+              component: () => import('@/views/audit/AuditLogList.vue'),
               meta: { title: '操作审计', permission: 'audit:auditlog:list' },
             },
             {
               path: 'login-log',
               name: 'audit-login-log',
-              component: LoginLogList,
+              component: () => import('@/views/audit/LoginLogList.vue'),
               meta: { title: '登录日志', permission: 'accounts:userloginlog:list' },
             },
           ],
@@ -173,7 +147,7 @@ router.beforeEach(async (to, from) => {
       ])
     } catch (e) {
       message.error('获取用户信息失败')
-      userStore.logout()
+      userStore.clearToken()
       return '/login'
     }
   }
