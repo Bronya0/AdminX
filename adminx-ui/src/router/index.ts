@@ -134,6 +134,12 @@ const router = createRouter({
             },
           ],
         },
+        {
+          path: 'iframe',
+          name: 'iframe',
+          component: () => import('@/views/iframe/IframeView.vue'),
+          meta: { title: '外部页面' },
+        },
       ],
     },
     {

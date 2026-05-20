@@ -155,10 +155,13 @@ export function menusToSidebarItems(
     // 优先使用默认图标映射，否则用数据库图标名，最后兜底
     const iconName = defaultIcons[menu.name] || menu.icon || 'FileOutlined'
 
+    const isExternal = menu.path.startsWith('http://') || menu.path.startsWith('https://')
     const item: SidebarItem = {
-      key: menu.path,
+      key: isExternal ? menu.code : menu.path,
       title: menu.name,
       icon: iconName,
+      menu_type: menu.menu_type,
+      url: isExternal ? menu.path : undefined,
     }
 
     if (children && children.length > 0) {

@@ -125,4 +125,4 @@ async def healthz():
 if __name__ == "__main__":
     import uvicorn
     logger.info("启动业务服务 http://localhost:%d  (DEBUG=%s)", SERVICE_PORT, DEBUG)
-    uvicorn.run("main:app", host="0.0.0.0", port=SERVICE_PORT, reload=DEBUG)
+    uvicorn.run("main:app", host="0.0.0.0", port=SERVICE_PORT, reload=False)

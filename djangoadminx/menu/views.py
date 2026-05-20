@@ -39,6 +39,33 @@ class MenuViewSet(AuditLogMixin, viewsets.ModelViewSet):
             instance = serializer.save(depth=depth, sort_order=Menu.get_root_nodes().count() + 1)
         self._log_audit_create(instance)
 
+    @action(detail=False, methods=["post"], permission_classes=[IsAdminUser])
+    def register(self, request):
+        """幂等注册菜单：按 code 查找，存在则更新，不存在则创建"""
+        code = request.data.get("code")
+        if not code:
+            return Response({"code": 400, "msg": "code 不能为空"})
+
+        try:
+            menu = Menu.objects.get(code=code)
+        except Menu.DoesNotExist:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            return Response({"code": 201, "msg": "创建成功", "data": serializer.data})
+
+        # 更新已存在的菜单（code 不可变）
+        from djangoadminx.audit.utils import serialize_for_json
+        old_vals = serialize_for_json(menu)
+        data = {**request.data}
+        data.pop("code", None)
+        serializer = self.get_serializer(menu, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        new_vals = serialize_for_json(serializer.instance)
+        self._log_audit_update(menu, old_vals, new_vals)
+        return Response({"code": 200, "msg": "更新成功", "data": serializer.data})
+
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def tree(self, request):
         """菜单树 — 用于菜单管理页面"""

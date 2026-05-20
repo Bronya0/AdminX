@@ -202,24 +202,7 @@ const fetchUnreadCount = async () => {
 
 const sidebarMenus = computed<SidebarItem[]>(() => {
   const tree = flatMenusToTreeByDepth(userStore.menus || [])
-  const items = menusToSidebarItems(tree, (code: string) => userStore.hasPermission(code))
-
-  // 合并外部菜单（path 以 http 开头的动态注册菜单）
-  if (userStore.menus && userStore.menus.length > 0) {
-    for (const menu of userStore.menus) {
-      if (menu.path && menu.path.startsWith('http') && menu.is_visible && menu.is_active) {
-        if (!menu.permission_code || userStore.hasPermission(menu.permission_code)) {
-          items.push({
-            key: menu.path,
-            title: menu.name,
-            icon: menu.icon || 'LinkOutlined',
-          })
-        }
-      }
-    }
-  }
-
-  return items
+  return menusToSidebarItems(tree, (code: string) => userStore.hasPermission(code))
 })
 
 // MIX 布局的一级菜单（只保留顶级，不显示子菜单）
@@ -269,11 +252,32 @@ const toggleFullscreen = () => {
   }
 }
 
+const findSidebarItem = (key: string, items: SidebarItem[]): SidebarItem | undefined => {
+  for (const item of items) {
+    if (item.key === key) return item
+    if (item.children) {
+      const found = findSidebarItem(key, item.children)
+      if (found) return found
+    }
+  }
+  return undefined
+}
+
+const openExternal = (item: SidebarItem) => {
+  const targetUrl = item.url!
+  if (item.menu_type === 'iframe') {
+    router.push(`/iframe?url=${encodeURIComponent(targetUrl)}&title=${encodeURIComponent(item.title)}`)
+  } else {
+    const sep = targetUrl.includes('?') ? '&' : '?'
+    window.open(`${targetUrl}${sep}token=${userStore.token}`, '_blank')
+  }
+}
+
 const handleMenuClick = (key: string) => {
   if (!key) return
-  if (key.startsWith('http://') || key.startsWith('https://')) {
-    const sep = key.includes('?') ? '&' : '?'
-    window.open(`${key}${sep}token=${userStore.token}`, '_blank')
+  const item = findSidebarItem(key, sidebarMenus.value)
+  if (item?.url) {
+    openExternal(item)
     return
   }
   router.push(key).catch((err) => {
@@ -287,22 +291,15 @@ const handleMenuClick = (key: string) => {
 const handleTopMenuClick = (key: string) => {
   selectedTopKey.value = key
   const parent = sidebarMenus.value.find(m => m.key === key)
-  let target: string | undefined
-  if (parent && parent.children && parent.children.length > 0) {
-    target = parent.children[0]?.key
-  } else if (parent) {
-    target = parent.key
+  const targetItem = parent?.children?.[0] ?? parent
+  if (!targetItem) return
+  if (targetItem.url) {
+    openExternal(targetItem)
+    return
   }
-  if (target) {
-    if (target.startsWith('http://') || target.startsWith('https://')) {
-      const sep = target.includes('?') ? '&' : '?'
-      window.open(`${target}${sep}token=${userStore.token}`, '_blank')
-      return
-    }
-    const routeExists = router.getRoutes().some(r => r.path === target)
-    if (routeExists) {
-      router.push(target)
-    }
+  const routeExists = router.getRoutes().some(r => r.path === targetItem.key)
+  if (routeExists) {
+    router.push(targetItem.key)
   }
 }
 

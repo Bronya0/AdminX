@@ -324,6 +324,8 @@ export interface SidebarItem {
   key: string
   title: string
   icon?: string
+  menu_type?: 'menu' | 'button' | 'iframe'
+  url?: string          // 外部菜单的实际 URL，key 此时为 menu.code
   children?: SidebarItem[]
 }
 

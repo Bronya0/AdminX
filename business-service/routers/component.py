@@ -58,7 +58,6 @@ async def register() -> bool:
 
 
 async def unregister() -> bool:
-    """注销本服务"""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(f"{PLATFORM_API}/unregister/", json={"app_label": APP_LABEL})
@@ -68,6 +67,26 @@ async def unregister() -> bool:
     except Exception as e:
         logger.error("组件注销异常: %s", e)
         return False
+
+
+async def heartbeat() -> dict | None:
+    """向平台上报心跳，返回响应 data（含升级/卸载指令），失败返回 None"""
+    payload = {
+        "app_label": APP_LABEL,
+        "version": APP_VERSION,
+        "host": SERVICE_URL,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(f"{PLATFORM_API}/heartbeat/", json=payload)
+            body = resp.json()
+        if body.get("code") == 200:
+            return body.get("data", {})
+        logger.warning("心跳响应异常: %s", body.get("msg"))
+        return None
+    except Exception as e:
+        logger.warning("心跳失败: %s", e)
+        return None
 
 
 async def _download_and_verify(url: str, checksum: str) -> Path:
@@ -164,7 +183,9 @@ async def handle_upgrade(upgrade_cmd: dict) -> None:
     logger.info("收到升级指令: v%s → v%s, url=%s", APP_VERSION, version, url)
     try:
         pkg_path = await _download_and_verify(url, checksum)
-        success = _run_upgrade_script(pkg_path)
+        # _run_upgrade_script 内部有多个 subprocess.run（最长 600s），
+        # 用 asyncio.to_thread 丢到线程池避免阻塞事件循环
+        success = await asyncio.to_thread(_run_upgrade_script, pkg_path)
         if success:
             APP_VERSION = version
             logger.info("升级成功，新版本: %s", APP_VERSION)
@@ -214,13 +235,22 @@ async def handle_uninstall() -> None:
     """处理平台下发的卸载指令"""
     logger.info("收到卸载指令，开始执行卸载...")
     try:
-        success = _run_uninstall_script()
+        success = await asyncio.to_thread(_run_uninstall_script)
         if success:
             logger.info("卸载成功")
         else:
             logger.error("卸载脚本执行失败")
     except Exception as e:
         logger.error("卸载失败: %s", e)
+
+
+def _task_done_callback(t: asyncio.Task) -> None:
+    try:
+        exc = t.exception()
+        if exc:
+            logger.error("后台任务异常: %s", exc)
+    except asyncio.CancelledError:
+        pass
 
 
 async def heartbeat_loop() -> None:
@@ -233,8 +263,10 @@ async def heartbeat_loop() -> None:
             continue
         upgrade_cmd = data.get("upgrade")
         if upgrade_cmd:
-            asyncio.create_task(handle_upgrade(upgrade_cmd))
+            task = asyncio.create_task(handle_upgrade(upgrade_cmd))
+            task.add_done_callback(_task_done_callback)
             continue  # 升级和卸载互斥，有升级指令时跳过卸载检查
         if data.get("uninstall"):
-            asyncio.create_task(handle_uninstall())
+            task = asyncio.create_task(handle_uninstall())
+            task.add_done_callback(_task_done_callback)
 
