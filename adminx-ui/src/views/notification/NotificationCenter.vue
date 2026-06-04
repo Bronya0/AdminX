@@ -43,11 +43,9 @@
           <a-select-option :value="false">未读</a-select-option>
           <a-select-option :value="true">已读</a-select-option>
         </a-select>
-        <a-badge :count="unreadCount">
-          <a-button size="small" @click="fetchData">
-            <ReloadOutlined /> 刷新
-          </a-button>
-        </a-badge>
+        <a-button @click="fetchData">
+          <ReloadOutlined /> 刷新
+        </a-button>
       </div>
 
       <div v-if="loading" style="text-align: center; padding: 40px;">
@@ -68,8 +66,18 @@
                 </a-tag>
               </template>
               <template #title>
-                <span :style="{ fontWeight: item.is_read ? 'normal' : 'bold' }">
-                  {{ item.title }}
+                <span style="display: inline-flex; align-items: center; gap: 8px;">
+                  <span
+                    v-if="!item.is_read"
+                    style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #1890ff; flex-shrink: 0;"
+                  />
+                  <span
+                    v-else
+                    style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d9d9d9; flex-shrink: 0;"
+                  />
+                  <span :style="{ fontWeight: item.is_read ? 'normal' : 'bold' }">
+                    {{ item.title }}
+                  </span>
                 </span>
               </template>
               <template #description>
@@ -77,6 +85,17 @@
                 <div v-if="item.content" style="margin-top: 4px; color: #666;">{{ item.content }}</div>
               </template>
             </a-list-item-meta>
+            <template #actions>
+              <a-button
+                v-if="!item.is_read"
+                type="link"
+                size="small"
+                @click.stop="handleMarkRead(item)"
+              >
+                标记已读
+              </a-button>
+              <span v-else style="color: #bfbfbf; font-size: 12px;">已读</span>
+            </template>
           </a-list-item>
         </template>
       </a-list>

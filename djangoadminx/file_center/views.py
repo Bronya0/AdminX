@@ -3,6 +3,8 @@ import mimetypes
 from django.conf import settings
 from rest_framework import parsers, serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
+
+from djangoadminx.accounts.permissions import RBACPermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -41,7 +43,7 @@ class FileRecordSerializer(serializers.ModelSerializer):
 
 class FileUploadView(APIView):
     """文件上传"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RBACPermission]
 
     def post(self, request):
         ser = FileUploadSerializer(data=request.data)
@@ -89,5 +91,5 @@ class FileViewSet(viewsets.ReadOnlyModelViewSet):
     """文件记录列表"""
     queryset = FileRecord.objects.all()
     serializer_class = FileRecordSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RBACPermission]
     ordering = ["-created_at"]

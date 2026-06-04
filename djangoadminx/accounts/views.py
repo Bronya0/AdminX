@@ -13,6 +13,8 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+
+from djangoadminx.accounts.permissions import RBACPermission
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -427,7 +429,7 @@ class UserViewSet(AuditLogMixin, viewsets.ModelViewSet):
             },
         })
 
-    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated, RBACPermission])
     def roles(self, request):
         """角色选项列表 — 用于用户管理页面的角色下拉框"""
         qs = Role.objects.filter(is_active=True).values("name")
@@ -462,7 +464,7 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
         self._check_system_role(instance)
         instance.delete()
 
-    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated, RBACPermission])
     def menu_tree(self, request):
         """菜单树 — 用于角色管理页面的菜单权限分配"""
         from djangoadminx.menu.models import Menu
@@ -474,7 +476,7 @@ class RoleViewSet(AuditLogMixin, viewsets.ModelViewSet):
         ser = MenuTreeSerializer(menus, many=True)
         return Response({"code": 200, "msg": "success", "data": ser.data})
 
-    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated, RBACPermission])
     def accessible_menus(self, request):
         """根据角色名列表返回可访问的菜单路径（用于用户首页配置）"""
         role_names = request.data.get("roles", [])

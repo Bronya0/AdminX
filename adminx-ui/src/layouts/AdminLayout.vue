@@ -149,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { message, Modal } from 'ant-design-vue'
@@ -190,6 +190,7 @@ const userRoles = computed(() => userStore.user?.role_names?.join(', ') || '')
 
 // 未读通知数量
 const unreadCount = ref(0)
+let unreadPollTimer: ReturnType<typeof setInterval> | null = null
 
 const fetchUnreadCount = async () => {
   try {
@@ -197,6 +198,18 @@ const fetchUnreadCount = async () => {
     unreadCount.value = res.count
   } catch {
     // 获取失败时保持旧值
+  }
+}
+
+const startUnreadPolling = () => {
+  stopUnreadPolling()
+  unreadPollTimer = setInterval(fetchUnreadCount, 30000)
+}
+
+const stopUnreadPolling = () => {
+  if (unreadPollTimer !== null) {
+    clearInterval(unreadPollTimer)
+    unreadPollTimer = null
   }
 }
 
@@ -337,6 +350,11 @@ onMounted(() => {
     document.documentElement.style.fontSize = fontSize + 'px'
   }
   fetchUnreadCount()
+  startUnreadPolling()
+})
+
+onUnmounted(() => {
+  stopUnreadPolling()
 })
 </script>
 

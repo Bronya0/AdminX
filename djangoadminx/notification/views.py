@@ -2,6 +2,8 @@ from django.db import models
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+
+from djangoadminx.accounts.permissions import RBACPermission
 from rest_framework.response import Response
 
 from .models import Notification, WebhookConfig, WebhookLog
@@ -11,7 +13,7 @@ from .serializers import NotificationSerializer, WebhookConfigSerializer, Webhoo
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """通知 — 只读 + 标记已读"""
     serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RBACPermission]
     ordering = ["-created_at"]
     search_fields = ["title", "content"]
     filterset_fields = ["notification_type", "is_read"]
