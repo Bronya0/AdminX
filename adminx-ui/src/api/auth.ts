@@ -19,6 +19,9 @@ export const authApi = {
   logout: (refreshToken: string): Promise<void> =>
     request.post('/accounts/logout/', { refresh: refreshToken }),
 
+  refresh: (refreshToken: string): Promise<{ access: string; refresh: string }> =>
+    request.post('/accounts/refresh/', { refresh: refreshToken }),
+
   getUserInfo: (): Promise<UserInfo> =>
     request.get('/accounts/users/me/'),
 

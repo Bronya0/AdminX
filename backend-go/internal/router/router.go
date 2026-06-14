@@ -22,25 +22,25 @@ import (
 
 // Deps 路由依赖（依赖注入）。
 type Deps struct {
-	Config  *config.Config
-	DB      *gorm.DB
-	Redis   *redis.Client
+	Config *config.Config
+	DB     *gorm.DB
+	Redis  *redis.Client
 
 	// 所有 handler
-	AuthH  *handler.AuthHandler
-	UserH  *handler.UserHandler
-	RoleH  *handler.RoleHandler
-	MenuH  *handler.MenuHandler
-	CfgH   *handler.ConfigHandler
-	AuditH *handler.AuditHandler
-	JobH   *handler.JobHandler
-	NotifH *handler.NotificationHandler
-	ClsH   *handler.ClusterHandler
-	FileH  *handler.FileHandler
-	MonH   *handler.CommonHandler // monitor + dashboard + health
+	AuthH   *handler.AuthHandler
+	UserH   *handler.UserHandler
+	RoleH   *handler.RoleHandler
+	MenuH   *handler.MenuHandler
+	CfgH    *handler.ConfigHandler
+	AuditH  *handler.AuditHandler
+	JobH    *handler.JobHandler
+	NotifH  *handler.NotificationHandler
+	ClsH    *handler.ClusterHandler
+	FileH   *handler.FileHandler
+	MonH    *handler.CommonHandler // monitor + dashboard + health
 	PolicyH *handler.PolicyHandler
-	CapH   *handler.CaptchaHandler
-	WSH    *handler.WSHandler
+	CapH    *handler.CaptchaHandler
+	WSH     *handler.WSHandler
 
 	JWTCfg JWTConfig
 }
@@ -249,14 +249,25 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 	if len(cfg.Security.CORSAllowedOrigins) == 0 {
 		cfg.Security.CORSAllowedOrigins = []string{"*"}
 	}
-	return cors.New(cors.Config{
-		AllowOrigins:     cfg.Security.CORSAllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
-		ExposeHeaders:    []string{"Content-Length", "Content-Disposition"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	})
+
+	// CORS 规范禁止 AllowOrigins: ["*"] 与 AllowCredentials: true 同时使用，
+	// 否则浏览器会拒绝响应；gin-contrib/cors 在此场景下也会 panic。
+	// 当配置为通配 "*" 时，关闭 credentials 并改用 echo 模式回显 Origin。
+	wildcard := len(cfg.Security.CORSAllowedOrigins) == 1 && cfg.Security.CORSAllowedOrigins[0] == "*"
+	corsCfg := cors.Config{
+		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
+		ExposeHeaders: []string{"Content-Length", "Content-Disposition"},
+		MaxAge:        12 * time.Hour,
+	}
+	if wildcard {
+		corsCfg.AllowAllOrigins = true
+		corsCfg.AllowCredentials = false
+	} else {
+		corsCfg.AllowOrigins = cfg.Security.CORSAllowedOrigins
+		corsCfg.AllowCredentials = true
+	}
+	return cors.New(corsCfg)
 }
 
 var _ = http.StatusOK

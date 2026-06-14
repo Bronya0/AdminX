@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 // TokenType token 类型。
@@ -23,8 +23,10 @@ const (
 	TokenTypeRefresh = "refresh"
 )
 
-// blacklistKey Redis 中存放 refresh token 黑名单的 set key。
-const blacklistKey = "jwt:blacklist"
+// blacklistKey Redis 中存放 refresh token 黑名单的 key 前缀。
+// 使用独立 key（jwt:blacklist:<jti>）而非单一 set，便于按成员设置 TTL，
+// 避免 set 永久堆积导致 Redis 内存泄漏。
+const blacklistKeyPrefix = "jwt:blacklist:"
 
 // Claims JWT 自定义 claims（对齐 Django SimpleJWT 默认 claims）。
 type Claims struct {
@@ -103,22 +105,23 @@ func (m *Manager) Parse(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// BlacklistRefreshToken 将 refresh token 加入黑名单（logout 时调用）。
+// BlacklistRefreshToken 将 refresh token 加入黑名单（logout / refresh 轮换时调用）。
+// 使用独立 key + TTL，过期后 Redis 自动清理，避免内存泄漏。
 func (m *Manager) BlacklistRefreshToken(ctx context.Context, tokenString string) error {
 	if m.rdb == nil {
 		return nil // 无 Redis，跳过黑名单
 	}
 	claims, err := m.Parse(tokenString)
 	if err != nil {
-		// 无效 token 也加入黑名单，防止重放（用 token 字符串本身做 key）
-		return m.rdb.SAdd(ctx, blacklistKey, tokenString).Err()
+		// 无效 token 无法获取过期时间，直接忽略（无效 token 本就无法用于 refresh）
+		return nil
 	}
-	// 用 jti 加入黑名单，TTL 设为 token 剩余有效期（过期后自动清理）
+	// 用 jti 作为 key，TTL 设为 token 剩余有效期（过期后自动清理）
 	remaining := time.Until(claims.ExpiresAt.Time)
 	if remaining <= 0 {
 		return nil // 已过期，无需拉黑
 	}
-	return m.rdb.SAdd(ctx, blacklistKey, claims.ID).Err()
+	return m.rdb.Set(ctx, blacklistKeyPrefix+claims.ID, "1", remaining).Err()
 }
 
 // IsBlacklisted 检查 token 是否在黑名单内。
@@ -126,19 +129,15 @@ func (m *Manager) IsBlacklisted(ctx context.Context, tokenString string) (bool, 
 	if m.rdb == nil {
 		return false, nil
 	}
-	// 先按 jti 查
 	claims, err := m.Parse(tokenString)
-	if err == nil {
-		exists, err := m.rdb.SIsMember(ctx, blacklistKey, claims.ID).Result()
-		if err != nil {
-			return false, err
-		}
-		if exists {
-			return true, nil
-		}
+	if err != nil {
+		return false, nil // 无法解析的 token 视为未拉黑（调用方会因解析失败拒绝）
 	}
-	// 再按完整 token 字符串查（兼容无效 token 的拉黑）
-	return m.rdb.SIsMember(ctx, blacklistKey, tokenString).Result()
+	n, err := m.rdb.Exists(ctx, blacklistKeyPrefix+claims.ID).Result()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // TokenType 返回 token 类型（独立字段，不再复用 Subject）。

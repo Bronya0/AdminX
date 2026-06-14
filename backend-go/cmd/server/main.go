@@ -124,7 +124,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go hub.Run(ctx)
-	wsH := handler.NewWSHandler(hub, log)
+	wsH := handler.NewWSHandler(hub, jwtMgr, log)
 
 	// 11. 调度器（可选，--scheduler 启用）
 	if *enableScheduler || cfg.Scheduler.Enabled {

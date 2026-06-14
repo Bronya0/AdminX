@@ -19,6 +19,8 @@ import (
 	"djangoadminx/internal/repository"
 )
 
+var _ = time.Second // 保留 time 引用（executeShell 超时用到）
+
 // JobService 定时任务业务逻辑。
 type JobService struct {
 	db   *gorm.DB
@@ -248,17 +250,29 @@ func (s *JobService) executePython(ctx context.Context, job *model.ScheduleJob) 
 }
 
 // executeShell 执行 shell 命令。
+// 安全: 用最小化的 strings.Fields 分割（不支持 shell 元字符，避免注入），
+// 调用方应避免传入含 ; | & $ ` 等元字符的命令。
+// 超时: 使用执行 context（带 deadline，避免僵尸进程）。
 func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (string, error) {
 	if job.Command == "" {
 		return "", fmt.Errorf("shell 命令为空")
 	}
-	// 用 shlex 解析命令，防止注入（简化版：用 strings.Fields）
-	_ = strings.TrimSpace(job.Command)
-	// 注意: 生产应使用 shlex 库。这里简化用 Fields。
-	// TODO: 引入 github.com/google/shlex 做安全分割。
-	parts := strings.Fields(job.Command)
+	cmdStr := strings.TrimSpace(job.Command)
+	// 阻断明显的 shell 元字符注入（命令拼接）
+	for _, ch := range ";|&`$\n\r" {
+		if strings.ContainsRune(cmdStr, ch) {
+			return "", fmt.Errorf("shell 命令包含禁用字符 %q", string(ch))
+		}
+	}
+	parts := strings.Fields(cmdStr)
 	if len(parts) == 0 {
 		return "", fmt.Errorf("命令为空")
+	}
+	// 若 context 无 deadline，补一个默认上限，防止任务挂死
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
 	}
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
 	out, err := cmd.CombinedOutput()

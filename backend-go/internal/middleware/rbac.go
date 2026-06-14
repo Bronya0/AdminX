@@ -127,10 +127,13 @@ func matchPath(method, requestPath, rule string) bool {
 		return false
 	}
 
-	// glob 匹配（对齐 Python fnmatch）
+	// glob 匹配（对齐 Python fnmatch）。
+	// path.Match 对含 [ ] 的模式会返回 ErrBadPattern，需显式处理，
+	// 否则会被当成"不匹配"（静默拒绝合法请求）。
 	matched, err := path.Match(rulePath, requestPath)
 	if err != nil {
-		return false
+		// 模式非法（如未闭合的 [），降级为字面量比较
+		return rulePath == requestPath
 	}
 	return matched
 }

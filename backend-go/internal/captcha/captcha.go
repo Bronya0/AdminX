@@ -7,6 +7,7 @@ package captcha
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -41,9 +42,10 @@ func (m *Manager) Generate(ctx context.Context) (string, string, error) {
 }
 
 // Verify 校验验证码（一次性，校验后删除）。
+// 无 Redis 时拒绝校验（返回 false + error），避免验证码被绕过。
 func (m *Manager) Verify(ctx context.Context, captchaID, text string) (bool, error) {
 	if m.rdb == nil {
-		return true, nil // 无 Redis，放行（开发模式）
+		return false, fmt.Errorf("验证码服务不可用（未配置 Redis）")
 	}
 	key := captchaPrefix + captchaID
 	stored, err := m.rdb.Get(ctx, key).Result()

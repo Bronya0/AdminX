@@ -3,8 +3,8 @@ package service
 import (
 	"gorm.io/gorm"
 
-	apperr "djangoadminx/pkg/errors"
 	"djangoadminx/pkg/crypto"
+	apperr "djangoadminx/pkg/errors"
 
 	"djangoadminx/internal/model"
 )
@@ -52,18 +52,30 @@ func (s *PolicyService) ChangePassword(userID, oldPassword, newPassword string) 
 		return apperr.New(400, "旧密码错误")
 	}
 
-	// 策略校验
-	policy, _ := s.GetPolicy()
-	if policy != nil {
-		if err := policy.Validate(newPassword); err != nil {
-			return apperr.New(400, err.Error())
+	// 策略校验（GetPolicy 不会返回 nil policy，但保险起见处理 error）
+	policy, pErr := s.GetPolicy()
+	if pErr != nil {
+		return apperr.Wrap(500, "获取密码策略失败", pErr)
+	}
+	if policy == nil {
+		policy = &model.PasswordPolicy{
+			ID: 1, MinLength: 8, HistoryCount: 5, IsActive: true,
 		}
+	}
+	if err := policy.Validate(newPassword); err != nil {
+		return apperr.New(400, err.Error())
+	}
+	historyCount := policy.HistoryCount
+	if historyCount < 0 {
+		historyCount = 0
 	}
 
 	// 历史校验（防重用最近 N 个密码）
 	var histories []model.PasswordHistory
-	s.db.Where("user_id = ?", userID).Order("created_at DESC").
-		Limit(policy.HistoryCount).Find(&histories)
+	if historyCount > 0 {
+		s.db.Where("user_id = ?", userID).Order("created_at DESC").
+			Limit(historyCount).Find(&histories)
+	}
 	for _, h := range histories {
 		if crypto.CheckPassword(h.PasswordHash, newPassword) == nil {
 			return apperr.New(400, "新密码不能与最近使用过的密码相同")

@@ -41,7 +41,9 @@ func (h *NotificationHandler) List(c *gin.Context) {
 
 // MarkRead POST /notification/messages/:id/mark_read/
 func (h *NotificationHandler) MarkRead(c *gin.Context) {
-	if err := h.svc.MarkRead(c.Param("id")); err != nil {
+	userID, _ := c.Get("user_id")
+	uid, _ := userID.(string)
+	if err := h.svc.MarkRead(c.Param("id"), uid); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}

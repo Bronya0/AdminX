@@ -74,8 +74,14 @@ func (s *NotificationService) UnreadCount(userID string) (int64, error) {
 	return s.repo.UnreadCount(userID)
 }
 
-// MarkRead 标记单条已读。
-func (s *NotificationService) MarkRead(id string) error {
+// MarkRead 标记单条已读（校验归属：仅本人或广播通知可标记）。
+func (s *NotificationService) MarkRead(id, userID string) error {
+	// 先校验该通知属于当前用户或是广播通知，防止越权标记他人通知
+	var n model.Notification
+	err := s.db.Select("id").First(&n, "id = ? AND (user_id IS NULL OR user_id = ?)", id, userID).Error
+	if err != nil {
+		return apperr.ErrNotFound
+	}
 	if err := s.repo.MarkRead(id); err != nil {
 		return apperr.ErrInternal
 	}

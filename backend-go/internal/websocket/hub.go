@@ -27,11 +27,11 @@ type Message struct {
 
 // Client 单个 WebSocket 连接。
 type Client struct {
-	hub      *Hub
-	conn     *websocket.Conn
-	send     chan Message
-	closed   bool // 防止 send channel 被重复 close 导致 panic
-	closeMu  sync.Mutex
+	hub     *Hub
+	conn    *websocket.Conn
+	send    chan Message
+	closed  bool // 防止 send channel 被重复 close 导致 panic
+	closeMu sync.Mutex
 }
 
 func newClient(hub *Hub, conn *websocket.Conn) *Client {
@@ -151,7 +151,7 @@ func (h *Hub) HandleConn(conn *websocket.Conn) {
 }
 
 // BroadcastLog 广播一条日志到所有客户端（先发 Redis，再由本地订阅触发本地广播）。
-// 无 Redis 时直接本地广播。
+// 无 Redis 时直接本地广播。使用非阻塞发送，避免慢消费者拖垮日志生产方。
 func (h *Hub) BroadcastLog(line, level string) {
 	msg := Message{Line: line, Level: level}
 
@@ -160,12 +160,23 @@ func (h *Hub) BroadcastLog(line, level string) {
 		data, _ := json.Marshal(msg)
 		if err := h.rdb.Publish(context.Background(), channelLogs, data).Err(); err != nil {
 			h.logger.Warn("Redis 发布日志失败，降级本地广播", "error", err)
-			h.broadcast <- msg
+			h.tryLocalBroadcast(msg)
 		}
 		return
 	}
 	// 无 Redis: 直接本地广播
-	h.broadcast <- msg
+	h.tryLocalBroadcast(msg)
+}
+
+// tryLocalBroadcast 非阻塞地把消息塞入 broadcast channel。
+// channel 满（订阅/客户端消费不过来）时丢弃该条日志并记 warn，
+// 避免阻塞调用方（日志生产链路通常不应被 UI 推送拖住）。
+func (h *Hub) tryLocalBroadcast(msg Message) {
+	select {
+	case h.broadcast <- msg:
+	default:
+		h.logger.Warn("日志广播 channel 已满，丢弃一条日志消息")
+	}
 }
 
 // subscribeRedis 订阅 Redis channel，收到消息后本地广播。

@@ -6,6 +6,8 @@
 package middleware
 
 import (
+	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -97,9 +99,14 @@ func updateActivity(c *gin.Context, db *gorm.DB, userID string, lastActivity *ti
 	if _, err := uuid.Parse(userID); err != nil {
 		return
 	}
+	// 异步更新，不阻塞请求；使用独立 context（请求 context 在返回后即取消）
 	go func() {
-		// 异步更新，不阻塞请求
-		db.Model(&model.User{}).Where("id = ?", userID).Update("last_activity", now)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := db.WithContext(ctx).Model(&model.User{}).
+			Where("id = ?", userID).Update("last_activity", now).Error; err != nil {
+			slog.Default().Warn("更新用户活动时间失败", "user_id", userID, "error", err)
+		}
 	}()
 }
 

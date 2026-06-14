@@ -59,10 +59,27 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 	if err != nil {
 		return nil, apperr.Wrap(500, "创建目标文件失败", err)
 	}
-	defer dst.Close()
 
-	if _, err := io.Copy(dst, src); err != nil {
-		return nil, apperr.Wrap(500, "写入文件失败", err)
+	// io.Copy → Sync → Close 三步都必须成功，任一失败都清理已写文件，
+	// 避免出现"DB 已记录但磁盘文件不完整/丢失"的数据不一致。
+	copyErr := func() error {
+		if _, err := io.Copy(dst, src); err != nil {
+			return apperr.Wrap(500, "写入文件失败", err)
+		}
+		// 刷盘，防止系统崩溃时文件内容缺失
+		if err := dst.Sync(); err != nil {
+			return apperr.Wrap(500, "刷盘失败", err)
+		}
+		return nil
+	}()
+	// 关闭错误独立检查（NFS 等网络文件系统只在 Close 时上报写错误）
+	if err := dst.Close(); err != nil {
+		_ = os.Remove(fullPath)
+		return nil, apperr.Wrap(500, "关闭文件失败", err)
+	}
+	if copyErr != nil {
+		_ = os.Remove(fullPath)
+		return nil, copyErr
 	}
 
 	// MIME 类型
