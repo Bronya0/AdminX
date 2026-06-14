@@ -59,14 +59,12 @@
         :pagination="pagination"
         @change="handleTableChange"
         row-key="id"
+        :locale="{ emptyText: '暂无审计日志' }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'action'">
             <a-tag :color="actionColor(record.action)">{{ actionLabel(record.action) }}</a-tag>
           </template>
-        </template>
-        <template #emptyText>
-          <a-empty description="暂无审计日志" />
         </template>
       </a-table>
     </a-card>

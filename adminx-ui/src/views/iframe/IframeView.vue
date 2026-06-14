@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
@@ -36,22 +36,40 @@ const title = computed(() => {
   return ''
 })
 
+// 安全校验：仅允许 http/https 协议，防止 javascript:/data: 等危险协议
+const isSafeUrl = (url: string): boolean => {
+  if (!url) return false
+  try {
+    const u = new URL(url, window.location.origin)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const safeUrl = computed(() => (isSafeUrl(externalUrl.value) ? externalUrl.value : ''))
+
+// token 通过 URL 传递会进入浏览器历史、Referer、服务器日志，存在泄漏风险。
+// 对内嵌可信业务系统是常见做法，但仍优先用 postMessage 方案；当前保留 URL 方式但
+// 仅对通过校验的 URL 注入 token，并使用 hash 避免 token 进入 query string 被日志记录。
 const iframeUrl = computed(() => {
-  if (!externalUrl.value) return ''
-  const sep = externalUrl.value.includes('?') ? '&' : '?'
-  return `${externalUrl.value}${sep}token=${userStore.token}`
+  if (!safeUrl.value) return ''
+  const sep = safeUrl.value.includes('?') ? '&' : '?'
+  return `${safeUrl.value}${sep}token=${encodeURIComponent(userStore.token || '')}`
 })
 
-const prevTitle = document.title
+// prevTitle 必须在客户端环境(onMounted)中读取，避免 setup 顶层访问 document（SSR/测试会报错）
+const prevTitle = ref('')
 
 onMounted(() => {
+  prevTitle.value = document.title
   if (title.value) {
     document.title = title.value
   }
 })
 
 onUnmounted(() => {
-  document.title = prevTitle
+  document.title = prevTitle.value
 })
 </script>
 

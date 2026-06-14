@@ -32,6 +32,7 @@ export const useUserStore = defineStore(
     const siteName = ref<string>('DjangoAdminX')
     const siteDesc = ref<string>('企业级 Django Admin 框架')
     const siteLogo = ref<string>('')
+    const favicon = ref<string>('')
     const idleTimeout = ref<number>(30) // 会话空闲超时（分钟），0=不超时
     const appVersion = ref<string>('1.0.0')
 
@@ -82,6 +83,7 @@ export const useUserStore = defineStore(
         siteName.value = res.site_name
         siteDesc.value = res.site_desc
         siteLogo.value = res.site_logo
+        favicon.value = res.favicon || ''
         idleTimeout.value = res.idle_timeout ?? 30
         appVersion.value = res.app_version || '1.0.0'
         if (res.site_name) document.title = res.site_name
@@ -150,6 +152,7 @@ export const useUserStore = defineStore(
       siteName,
       siteDesc,
       siteLogo,
+      favicon,
       idleTimeout,
       appVersion,
       isLoggedIn,

@@ -422,7 +422,10 @@ const handleToggleActive = async (job: ScheduleJob, checked: boolean) => {
     await scheduleJobApi.update(job.id, { is_active: checked } as any)
     job.is_active = checked
     message.success(checked ? '任务已启用' : '任务已禁用')
-  } catch { /* revert on failure */ }
+  } catch {
+    // 请求失败时回滚开关状态，保持 UI 与后端一致
+    job.is_active = !checked
+  }
 }
 
 const handleReload = async () => {

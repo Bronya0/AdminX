@@ -103,12 +103,12 @@
       <a-pagination
         v-if="total > 0"
         v-model:current="page"
+        v-model:pageSize="pageSize"
         :total="total"
-        :pageSize="pageSize"
         showSizeChanger
         :showTotal="(t: number) => `共 ${t} 条`"
         style="margin-top: 16px; text-align: right;"
-        @change="fetchData"
+        @change="onPageChange"
       />
     </a-card>
 
@@ -229,6 +229,19 @@ const fetchData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 分页 change 回调：AntD 签名 (page, pageSize)。
+// v-model 已同步 page/pageSize ref；切换 pageSize 时强制回到第 1 页，
+// 否则停留在旧页码可能超出新的总页数。
+const onPageChange = (p: number, ps: number) => {
+  if (ps !== pageSize.value) {
+    pageSize.value = ps
+    page.value = 1
+  } else {
+    page.value = p
+  }
+  fetchData()
 }
 
 const handleMarkRead = async (item: Notification) => {

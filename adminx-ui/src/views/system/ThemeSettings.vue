@@ -313,6 +313,9 @@ const layoutDesc = (layout: string) => {
 }
 
 // 表单同步自 store
+// 注意: 不能在 setup 顶层访问 document/localStorage（SSR/测试环境会报错，
+// 且 favicon 读取 DOM 绝对 URL 会把部署域名硬编码写回后端）。
+// favicon 从 store 读取（store 由 fetchSiteInfo 维护），loginBgImage 在 onMounted 初始化。
 const form = reactive({
   layout: userStore.theme.layout,
   collapsed: userStore.theme.collapsed,
@@ -328,8 +331,8 @@ const form = reactive({
   siteName: userStore.siteName,
   siteDesc: userStore.siteDesc,
   siteLogo: userStore.siteLogo,
-  favicon: (document.querySelector('link[rel="icon"]') as HTMLLinkElement)?.href || '',
-  loginBgImage: localStorage.getItem('login_bg_image') || '',
+  favicon: userStore.favicon,
+  loginBgImage: '',
   idleTimeout: userStore.idleTimeout,
   appVersion: userStore.appVersion,
 })
@@ -337,6 +340,8 @@ const form = reactive({
 // 同步 store → form（当 store 被其他地方修改时）
 onMounted(() => {
   syncFormFromStore()
+  // 恢复登录背景图（仅限客户端 localStorage）
+  form.loginBgImage = localStorage.getItem('login_bg_image') || ''
   // 恢复 NTP 配置
   ntpForm.enabled = localStorage.getItem('ntp_enabled') === '1'
   ntpForm.server = localStorage.getItem('ntp_server') || ''
@@ -359,6 +364,7 @@ const syncFormFromStore = () => {
   form.siteName = userStore.siteName
   form.siteDesc = userStore.siteDesc
   form.siteLogo = userStore.siteLogo
+  form.favicon = userStore.favicon
   form.idleTimeout = userStore.idleTimeout
   form.appVersion = userStore.appVersion
 }
@@ -454,6 +460,7 @@ const saveAll = async () => {
     userStore.siteName = form.siteName
     userStore.siteDesc = form.siteDesc
     userStore.siteLogo = form.siteLogo
+    userStore.favicon = form.favicon
     userStore.idleTimeout = form.idleTimeout
     userStore.appVersion = form.appVersion
     // 登录背景到 localStorage

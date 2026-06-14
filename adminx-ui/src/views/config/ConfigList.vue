@@ -321,11 +321,10 @@ const valueValidator = (_rule: any, value: string) => {
   return Promise.resolve()
 }
 
-// 切换值类型时重新校验 value 字段
+// 切换值类型时重新校验 value 字段（即使 value 为空也要校验，
+// 否则从 string 切到 int 而旧值不符合 int 格式时不会即时提示）
 watch(() => formState.value_type, () => {
-  if (formRef.value && formState.value) {
-    formRef.value.validateFields('value').catch(() => {})
-  }
+  formRef.value?.validateFields('value').catch(() => {})
 })
 
 const formRules = {

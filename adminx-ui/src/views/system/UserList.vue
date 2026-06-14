@@ -508,6 +508,8 @@ const handlePasswordOk = async () => {
     await userApi.updateUser(currentUser.value.id, { password: newPassword.value } as any)
     message.success('密码重置成功')
     passwordModalVisible.value = false
+    // 清空密码，避免弹窗残留导致下次打开可见上次输入
+    newPassword.value = ''
   } finally {
     passwordModalLoading.value = false
   }

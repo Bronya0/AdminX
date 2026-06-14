@@ -58,6 +58,7 @@
         :pagination="pagination"
         @change="handleTableChange"
         row-key="id"
+        :locale="{ emptyText: '暂无登录日志' }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'success'">
@@ -65,9 +66,6 @@
               {{ record.success ? '成功' : '失败' }}
             </a-tag>
           </template>
-        </template>
-        <template #emptyText>
-          <a-empty description="暂无登录日志" />
         </template>
       </a-table>
     </a-card>

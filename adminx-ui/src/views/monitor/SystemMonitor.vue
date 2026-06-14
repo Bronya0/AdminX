@@ -285,6 +285,9 @@ const loadHistory = async (force = false) => {
     resourceHistory.value = await monitorApi.getSystemResourceHistory({ range: historyRange.value })
     lastHistoryLoadedAt.value = Date.now()
   } catch {
+    // 接口失败时也更新时间戳，避免 5s 自动刷新每轮都重试失败请求（错误退避）。
+    // 全局 axios 拦截器已展示错误提示，这里不再重复弹窗。
+    lastHistoryLoadedAt.value = Date.now()
   } finally {
     historyLoading.value = false
   }

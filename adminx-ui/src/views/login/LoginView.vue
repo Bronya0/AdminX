@@ -108,12 +108,13 @@ const formState = reactive({
   captchaText: '',
 })
 
-// 表单验证规则
-const rules = {
+// 表单验证规则（用 computed 使 captchaText 的 required 随 captchaEnabled 动态变化，
+// 否则 rules 在 setup 求值一次后不再更新）
+const rules = computed(() => ({
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   captchaText: [{ required: captchaEnabled.value, message: '请输入验证码', trigger: 'blur' }],
-}
+}))
 
 // 获取验证码
 const fetchCaptcha = async () => {

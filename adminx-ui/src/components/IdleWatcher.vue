@@ -122,7 +122,17 @@ const stopListening = () => {
 
 // 当超时配置变化时重设
 watch(() => userStore.idleTimeout, (val) => {
+  const prevMs = idleTimeoutMs.value
   idleTimeoutMs.value = val > 0 ? val * 60 * 1000 : 0
+  // 从"启用超时"切到"关闭超时"(val=0)：必须清除已挂载的旧 timer，
+  // 否则旧 timer 仍会触发超时警告（resetIdleTimer 在 idleTimeoutMs===0 时不会清旧 timer）
+  if (prevMs > 0 && idleTimeoutMs.value === 0) {
+    if (idleTimer) {
+      clearTimeout(idleTimer)
+      idleTimer = null
+    }
+    return
+  }
   if (val > 0 && userStore.isLoggedIn) {
     resetIdleTimer()
   }
