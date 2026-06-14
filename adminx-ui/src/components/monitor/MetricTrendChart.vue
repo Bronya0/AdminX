@@ -59,16 +59,19 @@
           :y2="height - padding.bottom"
           class="hover-line"
         />
-        <circle
-          v-for="item in series"
-          v-if="hasHover"
-          :key="`${item.name}-hover`"
-          :cx="toX(hoverIndex!)"
-          :cy="toY(item.values[hoverIndex!] || 0)"
-          :fill="item.color"
-          r="4"
-          class="hover-point"
-        />
+        <!-- v-if 与 v-for 不应放同一元素（Vue3 中 v-if 优先级更高，无法访问 v-for 变量；
+             这里用 template 包裹，hasHover 为 false 时不渲染整组 hover 圆点） -->
+        <template v-if="hasHover">
+          <circle
+            v-for="item in series"
+            :key="`${item.name}-hover`"
+            :cx="toX(hoverIndex!)"
+            :cy="toY(item.values[hoverIndex!] || 0)"
+            :fill="item.color"
+            r="4"
+            class="hover-point"
+          />
+        </template>
         <circle
           v-for="item in series"
           :key="`${item.name}-last`"

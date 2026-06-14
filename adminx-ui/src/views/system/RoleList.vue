@@ -280,6 +280,8 @@ const handleAdd = () => {
   menuSearch.value = ''
   loadMenus()
   modalVisible.value = true
+  // 清除上次校验残留
+  formRef.value?.clearValidate?.()
 }
 
 // 编辑
@@ -295,6 +297,8 @@ const handleEdit = (record: Role, readOnly = false) => {
   menuSearch.value = ''
   loadMenus()
   modalVisible.value = true
+  // 清除上次校验残留
+  formRef.value?.clearValidate?.()
 }
 
 // 删除

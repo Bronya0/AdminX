@@ -241,6 +241,7 @@ const expandedRows = ref<string[]>([])
 const logMap = ref<Record<string, JobLog[]>>({})
 
 // ── 弹窗 ──
+const formRef = ref()
 const modalVisible = ref(false)
 const modalLoading = ref(false)
 const editingId = ref<string | null>(null)
@@ -338,6 +339,9 @@ const handleExpand = async (expanded: boolean, record: ScheduleJob) => {
       const res = await jobLogApi.list({ page: 1, size: 10, job: record.id })
       logMap.value[record.id] = res.results
     } catch { logMap.value[record.id] = [] }
+  } else {
+    // 收起时清理缓存，避免下次展开瞬间渲染旧数据造成闪烁
+    delete logMap.value[record.id]
   }
 }
 
@@ -354,6 +358,8 @@ const handleAdd = () => {
   formInterval.days = 0; formInterval.hours = 1; formInterval.minutes = 0; formInterval.seconds = 0
   formDate.value = ''
   modalVisible.value = true
+  // 清除上次校验残留
+  formRef.value?.clearValidate?.()
 }
 
 const handleEdit = (job: ScheduleJob) => {
@@ -370,6 +376,8 @@ const handleEdit = (job: ScheduleJob) => {
     } catch { formDate.value = '' }
   }
   modalVisible.value = true
+  // 清除上次校验残留
+  formRef.value?.clearValidate?.()
 }
 
 const handleModalOk = async () => {

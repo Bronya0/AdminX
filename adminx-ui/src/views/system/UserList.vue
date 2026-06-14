@@ -431,6 +431,8 @@ const handleAdd = () => {
     home_page: '',
   })
   modalVisible.value = true
+  // 清除上次的校验错误状态（红色提示），避免打开弹窗时残留
+  formRef.value?.clearValidate?.()
 }
 
 // 编辑
@@ -448,6 +450,8 @@ const handleEdit = (record: User) => {
     home_page: record.home_page || '',
   })
   modalVisible.value = true
+  // 清除上次的校验错误状态
+  formRef.value?.clearValidate?.()
 }
 
 // 删除
