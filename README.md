@@ -18,7 +18,7 @@
 - **动态菜单** — `django-treebeard` 物化路径树形结构，多级 + 排序 + 角色绑定
 - **配置中心** — KV 动态配置 + 业务选项列表一体化，支持 String/Int/Bool/JSON/加密/选项列表 六种类型，Fernet 加密存储，Redis 缓存加速，分组批量查询
 - **定时任务** — APScheduler 独立进程运行（不受 Gunicorn 多进程影响），数据库驱动，Cron/间隔/一次性触发
-- **文件中心** — 统一文件上传，支持 Local / MinIO 存储后端，可扩展
+- **文件中心** — 统一文件上传，本地存储后端，可扩展
 - **数据导入导出** — 基于 openpyxl 的 Excel 导入导出，支持多模型
 - **图形验证码** — 登录验证码，基于 captcha 库
 - **NTP 同步** — 对接 NTP 服务器，集群时间校准
@@ -109,10 +109,15 @@ pip install aiohttp
 
 ## 快速开始
 
+本仓库为 monorepo 三端结构：前端 `adminx-ui/`、Django 后端 `backend-django/`、Go 后端骨架 `backend-go/`。
+
 ```bash
 # 克隆
 git clone https://github.com/Bronya0/DjangoAdminX.git
 cd DjangoAdminX
+
+# ── 后端（Django） ──────────────────────────────
+cd backend-django
 
 # 虚拟环境（Python 3.12+）
 python -m venv .venv
@@ -141,6 +146,15 @@ python manage.py runserver
 
 # 访问 API 文档
 open http://127.0.0.1:8000/api/docs/
+
+# ── 前端（Vue3） ────────────────────────────────
+cd ../adminx-ui
+npm install
+npm run dev   # http://localhost:5173，自动代理 /api 到后端
+
+# ── Go 后端（骨架） ─────────────────────────────
+cd ../backend-go
+go build ./cmd/server   # 当前仅占位
 ```
 
 ## 启用 Redis（可选，推荐）
@@ -192,15 +206,43 @@ docker compose up -d
 
 ## 项目结构
 
+本仓库为 monorepo，前端、Django 后端、Go 后端各自独立目录，共享同一 git 仓库与 CI。
+
 ```
 DjangoAdminX/
+├── adminx-ui/                     # 前端（Vue3 + Ant Design Vue）
+├── backend-django/                # 后端实现一：Django + DRF（当前主实现）
+│   ├── djangoadminx/              #   框架代码（accounts/menu/config_center/...）
+│   ├── config/                    #   settings + urls + wsgi/asgi
+│   ├── deploy/                    #   Dockerfile / nginx / systemd / supervisor
+│   ├── scripts/                   #   一键部署脚本
+│   ├── manage.py
+│   ├── requirements.txt
+│   ├── start-linux.sh / stop-linux.sh / start-win.bat
+│   └── .env.example
+├── backend-go/                    # 后端实现二：Go 重写（骨架阶段）
+│   ├── cmd/server/                #   服务入口
+│   ├── internal/                  #   handler/service/repository/model/middleware/config
+│   ├── pkg/                       #   可复用包
+│   └── configs/                   #   配置示例
+├── business-service/              # 示例业务服务（FastAPI，独立部署）
+├── README.md
+└── AGENTS.md
+```
+
+各后端实现 API 兼容，前端无需改动即可在 Django / Go 后端之间切换。
+
+### backend-django 内部结构
+
+```
+backend-django/
 ├── djangoadminx/                  # 框架代码
 │   ├── accounts/                  #   用户、角色、权限、JWT 登录/登出、登录锁定
 │   ├── menu/                      #   动态菜单（treebeard 物化路径）
 │   ├── config_center/             #   配置中心（KV + 选项列表 + 加密 + 缓存）
 │   ├── monitor/                   #   系统资源监控（psutil）
 │   ├── cluster/                   #   集群节点管理
-│   ├── webservice/                #   WebService + 定时任务 + 任务日志
+│   ├── jobs/                      #   定时任务 + 任务日志 + 调度器 HA
 │   ├── file_center/               #   文件上传/记录管理
 │   ├── data_center/               #   数据导入导出（Excel）
 │   ├── captcha/                   #   图形验证码
@@ -215,22 +257,18 @@ DjangoAdminX/
 │   ├── urls.py                    #   路由入口
 │   ├── wsgi.py                    #   WSGI（Gunicorn）
 │   └── asgi.py                    #   ASGI（Channels WebSocket）
-├── deploy/
-│   ├── docker/
-│   │   ├── Dockerfile
-│   │   ├── entrypoint.sh
-│   │   ├── supervisor.conf
-│   │   └── docker-compose.yml
-│   ├── systemd/
-│   │   ├── djangoadminx-web.service      # Gunicorn
-│   │   ├── djangoadminx-scheduler.service # APScheduler
-│   │   └── biz-template.service           # 三方业务模板
-│   └── nginx/
-│       └── nginx.conf
-├── start-linux.sh
-├── start-win.bat
-├── requirements.txt
-└── manage.py
+└── deploy/
+    ├── docker/
+    │   ├── Dockerfile
+    │   ├── entrypoint.sh
+    │   ├── supervisor.conf
+    │   └── supervisor-scheduler-standby.conf   # 调度器 HA standby
+    ├── systemd/
+    │   ├── djangoadminx-web.service      # Gunicorn
+    │   ├── djangoadminx-scheduler.service # APScheduler
+    │   └── biz-template.service           # 三方业务模板
+    └── nginx/
+        └── nginx.conf
 ```
 
 ## API 概览
@@ -263,7 +301,7 @@ DjangoAdminX/
 | | `POST /api/webservice/jobs/reload/` | 全量重载任务 |
 | **任务日志** | `GET /api/webservice/job-logs/` | 任务执行历史 |
 | **WS 调用日志** | `GET /api/webservice/ws-logs/` | WebService 调用历史 |
-| **文件中心** | `POST /api/file/upload/` | 文件上传（Local / MinIO） |
+| **文件中心** | `POST /api/file/upload/` | 文件上传（本地存储） |
 | | `GET /api/file/records/` | 文件记录列表 |
 | **数据导入导出** | `GET /api/data-center/export/?model=xxx` | Excel 导出 |
 | | `POST /api/data-center/import/` | Excel 导入 |
@@ -348,6 +386,7 @@ digest = sha256_hash(b"data")
 APScheduler 以独立进程运行，不受 Gunicorn 多 worker 影响：
 
 ```bash
+# 在 backend-django/ 目录下执行
 # 开发环境
 python manage.py run_scheduler
 
@@ -380,6 +419,7 @@ sudo systemctl start djangoadminx-scheduler
 ### 测试
 
 ```bash
+# 在 backend-django/ 目录下执行
 # 运行全部测试
 python manage.py test
 

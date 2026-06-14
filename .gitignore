@@ -2,20 +2,20 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
 build/
 
 # Virtualenv
 .venv/
 venv/
 
-# Django
+# Django（后端运行时目录）
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
-logs/
-media/
-staticfiles/
+backend-django/logs/
+backend-django/media/
+backend-django/staticfiles/
+backend-django/.coverage
 
 # IDE
 .idea/
@@ -32,7 +32,7 @@ staticfiles/
 Thumbs.db
 
 # Docker
-deploy/docker-compose.yml
+backend-django/deploy/docker-compose.yml
 
 # Claude
 .claude/
@@ -43,3 +43,10 @@ adminx-ui/dist/
 adminx-ui/dist-ssr/
 adminx-ui/.eslintcache
 adminx-ui/*.timestamp-*-*.mjs
+
+# Go
+backend-go/bin/
+backend-go/vendor/
+*.exe
+*.test
+*.out

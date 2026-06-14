@@ -4,8 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+本仓库为 monorepo：Django 后端在 `backend-django/`，Go 后端骨架在 `backend-go/`，前端在 `adminx-ui/`。
+
 ```bash
-# Backend
+# Backend (Django) — 先 cd backend-django
+cd backend-django
 python manage.py migrate                # DB migrations
 python manage.py init_data --superuser --username admin --password admin123  # Seed superuser
 python manage.py run_scheduler          # Start APScheduler standalone process
@@ -15,18 +18,23 @@ python manage.py runserver              # Dev server (settings: config.settings.
 # Just set REDIS_URL in .env, no code changes needed. Auto-detected at startup.
 
 # Tests
-python manage.py test                   # All tests (80 total)
+python manage.py test                   # All tests (97 total)
 python manage.py test djangoadminx.accounts    # Single module
 
 # Frontend (adminx-ui/)
 cd adminx-ui && npm run dev             # Vite dev server (port 5173, proxies /api to :8000)
 cd adminx-ui && npm run build           # Production build
 cd adminx-ui && npm run type-check      # Vue/TS type checking (skip build)
+
+# Backend (Go skeleton)
+cd backend-go && go build ./cmd/server  # Build skeleton (placeholder only)
 ```
 
 ## Project Structure & File Index
 
-### Backend (`djangoadminx/`)
+本仓库为 monorepo：Django 后端在 `backend-django/`，Go 后端骨架在 `backend-go/`，前端在 `adminx-ui/`。下方文件索引默认相对于 `backend-django/`（如 `accounts/models.py` 实际位于 `backend-django/djangoadminx/accounts/models.py`）。
+
+### Backend Django (`backend-django/djangoadminx/`)
 
 #### accounts — 用户认证管理
 | 文件 | 说明 |
@@ -95,7 +103,7 @@ cd adminx-ui && npm run type-check      # Vue/TS type checking (skip build)
 #### file_center — 文件中心
 | 文件 | 说明 |
 |------|------|
-| `file_center/models.py` | FileRecord（本地/MinIO 统一管理） |
+| `file_center/models.py` | FileRecord（本地存储统一管理） |
 | `file_center/views.py` | 文件上传 API + FileRecord CRUD |
 | `file_center/urls.py` | 路由注册 |
 
@@ -137,7 +145,7 @@ cd adminx-ui && npm run type-check      # Vue/TS type checking (skip build)
 | `jobs/urls.py` | 路由注册 |
 | `jobs/tasks.py` | 任务处理函数（NTP 同步、清理日志等） |
 
-#### tests — 测试（80 total）
+#### tests — 测试（97 total）
 | 文件 | 说明 |
 |------|------|
 | `tests/base.py` | AdminXTestCase 基类（JWT 认证辅助） |
@@ -158,16 +166,20 @@ cd adminx-ui && npm run type-check      # Vue/TS type checking (skip build)
 | `tests/webservice/test_job.py` | 任务模型 + CRUD |
 | `tests/webservice/test_job_views.py` | 任务执行/状态/重载 |
 
-#### config/ — 项目配置
+#### config/ — 项目配置（`backend-django/config/`）
 | 文件 | 说明 |
 |------|------|
 | `config/settings/base.py` | 基础配置（应用、数据库、缓存、JWT、CORS、安全等） |
 | `config/settings/dev.py` | 开发环境（SQLite、DEBUG=True、CORS 全开放） |
-| `config/settings/prod.py` | 生产环境（PostgreSQL、强制校验、HSTS） |
+| `config/settings/prod.py` | 生产环境（PostgreSQL、强制校验、HSTS、强制 Redis） |
 
-#### 根目录
+#### 根目录（`backend-django/`）
 - `manage.py` — 入口（默认 config.settings.dev）
 - `requirements.txt` — 依赖清单
+- `start-linux.sh` / `stop-linux.sh` / `start-win.bat` — 启停脚本
+- `.env.example` — 环境变量示例
+- `deploy/` — Docker / nginx / systemd / supervisor 配置
+- `scripts/deploy.sh` — 一键部署脚本
 
 ---
 
@@ -287,12 +299,12 @@ cd adminx-ui && npm run type-check      # Vue/TS type checking (skip build)
 - **Cross-process communication via database** (no Redis dependency):
   - **Heartbeat**: scheduler process updates `SchedulerHeartbeat.last_heartbeat` every 10s via `update_or_create`; web workers check via `is_alive()` (30s timeout threshold).
   - **Reload notifications**: CRUD signals + reload button set `SchedulerHeartbeat.reload_pending=True`; scheduler process polls every 10s and calls `reload_all()`.
-  - See [`SchedulerManager`](djangoadminx/common/scheduler.py) and [`SchedulerHeartbeat`](djangoadminx/webservice/models.py) for implementation.
+  - See [`SchedulerManager`](backend-django/djangoadminx/common/scheduler.py) and [`SchedulerHeartbeat`](backend-django/djangoadminx/jobs/models.py) for implementation.
 - **Anti-pattern (fixed)**: Before this approach, signals and reload called `reload_job()`/`reload_all()` directly on `SchedulerManager` singleton — this only affected the calling process (one Gunicorn worker) and was silently ignored by the actual scheduler process. **Never rely on in-process state for cross-process coordination.**
 - **Shell commands**: Use `shlex.split()` + `subprocess.run(shell=False)` to prevent command injection.
 - **Security**: `ScheduleJobViewSet` requires `IsAdminUser` permission.
 
-### Encryption (djangoadminx/common/crypto_utils.py)
+### Encryption (backend-django/djangoadminx/common/crypto_utils.py)
 - SM4 (ECB/CBC), AES (CBC/GCM), MD5, SHA256, HMAC-SHA256.
 - Each function has `_b64` variant for base64 I/O.
 

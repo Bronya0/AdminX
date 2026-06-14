@@ -1,0 +1,26 @@
+# DjangoAdminX Go 后端配置示例
+# 复制为 config.yaml 后按实际环境修改。
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  base_path: "/djangoadminx"   # 对应 Django 的 FORCE_SCRIPT_NAME
+  timeout_sec: 120
+
+database:
+  driver: "postgres"
+  dsn: "postgres://user:pass@localhost:5432/djangoadminx?sslmode=disable"
+
+redis:
+  url: "redis://localhost:6379/0"
+
+jwt:
+  secret: "change-me-in-production"
+  access_expire: "30m"
+  refresh_expire: "168h"
+  issuer: "djangoadminx"
+
+logging:
+  level: "info"
+  format: "text"
+  dir: "./logs"
