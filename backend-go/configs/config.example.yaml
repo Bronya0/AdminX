@@ -1,26 +1,47 @@
 # DjangoAdminX Go 后端配置示例
 # 复制为 config.yaml 后按实际环境修改。
+# 环境变量可覆盖任意字段，前缀 DJA_，下划线分隔，如 DJA_JWT_SECRET。
 
 server:
   host: "0.0.0.0"
   port: 8000
-  base_path: "/djangoadminx"   # 对应 Django 的 FORCE_SCRIPT_NAME
+  base_path: "/djangoadminx"        # 对应 Django FORCE_SCRIPT_NAME
+  mode: "debug"                      # debug / release / test
   timeout_sec: 120
 
 database:
   driver: "postgres"
-  dsn: "postgres://user:pass@localhost:5432/djangoadminx?sslmode=disable"
+  dsn: "postgres://postgres:postgres@localhost:5432/djangoadminx?sslmode=disable"
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: "1h"
+  log_level: "warn"                  # silent / error / warn / info
 
 redis:
   url: "redis://localhost:6379/0"
 
 jwt:
-  secret: "change-me-in-production"
+  secret: "change-me-in-production"  # 生产必须改（DJA_JWT_SECRET）
   access_expire: "30m"
   refresh_expire: "168h"
   issuer: "djangoadminx"
 
 logging:
-  level: "info"
-  format: "text"
-  dir: "./logs"
+  level: "info"                      # debug / info / warn / error
+  format: "text"                     # text / json
+  dir: ""                            # 空 = 输出到 stdout
+
+security:
+  # AES-256-GCM 密钥（base64 编码的 32 字节）
+  # 生成: openssl rand -base64 32
+  # 用于配置中心 is_encrypted=true 的字段加密
+  # 留空则加密功能不可用（不报错，创建加密配置时返回 500）
+  aes_key: ""
+  cors_allowed_origins:             # CORS 允许来源
+    - "http://localhost:5173"        # vite dev
+    - "http://localhost:8080"
+  trust_proxy_headers: false         # 生产反向代理后设 true
+
+scheduler:
+  enabled: false                     # 是否默认启用内置调度器（也可用 --scheduler 标志）
+  lock_ttl_sec: 30                   # gocron-redis-lock 锁 TTL

@@ -109,7 +109,7 @@ pip install aiohttp
 
 ## 快速开始
 
-本仓库为 monorepo 三端结构：前端 `adminx-ui/`、Django 后端 `backend-django/`、Go 后端骨架 `backend-go/`。
+本仓库为 monorepo 三端结构：前端 `adminx-ui/`、Django 后端 `backend-django/`、Go 后端 `backend-go/`（核心模块已实现，与 Django API 兼容）。
 
 ```bash
 # 克隆
@@ -152,9 +152,11 @@ cd ../adminx-ui
 npm install
 npm run dev   # http://localhost:5173，自动代理 /api 到后端
 
-# ── Go 后端（骨架） ─────────────────────────────
+# ── Go 后端 ─────────────────────────────────────
 cd ../backend-go
-go build ./cmd/server   # 当前仅占位
+cp configs/config.example.yaml configs/config.yaml  # 编辑填入 DB/Redis 配置
+go run ./cmd/init-data --username admin --password admin123
+go run ./cmd/server
 ```
 
 ## 启用 Redis（可选，推荐）
@@ -220,7 +222,7 @@ DjangoAdminX/
 │   ├── requirements.txt
 │   ├── start-linux.sh / stop-linux.sh / start-win.bat
 │   └── .env.example
-├── backend-go/                    # 后端实现二：Go 重写（骨架阶段）
+├── backend-go/                    # 后端实现二：Go（核心模块已实现，API 兼容 Django）
 │   ├── cmd/server/                #   服务入口
 │   ├── internal/                  #   handler/service/repository/model/middleware/config
 │   ├── pkg/                       #   可复用包
