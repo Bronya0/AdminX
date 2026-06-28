@@ -44,7 +44,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "创建超级用户失败: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✓ 超级用户已创建: %s (password: %s)\n", *username, *password)
+	fmt.Printf("✓ 超级用户已创建: %s\n", *username)
 
 	// 2. 创建默认角色（对齐 Django 等保2.0 三权分立）
 	if err := createDefaultRoles(db); err != nil {
@@ -60,8 +60,7 @@ func main() {
 	}
 	fmt.Println("✓ 默认菜单已创建")
 
-	fmt.Println("\n初始化完成。可用以下凭证登录:")
-	fmt.Printf("  用户名: %s\n  密码: %s\n", *username, *password)
+	fmt.Println("\n初始化完成。请使用配置的凭证登录。")
 }
 
 func createSuperuser(db *gorm.DB, username, password string) error {

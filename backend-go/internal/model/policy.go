@@ -90,4 +90,13 @@ func hasSpecial(s string) bool { return strings.IndexFunc(s, isSpecial) >= 0 }
 func isUpper(r rune) bool   { return r >= 'A' && r <= 'Z' }
 func isLower(r rune) bool   { return r >= 'a' && r <= 'z' }
 func isDigit(r rune) bool   { return r >= '0' && r <= '9' }
-func isSpecial(r rune) bool { return !isUpper(r) && !isLower(r) && !isDigit(r) }
+func isSpecial(r rune) bool {
+	switch r {
+	case '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '-', '=',
+		'{', '}', '[', ']', '|', '\\', ':', ';', '"', '\'', '<', '>', ',',
+		'.', '/', '?', '`', '~':
+		return true
+	default:
+		return false
+	}
+}

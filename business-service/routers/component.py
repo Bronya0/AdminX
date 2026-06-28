@@ -16,10 +16,13 @@
 import asyncio
 import hashlib
 import logging
+import re
 import shlex
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
@@ -89,8 +92,33 @@ async def heartbeat() -> dict | None:
         return None
 
 
+def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
+    """校验 zip 内所有条目的路径都在目标目录内，防止 zip slip"""
+    dest_resolved = dest.resolve()
+    for member in zf.infolist():
+        member_path = (dest / member.filename).resolve()
+        if not str(member_path).startswith(str(dest_resolved)):
+            raise RuntimeError(f"zip slip: {member.filename} 解压路径超出目标目录")
+    zf.extractall(dest)
+
+
+def _validate_upgrade_url(url: str) -> None:
+    """校验升级包 URL，防止 SSRF"""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(f"升级包 URL 协议不允许: {parsed.scheme}，仅支持 https/http")
+    host = parsed.hostname or ""
+    forbidden = ("localhost", "127.0.0.1", "0.0.0.0")
+    if host in forbidden or host.startswith("192.168.") or host.startswith("10.") or host.startswith("169.254."):
+        raise ValueError(f"升级包 URL 不允许内网/云元数据地址: {host}")
+    # 172.16.0.0/12 范围: 172.16.x - 172.31.x
+    if re.match(r"^172\.(1[6-9]|2[0-9]|3[01])\.", host):
+        raise ValueError(f"升级包 URL 不允许内网地址: {host}")
+
+
 async def _download_and_verify(url: str, checksum: str) -> Path:
     """下载升级包到临时目录，可选 SHA-256 校验"""
+    _validate_upgrade_url(url)
     tmp = Path(tempfile.mkdtemp(prefix="upgrade_"))
     filename = url.split("/")[-1].split("?")[0] or "package"
     dest = tmp / filename
@@ -126,12 +154,12 @@ def _run_upgrade_script(pkg_path: Path) -> bool:
         work_dir = pkg_path.parent / "extracted"
         work_dir.mkdir(exist_ok=True)
         with zipfile.ZipFile(pkg_path) as zf:
-            zf.extractall(work_dir)
+            _safe_extract(zf, work_dir)
         # 执行包内的 upgrade.sh（如果存在）
         upgrade_sh = work_dir / "upgrade.sh"
         if upgrade_sh.exists():
             result = subprocess.run(
-                shlex.split(f"bash {upgrade_sh}"),
+                ["bash", str(upgrade_sh)],
                 cwd=str(work_dir),
                 shell=False,
                 capture_output=True,
@@ -179,8 +207,13 @@ async def handle_upgrade(upgrade_cmd: dict) -> None:
     if not url:
         logger.warning("升级指令缺少 url，跳过")
         return
+    if not checksum:
+        logger.error("升级指令缺少 checksum，拒绝执行（安全要求）")
+        return
 
     logger.info("收到升级指令: v%s → v%s, url=%s", APP_VERSION, version, url)
+    import shutil
+    pkg_path = None
     try:
         pkg_path = await _download_and_verify(url, checksum)
         # _run_upgrade_script 内部有多个 subprocess.run（最长 600s），
@@ -193,6 +226,10 @@ async def handle_upgrade(upgrade_cmd: dict) -> None:
             logger.error("升级脚本执行失败")
     except Exception as e:
         logger.error("升级失败: %s", e)
+    finally:
+        # 清理临时目录
+        if pkg_path and pkg_path.parent.exists():
+            shutil.rmtree(pkg_path.parent, ignore_errors=True)
 
 
 def _run_uninstall_script() -> bool:
@@ -232,16 +269,9 @@ def _run_uninstall_script() -> bool:
 
 
 async def handle_uninstall() -> None:
-    """处理平台下发的卸载指令"""
-    logger.info("收到卸载指令，开始执行卸载...")
-    try:
-        success = await asyncio.to_thread(_run_uninstall_script)
-        if success:
-            logger.info("卸载成功")
-        else:
-            logger.error("卸载脚本执行失败")
-    except Exception as e:
-        logger.error("卸载失败: %s", e)
+    """收到卸载指令 — 仅记录日志和标记，由管理员手动确认执行"""
+    logger.warning("⚠️ 收到卸载指令！请管理员确认后手动执行卸载操作。")
+    logger.warning("  可通过 docker compose down 或 systemctl stop %s 手动停止服务", APP_LABEL)
 
 
 def _task_done_callback(t: asyncio.Task) -> None:
@@ -257,16 +287,16 @@ async def heartbeat_loop() -> None:
     """后台心跳循环 — 在 lifespan 中作为 asyncio.Task 运行"""
     logger.info("心跳任务启动，间隔 %ds", HEARTBEAT_INTERVAL)
     while True:
-        await asyncio.sleep(HEARTBEAT_INTERVAL)
         data = await heartbeat()
-        if data is None:
-            continue
-        upgrade_cmd = data.get("upgrade")
-        if upgrade_cmd:
-            task = asyncio.create_task(handle_upgrade(upgrade_cmd))
-            task.add_done_callback(_task_done_callback)
-            continue  # 升级和卸载互斥，有升级指令时跳过卸载检查
-        if data.get("uninstall"):
-            task = asyncio.create_task(handle_uninstall())
-            task.add_done_callback(_task_done_callback)
+        if data is not None:
+            upgrade_cmd = data.get("upgrade")
+            if upgrade_cmd:
+                task = asyncio.create_task(handle_upgrade(upgrade_cmd))
+                task.add_done_callback(_task_done_callback)
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+                continue  # 升级和卸载互斥，有升级指令时跳过卸载检查
+            if data.get("uninstall"):
+                task = asyncio.create_task(handle_uninstall())
+                task.add_done_callback(_task_done_callback)
+        await asyncio.sleep(HEARTBEAT_INTERVAL)
 

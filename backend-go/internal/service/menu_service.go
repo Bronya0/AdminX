@@ -94,14 +94,14 @@ func (s *MenuService) Create(in MenuCreateInput) (*model.Menu, error) {
 	return menu, nil
 }
 
-// UpdateInput 更新菜单入参。
+// UpdateInput 更新菜单入参（指针字段区分"未传"和"清空"）。
 type MenuUpdateInput struct {
 	Code           string   `json:"code"`
 	Name           string   `json:"name"`
-	Icon           string   `json:"icon"`
-	Path           string   `json:"path"`
-	Component      string   `json:"component"`
-	PermissionCode string   `json:"permission_code"`
+	Icon           *string  `json:"icon"`
+	Path           *string  `json:"path"`
+	Component      *string  `json:"component"`
+	PermissionCode *string  `json:"permission_code"`
 	MenuType       string   `json:"menu_type"`
 	IsActive       *bool    `json:"is_active"`
 	IsVisible      *bool    `json:"is_visible"`
@@ -125,10 +125,18 @@ func (s *MenuService) Update(id int64, in MenuUpdateInput) (*model.Menu, error) 
 	if in.Name != "" {
 		menu.Name = in.Name
 	}
-	menu.Icon = in.Icon
-	menu.Path = in.Path
-	menu.Component = in.Component
-	menu.PermissionCode = in.PermissionCode
+	if in.Icon != nil {
+		menu.Icon = *in.Icon
+	}
+	if in.Path != nil {
+		menu.Path = *in.Path
+	}
+	if in.Component != nil {
+		menu.Component = *in.Component
+	}
+	if in.PermissionCode != nil {
+		menu.PermissionCode = *in.PermissionCode
+	}
 	if in.MenuType != "" {
 		menu.MenuType = in.MenuType
 	}

@@ -98,7 +98,8 @@ const loginBgImage = ref('')
 // SVG 验证码 data URI（用 img 标签替代 v-html 防 XSS）
 const captchaDataUri = computed(() => {
   if (!captchaSvg.value) return ''
-  return 'data:image/svg+xml;base64,' + btoa(captchaSvg.value)
+  const encoded = btoa(new TextEncoder().encode(captchaSvg.value).reduce((s, b) => s + String.fromCharCode(b), ''))
+  return 'data:image/svg+xml;base64,' + encoded
 })
 
 // 表单状态

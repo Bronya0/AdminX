@@ -17,7 +17,7 @@ export const configApi = {
 
   // 更新配置
   updateConfig: (id: number, data: Partial<Config>): Promise<Config> =>
-    request.put(`/config/${id}/`, data),
+    request.patch(`/config/${id}/`, data),
 
   // 删除配置
   deleteConfig: (id: number): Promise<void> =>

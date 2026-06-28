@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -223,19 +222,17 @@ func (s *JobService) executePython(ctx context.Context, job *model.ScheduleJob) 
 		return "", fmt.Errorf("未注册的 handler: %s", job.Handler)
 	}
 
-	// 解析参数
-	var args []interface{}
-	if job.Args != "" {
-		_ = json.Unmarshal([]byte(job.Args), &args)
+	// 当前 handler 注册体系不支持参数传递，记录提示
+	if job.Args != "" || job.Kwargs != "" {
+		s.log.Warn("当前 handler 不支持参数传递，args/kwargs 被忽略",
+			"job", job.Name, "handler", job.Handler)
 	}
-	var kwargs map[string]interface{}
-	if job.Kwargs != "" {
-		_ = json.Unmarshal([]byte(job.Kwargs), &kwargs)
-	}
-	_ = args
-	_ = kwargs
 
-	// 反射调用（支持可变参数，简化：只传 kwargs）
+	// 反射调用前校验 handler 签名兼容性
+	ht := reflect.TypeOf(handler)
+	if ht.NumIn() != 0 || ht.NumOut() != 2 {
+		return "", fmt.Errorf("handler %s 签名不兼容，期望 func() (string, error)，实际 %v", job.Handler, ht)
+	}
 	result := reflect.ValueOf(handler).Call([]reflect.Value{})
 	if len(result) > 0 {
 		if err, ok := result[0].Interface().(error); ok && err != nil {
@@ -259,7 +256,7 @@ func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (
 	}
 	cmdStr := strings.TrimSpace(job.Command)
 	// 阻断明显的 shell 元字符注入（命令拼接）
-	for _, ch := range ";|&`$\n\r" {
+	for _, ch := range ";|&`$\n\r<>{}()#~" {
 		if strings.ContainsRune(cmdStr, ch) {
 			return "", fmt.Errorf("shell 命令包含禁用字符 %q", string(ch))
 		}
@@ -283,8 +280,9 @@ func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (
 }
 
 func truncateStr(s string, max int) string {
-	if len(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= max {
 		return s
 	}
-	return s[:max]
+	return string(runes[:max])
 }

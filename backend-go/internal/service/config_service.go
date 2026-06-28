@@ -18,6 +18,45 @@ import (
 	"djangoadminx/internal/repository"
 )
 
+// ConfigDTO 配置列表/详情返回给前端的 DTO（隐藏加密值）。
+type ConfigDTO struct {
+	ID           int64     `json:"id"`
+	Key          string    `json:"key"`
+	Value        string    `json:"value"`
+	DisplayValue string    `json:"display_value"`
+	ValueType    string    `json:"value_type"`
+	IsEncrypted  bool      `json:"is_encrypted"`
+	Desc         string    `json:"desc"`
+	Group        string    `json:"group"`
+	IsActive     bool      `json:"is_active"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func toConfigDTO(c *model.Config) ConfigDTO {
+	dto := ConfigDTO{
+		ID: c.ID, Key: c.Key, ValueType: c.ValueType,
+		IsEncrypted: c.IsEncrypted, Desc: c.Desc, Group: c.Group,
+		IsActive: c.IsActive, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+	}
+	if c.IsEncrypted {
+		dto.Value = ""
+		dto.DisplayValue = "********"
+	} else {
+		dto.Value = c.Value
+		dto.DisplayValue = c.Value
+	}
+	return dto
+}
+
+func toConfigDTOs(cfgs []model.Config) []ConfigDTO {
+	dtos := make([]ConfigDTO, len(cfgs))
+	for i := range cfgs {
+		dtos[i] = toConfigDTO(&cfgs[i])
+	}
+	return dtos
+}
+
 // ConfigService 配置中心业务（AES-GCM 加密 + Redis 缓存）。
 type ConfigService struct {
 	db       *gorm.DB
@@ -38,8 +77,12 @@ const (
 )
 
 // List 分页查询配置列表。
-func (s *ConfigService) List(offset, limit int, search, group string) ([]model.Config, int64, error) {
-	return s.repo.List(offset, limit, search, group)
+func (s *ConfigService) List(offset, limit int, search, group string) ([]ConfigDTO, int64, error) {
+	cfgs, count, err := s.repo.List(offset, limit, search, group)
+	if err != nil {
+		return nil, 0, err
+	}
+	return toConfigDTOs(cfgs), count, nil
 }
 
 // Groups 查询所有分组。
@@ -48,7 +91,7 @@ func (s *ConfigService) Groups() ([]string, error) {
 }
 
 // GetByID 按 ID 查询。
-func (s *ConfigService) GetByID(id int64) (*model.Config, error) {
+func (s *ConfigService) GetByID(id int64) (*ConfigDTO, error) {
 	c, err := s.repo.FindByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -56,7 +99,8 @@ func (s *ConfigService) GetByID(id int64) (*model.Config, error) {
 		}
 		return nil, apperr.ErrInternal
 	}
-	return c, nil
+	dto := toConfigDTO(c)
+	return &dto, nil
 }
 
 // CreateInput 创建配置入参。
@@ -229,7 +273,15 @@ func (s *ConfigService) GetByGroup(ctx context.Context, group string) (map[strin
 	for _, c := range cfgs {
 		out[c.Key] = s.parseValue(&c)
 	}
-	if s.rdb != nil {
+	// 仅缓存不含加密配置的 group（避免敏感信息泄漏到 Redis）
+	hasEncrypted := false
+	for _, c := range cfgs {
+		if c.IsEncrypted {
+			hasEncrypted = true
+			break
+		}
+	}
+	if s.rdb != nil && !hasEncrypted {
 		if b, err := json.Marshal(out); err == nil {
 			_ = s.rdb.Set(ctx, cacheKey, b, configCacheTTL).Err()
 		}
@@ -349,10 +401,11 @@ func toLower(s string) string {
 }
 
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= max {
 		return s
 	}
-	return s[:max]
+	return string(runes[:max])
 }
 
 var _ = fmt.Sprintf

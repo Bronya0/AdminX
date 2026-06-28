@@ -72,6 +72,11 @@ apiClient.interceptors.response.use(
 
     // 认证失败（token 过期/无效）→ 尝试用 refresh token 换新并重放请求
     if (code === 401) {
+      const cfg = response.config as InternalAxiosRequestConfig & { _retried?: boolean }
+      if (cfg?._retried) {
+        forceLogout('登录已过期，请重新登录')
+        return Promise.reject(new Error('认证失败'))
+      }
       return handleTokenExpired(response.config)
     }
 
@@ -112,6 +117,7 @@ apiClient.interceptors.response.use(
           message.error(msg)
       }
     } else {
+      if (axios.isCancel(error)) return Promise.reject(error)
       message.error('网络错误，请检查网络连接')
     }
 
@@ -136,7 +142,12 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
     return new Promise<string>((resolve, reject) => {
       refreshQueue.push({ resolve, reject })
     }).then((token) =>
-      apiClient({ ...config, headers: { ...config.headers, Authorization: `Bearer ${token}` } })
+      apiClient({
+        ...config,
+        headers: { ...config.headers, Authorization: `Bearer ${token}` },
+        transformRequest: [(data: any) => typeof data === 'string' ? data : JSON.stringify(data)],
+        _retried: true,
+      } as AxiosRequestConfig & { _retried?: boolean })
     )
   }
 
@@ -151,6 +162,7 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
       return apiClient({
         ...config,
         headers: { ...config.headers, Authorization: `Bearer ${payload.access}` },
+        transformRequest: [(data: any) => typeof data === 'string' ? data : JSON.stringify(data)],
         _retried: true,
       } as AxiosRequestConfig & { _retried?: boolean })
     })

@@ -96,15 +96,15 @@ func (s *UserService) Create(in CreateInput) (*model.User, error) {
 	return s.userRepo.FindByID(user.ID)
 }
 
-// UpdateInput 更新用户入参（密码可选）。
+// UpdateInput 更新用户入参（指针字段区分"未传"和"清空"）。
 type UpdateInput struct {
-	Email       string   `json:"email"`
-	Phone       string   `json:"phone"`
-	Avatar      string   `json:"avatar"`
-	Desc        string   `json:"desc"`
-	HomePage    string   `json:"home_page"`
-	IsActive    *bool    `json:"is_active"`
-	IsSuperuser *bool    `json:"is_superuser"`
+	Email       *string  `json:"email"`
+	Phone       *string  `json:"phone"`
+	Avatar      *string  `json:"avatar"`
+	Desc       *string  `json:"desc"`
+	HomePage   *string  `json:"home_page"`
+	IsActive   *bool    `json:"is_active"`
+	IsSuperuser *bool   `json:"is_superuser"`
 	Password    string   `json:"password"` // 非空则更新密码
 	Roles       []string `json:"roles"`
 }
@@ -119,11 +119,21 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 		return nil, apperr.ErrInternal
 	}
 
-	user.Email = in.Email
-	user.Phone = in.Phone
-	user.Avatar = in.Avatar
-	user.Desc = in.Desc
-	user.HomePage = in.HomePage
+	if in.Email != nil {
+		user.Email = *in.Email
+	}
+	if in.Phone != nil {
+		user.Phone = *in.Phone
+	}
+	if in.Avatar != nil {
+		user.Avatar = *in.Avatar
+	}
+	if in.Desc != nil {
+		user.Desc = *in.Desc
+	}
+	if in.HomePage != nil {
+		user.HomePage = *in.HomePage
+	}
 	if in.IsActive != nil {
 		user.IsActive = *in.IsActive
 	}

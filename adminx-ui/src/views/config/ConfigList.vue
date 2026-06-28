@@ -103,8 +103,8 @@
               <a-tag color="orange">********</a-tag>
             </span>
             <span v-else-if="record.value_type === 'bool'">
-              <a-tag :color="record.value === 'true' ? 'success' : 'error'">
-                {{ record.value === 'true' ? '是' : '否' }}
+              <a-tag :color="String(record.value).toLowerCase() === 'true' ? 'success' : 'error'">
+                {{ String(record.value).toLowerCase() === 'true' ? '是' : '否' }}
               </a-tag>
             </span>
             <span v-else-if="record.value_type === 'json' || record.value_type === 'options'">

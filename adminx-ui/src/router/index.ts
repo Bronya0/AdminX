@@ -157,7 +157,7 @@ router.beforeEach(async (to, from) => {
   if (requiredPermission && !userStore.hasPermission(requiredPermission)) {
     message.error('没有权限访问该页面')
     const fallback = userStore.user?.home_page || userStore.menus?.[0]?.path
-    if (fallback && fallback !== to.path) return fallback
+    if (fallback && fallback !== to.path && fallback !== from.path) return fallback
     return '/dashboard'
   }
 

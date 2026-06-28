@@ -23,13 +23,19 @@ import (
 
 // NotificationService 通知中心。
 type NotificationService struct {
-	db   *gorm.DB
-	repo *repository.NotificationRepo
-	log  *slog.Logger
+	db         *gorm.DB
+	repo       *repository.NotificationRepo
+	log        *slog.Logger
+	httpClient *http.Client
 }
 
 func NewNotificationService(db *gorm.DB, repo *repository.NotificationRepo, logger *slog.Logger) *NotificationService {
-	return &NotificationService{db: db, repo: repo, log: logger}
+	return &NotificationService{
+		db:         db,
+		repo:       repo,
+		log:        logger,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 // CreateInput 创建通知入参。
@@ -164,14 +170,13 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := s.httpClient.Do(req)
 	logEntry := &model.WebhookLog{
 		WebhookID: cfg.ID,
 	}
 	notificationID := n.ID
 	logEntry.NotificationID = &notificationID
 
-	resp, err := client.Do(req)
 	if err != nil {
 		logEntry.Status = "failed"
 		logEntry.ErrorMessage = err.Error()

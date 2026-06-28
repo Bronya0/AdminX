@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
@@ -54,6 +55,11 @@ func (c *Client) readPump() {
 		c.hub.unregister <- c
 		_ = c.conn.Close()
 	}()
+	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetPongHandler(func(string) error {
+		_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
 	for {
 		_, _, err := c.conn.ReadMessage()
 		if err != nil {
@@ -64,15 +70,28 @@ func (c *Client) readPump() {
 
 // writePump 把 send channel 的消息写给连接。
 func (c *Client) writePump() {
+	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
+		ticker.Stop()
 		_ = c.conn.Close()
-		// 兜底恢复：防止向已 close 的 send 写入导致 panic
 		recover()
 	}()
-	for msg := range c.send {
-		data, _ := json.Marshal(msg)
-		if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-			return
+	for {
+		select {
+		case msg, ok := <-c.send:
+			if !ok {
+				return
+			}
+			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			data, _ := json.Marshal(msg)
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+		case <-ticker.C:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -195,7 +214,11 @@ func (h *Hub) subscribeRedis(ctx context.Context) {
 			if err := json.Unmarshal([]byte(msg.Payload), &m); err != nil {
 				continue
 			}
-			h.broadcast <- m
+			select {
+			case h.broadcast <- m:
+			default:
+				h.logger.Warn("Redis 订阅消息广播 channel 已满，丢弃一条")
+			}
 		case <-ctx.Done():
 			return
 		}

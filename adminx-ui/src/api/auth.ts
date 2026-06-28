@@ -46,7 +46,7 @@ export const userApi = {
     request.post('/accounts/users/', data),
 
   updateUser: (id: string, data: Partial<User> & { roles?: string[] }): Promise<User> =>
-    request.put(`/accounts/users/${id}/`, data),
+    request.patch(`/accounts/users/${id}/`, data),
 
   deleteUser: (id: string): Promise<void> =>
     request.delete(`/accounts/users/${id}/`),
@@ -66,9 +66,6 @@ export const roleApi = {
     request.post('/accounts/roles/', data),
 
   updateRole: (id: string, data: Partial<Role>): Promise<Role> =>
-    request.put(`/accounts/roles/${id}/`, data),
-
-  patchRole: (id: string, data: Partial<Role>): Promise<Role> =>
     request.patch(`/accounts/roles/${id}/`, data),
 
   deleteRole: (id: string): Promise<void> =>
@@ -91,7 +88,7 @@ export const businessPermissionApi = {
     request.post('/accounts/business-permissions/', data),
 
   update: (id: string, data: Partial<BusinessPermission>): Promise<BusinessPermission> =>
-    request.put(`/accounts/business-permissions/${id}/`, data),
+    request.patch(`/accounts/business-permissions/${id}/`, data),
 
   delete: (id: string): Promise<void> =>
     request.delete(`/accounts/business-permissions/${id}/`),
@@ -105,7 +102,7 @@ export const businessCommandApi = {
     request.post('/accounts/business-commands/', data),
 
   update: (id: string, data: Partial<BusinessCommand>): Promise<BusinessCommand> =>
-    request.put(`/accounts/business-commands/${id}/`, data),
+    request.patch(`/accounts/business-commands/${id}/`, data),
 
   delete: (id: string): Promise<void> =>
     request.delete(`/accounts/business-commands/${id}/`),

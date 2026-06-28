@@ -22,15 +22,14 @@ func NewCaptchaHandler(mgr *captcha.Manager, logger *slog.Logger) *CaptchaHandle
 
 // Generate GET /captcha/captcha/
 func (h *CaptchaHandler) Generate(c *gin.Context) {
-	captchaID, text, err := h.mgr.Generate(c.Request.Context())
+	captchaID, svgImg, err := h.mgr.Generate(c.Request.Context())
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
-	// 简化: 直接返回文本（前端可用 canvas 渲染成图片）
 	response.OK(c, gin.H{
-		"captcha_id":   captchaID,
-		"captcha_text": text,
+		"captcha_id": captchaID,
+		"svg":        svgImg,
 	})
 }
 

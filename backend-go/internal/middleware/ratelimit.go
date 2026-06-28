@@ -21,6 +21,15 @@ import (
 	"djangoadminx/pkg/response"
 )
 
+// rateLimitScript 原子执行 INCR + EXPIRE，避免进程崩溃导致 key 无 TTL 永久封禁。
+var rateLimitScript = redis.NewScript(`
+	local count = redis.call("INCR", KEYS[1])
+	if count == 1 then
+		redis.call("EXPIRE", KEYS[1], ARGV[1])
+	end
+	return count
+`)
+
 // Limit 限流配置。
 type Limit struct {
 	Requests int           // 窗口内允许的请求数
@@ -55,16 +64,12 @@ func RateLimit(rdb *redis.Client, scope string, limit Limit) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 
-		// INCR 计数
-		count, err := rdb.Incr(ctx, key).Result()
+		// 原子 INCR + EXPIRE（Lua 脚本，防止崩溃导致 key 无 TTL）
+		count, err := rateLimitScript.Run(ctx, rdb, []string{key}, int(limit.Window.Seconds())).Int64()
 		if err != nil {
 			// Redis 出错不阻断请求
 			c.Next()
 			return
-		}
-		// 首次访问设置窗口过期
-		if count == 1 {
-			_ = rdb.Expire(ctx, key, limit.Window).Err()
 		}
 
 		// 超过阈值

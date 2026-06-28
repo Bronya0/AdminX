@@ -1,6 +1,8 @@
 """Pydantic 数据模型"""
 
 from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -18,13 +20,13 @@ class Post(BaseModel):
 class PostCreate(BaseModel):
     title: str
     content: str
-    status: str = "draft"
+    status: Literal["draft", "published"] = "draft"
 
 
 class PostUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
-    status: str | None = None
+    status: Literal["draft", "published"] | None = None
 
 
 # ─── 统一响应模型（与 DjangoAdminX 平台保持一致） ───

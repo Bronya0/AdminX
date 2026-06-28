@@ -1,7 +1,6 @@
-// Package captcha 图片验证码（简化实现: Redis 存储文本 + 返回 ID）。
+// Package captcha 图片验证码（SVG 渲染 + Redis 存储）。
 //
-// 对齐 Django captcha: 生成验证码 → 存 Redis → 返回 captcha_id + 图片。
-// 这里简化为只返回文本 ID（前端可后续接 SVG 渲染库）。
+// 对齐 Django captcha: 生成验证码 → 存 Redis → 返回 captcha_id + SVG 图片。
 package captcha
 
 import (
@@ -27,18 +26,19 @@ type Manager struct {
 
 func NewManager(rdb *redis.Client) *Manager { return &Manager{rdb: rdb} }
 
-// Generate 生成验证码。返回 (captchaID, text)。
-// text 应由前端渲染成图片，这里只返回明文（前端可自行用 canvas 渲染干扰线）。
+// Generate 生成验证码。返回 (captchaID, svgImg)。
+// 返回 SVG 图片，需 Redis 存储验证码文本。
 func (m *Manager) Generate(ctx context.Context) (string, string, error) {
+	if m.rdb == nil {
+		return "", "", fmt.Errorf("验证码服务不可用（未配置 Redis）")
+	}
 	text := randomText(4)
 	captchaID := uuid.New().String()
-
-	if m.rdb != nil {
-		if err := m.rdb.Set(ctx, captchaPrefix+captchaID, text, captchaTTL).Err(); err != nil {
-			return "", "", err
-		}
+	svg := renderSVG(text)
+	if err := m.rdb.Set(ctx, captchaPrefix+captchaID, text, captchaTTL).Err(); err != nil {
+		return "", "", err
 	}
-	return captchaID, text, nil
+	return captchaID, svg, nil
 }
 
 // Verify 校验验证码（一次性，校验后删除）。
@@ -88,4 +88,36 @@ func equalFold(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// renderSVG 生成简单的 SVG 验证码图片（带干扰线和噪点）。
+func renderSVG(text string) string {
+	const width, height = 160, 60
+	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">`, width, height)
+	svg += `<rect width="100%" height="100%" fill="#f0f0f0"/>`
+	// 干扰线
+	for i := 0; i < 5; i++ {
+		x1, y1 := randomXY(width, height)
+		x2, y2 := randomXY(width, height)
+		svg += fmt.Sprintf(`<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#ccc" stroke-width="1"/>`, x1, y1, x2, y2)
+	}
+	// 文字
+	for i, ch := range text {
+		x := 20 + i*32
+		y := 38 + (int(ch)%3)*5 - 5
+		svg += fmt.Sprintf(`<text x="%d" y="%d" font-size="32" font-family="monospace" fill="#333">%s</text>`, x, y, string(ch))
+	}
+	// 噪点
+	for i := 0; i < 30; i++ {
+		cx, cy := randomXY(width, height)
+		svg += fmt.Sprintf(`<circle cx="%d" cy="%d" r="1" fill="#999"/>`, cx, cy)
+	}
+	svg += `</svg>`
+	return svg
+}
+
+func randomXY(maxX, maxY int) (int, int) {
+	xx, _ := rand.Int(rand.Reader, big.NewInt(int64(maxX)))
+	yy, _ := rand.Int(rand.Reader, big.NewInt(int64(maxY)))
+	return int(xx.Int64()), int(yy.Int64())
 }
