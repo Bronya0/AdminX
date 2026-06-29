@@ -1,6 +1,6 @@
 # AdminX Go Backend
 
-AdminX 的 Go 语言实现，与 [`../backend-django/`](../backend-django/) API 完全兼容，前端 [`../adminx-ui/`](../adminx-ui/) 无需改动即可切换。
+AdminX 的 Go 后端，前端 [`../adminx-ui/`](../adminx-ui/) 搭配使用。
 
 ## 当前状态
 

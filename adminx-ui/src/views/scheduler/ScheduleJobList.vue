@@ -151,7 +151,7 @@
           </a-radio-group>
         </a-form-item>
         <a-form-item v-if="formState.command_type === 'python'" label="处理函数" name="handler">
-          <a-input v-model:value="formState.handler" placeholder="如 djangoadminx.webservice.tasks.ntp_sync" />
+          <a-input v-model:value="formState.handler" placeholder="如 adminx.internal.service.job.sample_task" />
         </a-form-item>
         <a-form-item v-if="formState.command_type === 'shell'" label="Shell 命令" name="command">
           <a-textarea v-model:value="formState.command" :rows="3" placeholder="要执行的命令或脚本路径" />

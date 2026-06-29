@@ -136,10 +136,10 @@ npm run type-check
 server: {
   port: 5173,
   proxy: {
-    '/djangoadminx/api': {
-      target: 'http://localhost:8000',  // Django 后端地址
+    '/adminx/api': {
+      target: 'http://localhost:8000',  // Go 后端地址
       changeOrigin: true,
-      rewrite: (path) => path.replace(/^\/djangoadminx\/api/, '/api'),
+      rewrite: (path) => path.replace(/^\/adminx\/api/, '/api'),
     },
   },
 }
@@ -150,7 +150,7 @@ server: {
 创建 `.env` 文件：
 
 ```
-VITE_API_BASE_URL=/djangoadminx/api/v1
+VITE_API_BASE_URL=/adminx/api/v1
 ```
 
 ## 主要特性
@@ -174,17 +174,15 @@ VITE_API_BASE_URL=/djangoadminx/api/v1
 - ESLint + Prettier 代码格式化
 - 组件化开发
 
-## API 接口对应
+## API 接口
 
-前端 API 与 Django 后端接口对应关系：
-
-| 前端 API | 后端接口 |
+| 前端 API | 后端路由 |
 |---------|---------|
-| `/api/auth.ts` | `djangoadminx/accounts/views.py` |
-| `/api/menu.ts` | `djangoadminx/menu/views.py` |
-| `/api/config.ts` | `djangoadminx/config_center/views.py` |
-| `/api/cluster.ts` | `djangoadminx/cluster/views.py` |
-| `/api/monitor.ts` | `djangoadminx/monitor/views.py` |
+| `/api/auth.ts` | `/api/v1/accounts/` |
+| `/api/menu.ts` | `/api/v1/menu/` |
+| `/api/config.ts` | `/api/v1/config/` |
+| `/api/cluster.ts` | `/api/v1/cluster/nodes/` |
+| `/api/monitor.ts` | `/api/v1/monitor/` |
 
 ## 开发规范
 

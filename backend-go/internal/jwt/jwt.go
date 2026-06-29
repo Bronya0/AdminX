@@ -3,7 +3,7 @@
 // 使用 golang-jwt/v5，HS256 对称签名。
 // Access token (30min) 用于 API 鉴权；Refresh token (7d) 用于换发。
 // 黑名单: logout 时将 refresh token 的 jti 写入 Redis set，
-// refresh 时校验是否在黑名单内（对齐 AdminX 的 BLACKLIST_AFTER_ROTATION）。
+// refresh 时校验是否在黑名单内。
 package jwt
 
 import (
@@ -28,7 +28,7 @@ const (
 // 避免 set 永久堆积导致 Redis 内存泄漏。
 const blacklistKeyPrefix = "jwt:blacklist:"
 
-// Claims JWT 自定义 claims（对齐 AdminX SimpleJWT 默认 claims）。
+// Claims JWT 自定义 claims。
 type Claims struct {
 	UserID    string `json:"user_id"`
 	Username  string `json:"username"`

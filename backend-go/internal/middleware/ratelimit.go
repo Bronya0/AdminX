@@ -1,6 +1,5 @@
 // Package middleware — 基于 Redis 的限流中间件（固定窗口计数器）。
 //
-// 对齐 AdminX DRF Throttling 三级限流:
 //   - anon: 匿名用户（按 IP）
 //   - user: 认证用户（按 user_id）
 //   - introspect: token 校验端点专用

@@ -65,7 +65,7 @@ func (s *NotificationService) Create(ctx context.Context, in NotificationCreateI
 		return nil, apperr.ErrInternal
 	}
 
-	// 异步触发 webhook（信号驱动，对齐 AdminX post_save signal）
+	// 异步触发 webhook（信号驱动
 	go s.dispatchWebhooks(context.Background(), n)
 	return n, nil
 }
@@ -169,7 +169,7 @@ func (s *NotificationService) dispatchWebhooks(ctx context.Context, n *model.Not
 	}
 }
 
-// sendWebhook 发送单个 webhook（HMAC-SHA256 签名，对齐 AdminX）。
+// sendWebhook 发送单个 webhook（HMAC-SHA256 签名。
 func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.WebhookConfig, n *model.Notification) {
 	payload := map[string]interface{}{
 		"event":      n.NotificationType,
@@ -217,7 +217,7 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 	s.log.Info("webhook 已发送", "name", cfg.Name, "status", resp.StatusCode)
 }
 
-// matchEvent 检查事件类型是否在 webhook 关注列表中（对齐 AdminX _matches_events）。
+// matchEvent 检查事件类型是否在 webhook 关注列表中。
 // 空 events 表示匹配所有。
 func matchEvent(eventsCSV, eventType string) bool {
 	if eventsCSV == "" {

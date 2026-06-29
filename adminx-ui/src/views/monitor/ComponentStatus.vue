@@ -16,7 +16,6 @@
               <template v-if="sysData?.platform">
                 <span class="toolbar-label">运行环境</span>
                 <a-tag color="blue">Python {{ sysData.platform.python_version }}</a-tag>
-              <a-tag color="blue">Python {{ sysData.platform.django_version }}</a-tag>
                 <a-tag color="blue">{{ sysData.platform.os }}</a-tag>
               </template>
             </div>

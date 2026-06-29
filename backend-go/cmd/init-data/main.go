@@ -3,7 +3,6 @@
 // 用法:
 //   go run ./cmd/init-data --username admin --password admin123
 //
-// 对齐 AdminX 的 `python manage.py init_data --superuser`。
 package main
 
 import (
@@ -46,7 +45,7 @@ func main() {
 	}
 	fmt.Printf("✓ 超级用户已创建: %s\n", *username)
 
-	// 2. 创建默认角色（对齐 AdminX 等保2.0 三权分立）
+	// 2. 创建默认角色
 	if err := createDefaultRoles(db); err != nil {
 		fmt.Fprintf(os.Stderr, "创建默认角色失败: %v\n", err)
 		os.Exit(1)

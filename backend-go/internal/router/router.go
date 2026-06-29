@@ -1,4 +1,4 @@
-// Package router 注册所有 HTTP 路由，对齐 AdminX 的 urls.py 路由树。
+// Package router 注册所有 HTTP 路由。
 //
 // 路由前缀: /adminx/api/v1/。
 // 完整覆盖阶段 1-6 所有模块。
@@ -83,7 +83,7 @@ func New(deps *Deps) *gin.Engine {
 		public.GET("/captcha/captcha/", deps.CapH.Generate)
 		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
 
-		// cluster 业务组件注册/心跳（AllowAny，对齐 AdminX）
+		// cluster 业务组件注册/心跳（AllowAny
 		if deps.ClsH != nil {
 			public.POST("/cluster/components/register/", deps.ClsH.Register)
 			public.POST("/cluster/components/heartbeat/", deps.ClsH.Heartbeat)

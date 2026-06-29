@@ -178,7 +178,7 @@ func (s *ConfigService) Update(id int64, in ConfigUpdateInput) (*model.Config, e
 
 	oldKey, oldGroup := cfg.Key, cfg.Group
 
-	// 加密配置：加密后不允许改回明文（对齐 AdminX）
+	// 加密配置：加密后不允许改回明文
 	if cfg.IsEncrypted && in.Value != "" {
 		if s.aes == nil {
 			return nil, apperr.New(500, "加密功能未配置")
@@ -227,7 +227,6 @@ func (s *ConfigService) Delete(id int64) error {
 }
 
 // GetValue 按 key 读取配置值（带缓存 + 解密 + 类型解析）。
-// 对齐 AdminX Config.get_value()。缓存 1h，miss 则查库。
 func (s *ConfigService) GetValue(ctx context.Context, key string, defaultVal interface{}) (interface{}, error) {
 	cacheKey := configCachePrefix + key
 	if s.rdb != nil {
@@ -290,7 +289,7 @@ func (s *ConfigService) GetByGroup(ctx context.Context, group string) (map[strin
 	return out, nil
 }
 
-// parseValue 按 valueType 解析配置值（对齐 AdminX parse_value）。
+// parseValue 按 valueType 解析配置值。
 // 加密配置自动解密；解密失败返回 "<<解密失败>>"。
 func (s *ConfigService) parseValue(c *model.Config) interface{} {
 	raw := c.Value

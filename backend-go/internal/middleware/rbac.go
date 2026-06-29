@@ -1,6 +1,5 @@
 // Package middleware — RBAC 权限中间件。
 //
-// 对齐 AdminX RBACPermission:
 // 1. 超级管理员 → 放行所有
 // 2. 普通用户 → 取其角色关联的菜单 allowed_paths（JSON glob 规则）匹配当前请求
 // 3. 默认拒绝
@@ -57,7 +56,6 @@ func RBAC(db *gorm.DB) gin.HandlerFunc {
 }
 
 // checkPermission 查询用户角色关联菜单的 allowed_paths，glob 匹配请求。
-// 对齐 AdminX permissions.py: superuser 放行；否则查 role→menu→allowed_paths。
 func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, error) {
 	// 1. 取用户角色关联的活跃菜单的 path 集合
 	var menuPaths []struct {
@@ -103,12 +101,12 @@ func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, err
 		}
 	}
 
-	// 4. 检查三方业务命令的白名单（对齐 AdminX BusinessCommand 逻辑）
+	// 4. 检查三方业务命令的白名单
 	// 当前阶段未实现 BusinessCommand 模型，后续补充
 	return false, nil
 }
 
-// matchPath 匹配单条规则。对齐 AdminX _match_path。
+// matchPath 匹配单条规则
 // 规则格式: 可选 "METHOD:/path"，path 部分用 glob（path.Match）。
 func matchPath(method, requestPath, rule string) bool {
 	rule = strings.TrimSpace(rule)
@@ -128,7 +126,7 @@ func matchPath(method, requestPath, rule string) bool {
 		return false
 	}
 
-	// glob 匹配（对齐 Python fnmatch）。
+	// glob 匹配fnmatch）。
 	// path.Match 对含 [ ] 的模式会返回 ErrBadPattern，需显式处理，
 	// 否则会被当成"不匹配"（静默拒绝合法请求）。
 	matched, err := path.Match(rulePath, requestPath)

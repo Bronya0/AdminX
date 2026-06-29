@@ -29,7 +29,7 @@ func TestConfigService_Create(t *testing.T) {
 
 	cfg, err := svc.Create(ConfigCreateInput{
 		Key:       "SITE_NAME",
-		Value:     "AdminX",
+		Value:     "",
 		ValueType: "string",
 		Group:     "system",
 	})

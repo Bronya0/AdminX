@@ -1,7 +1,6 @@
 // Package service 业务逻辑层。
 //
 // auth_service 实现登录/登出/刷新/introspect 完整流程，
-// 对齐 AdminX LoginView/LogoutView/TokenIntrospectView。
 package service
 
 import (
@@ -29,7 +28,7 @@ type AuthService struct {
 	jwtMgr        *jwt.Manager
 	logger        *slog.Logger
 
-	// 可配置项（对齐 AdminX settings）
+	// 可配置项
 	loginLockEnabled bool
 	maxAttempts      int
 	lockDuration     time.Duration
@@ -64,7 +63,6 @@ type LoginResult struct {
 }
 
 // Login 用户登录。
-// 对齐 AdminX LoginView 流程: 锁检查 → 密码验证 → 激活检查 → 签发 token。
 func (s *AuthService) Login(ctx context.Context, username, password, ip, userAgent string) (*LoginResult, error) {
 	// 1. 登录锁检查
 	if s.loginLockEnabled {
@@ -167,7 +165,7 @@ type RefreshResult struct {
 	Refresh string `json:"refresh"`
 }
 
-// Refresh 用 refresh token 换发新的 access + refresh（带黑名单轮换，对齐 AdminX）。
+// Refresh 用 refresh token 换发新的 access + refresh（带黑名单轮换。
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*RefreshResult, error) {
 	// 校验 token 类型
 	claims, err := s.jwtMgr.Parse(refreshToken)
@@ -251,7 +249,7 @@ func (s *AuthService) Introspect(ctx context.Context, tokenString string) (*Intr
 		return result, nil
 	}
 
-	// last_logout 二次失效检查（对齐 AdminX）
+	// last_logout 二次失效检查
 	if user.LastLogout != nil && claims.IssuedAt != nil {
 		if claims.IssuedAt.Time.Before(*user.LastLogout) {
 			result.Valid = false

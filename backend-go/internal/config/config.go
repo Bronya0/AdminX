@@ -5,7 +5,7 @@
 //  2. configs/config.yaml（本地开发默认值）
 //  3. 结构体默认值
 //
-// 环境变量前缀 DJA_（AdminX 缩写），如 DJA_SERVER_PORT。
+// 环境变量前缀 DJA_（缩写），如 DJA_SERVER_PORT。
 // 配置文件示例见 configs/config.example.yaml。
 package config
 

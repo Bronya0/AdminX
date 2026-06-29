@@ -379,7 +379,6 @@ export interface SystemComponentItem {
 export interface SystemComponentsData {
   platform: {
     python_version: string
-    django_version: string
     os: string
   }
   components: SystemComponentItem[]

@@ -1,6 +1,5 @@
 // Package response 提供统一的 {code, msg, data} 响应封装。
 //
-// 对齐 AdminX 的 StandardJsonRenderer：
 //   - 所有响应 HTTP 状态码恒为 200
 //   - 业务状态在 body.code 字段（200/201/400/401/403/404/423/500...）
 //   - 结构: {"code": int, "msg": string, "data": any}
@@ -22,7 +21,7 @@ type Body struct {
 	Data interface{} `json:"data"`
 }
 
-// PaginatedData 分页响应的 data 字段结构（对齐 AdminX StandardPagination）。
+// PaginatedData 分页响应的 data 字段结构。
 type PaginatedData struct {
 	Count    int64        `json:"count"`
 	Next     string       `json:"next"`
@@ -46,7 +45,7 @@ func NoContent(c *gin.Context) {
 }
 
 // Fail 返回失败响应: {code:code, msg:msg, data:null}
-// HTTP 状态码恒为 200（对齐 AdminX StandardJsonRenderer）。
+// HTTP 状态码恒为 200。
 func Fail(c *gin.Context, code int, msg string) {
 	c.JSON(200, Body{Code: code, Msg: msg, Data: nil})
 }
