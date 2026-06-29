@@ -33,11 +33,15 @@ func (s *ClusterService) CreateNode(n *model.ClusterNode) (*model.ClusterNode, e
 	return n, nil
 }
 
-func (s *ClusterService) UpdateNode(n *model.ClusterNode) (*model.ClusterNode, error) {
-	if err := s.repo.UpdateNode(n); err != nil {
+func (s *ClusterService) UpdateNode(id string, updates map[string]interface{}) (*model.ClusterNode, error) {
+	if err := s.db.Model(&model.ClusterNode{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return nil, apperr.ErrInternal
 	}
-	return n, nil
+	var n model.ClusterNode
+	if err := s.db.First(&n, "id = ?", id).Error; err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &n, nil
 }
 
 func (s *ClusterService) DeleteNode(id string) error {

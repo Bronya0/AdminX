@@ -4,7 +4,6 @@ package database
 import (
 	"fmt"
 	"log/slog"
-	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -110,6 +109,3 @@ func autoMigrate(db *gorm.DB) error {
 	}
 	return db.AutoMigrate(models...)
 }
-
-// 用于避免 time 包未使用的编译错误（占位，后续迁移逻辑可能用到）
-var _ = time.Now

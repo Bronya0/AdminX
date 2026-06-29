@@ -32,12 +32,15 @@ func (s *PolicyService) GetPolicy() (*model.PasswordPolicy, error) {
 }
 
 // UpdatePolicy 更新密码策略。
-func (s *PolicyService) UpdatePolicy(p *model.PasswordPolicy) (*model.PasswordPolicy, error) {
-	p.ID = 1 // 强制单例
-	if err := s.db.Save(p).Error; err != nil {
+func (s *PolicyService) UpdatePolicy(updates map[string]interface{}) (*model.PasswordPolicy, error) {
+	if err := s.db.Model(&model.PasswordPolicy{}).Where("id = 1").Updates(updates).Error; err != nil {
 		return nil, apperr.ErrInternal
 	}
-	return p, nil
+	var p model.PasswordPolicy
+	if err := s.db.First(&p, 1).Error; err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &p, nil
 }
 
 // ChangePassword 用户修改自己的密码（含历史校验 + 策略校验）。
@@ -70,26 +73,26 @@ func (s *PolicyService) ChangePassword(userID, oldPassword, newPassword string) 
 		historyCount = 0
 	}
 
-	// 历史校验（防重用最近 N 个密码）
-	var histories []model.PasswordHistory
-	if historyCount > 0 {
-		s.db.Where("user_id = ?", userID).Order("created_at DESC").
-			Limit(historyCount).Find(&histories)
-	}
-	for _, h := range histories {
-		if crypto.CheckPassword(h.PasswordHash, newPassword) == nil {
-			return apperr.New(400, "新密码不能与最近使用过的密码相同")
-		}
-	}
-
 	// 哈希新密码
 	hashed, err := crypto.HashPassword(newPassword)
 	if err != nil {
 		return apperr.ErrInternal
 	}
 
-	// 事务: 更新密码 + 写历史
+	// 事务: 历史检查 + 更新密码 + 写历史
 	return s.db.Transaction(func(tx *gorm.DB) error {
+		var histories []model.PasswordHistory
+		if historyCount > 0 {
+			if err := tx.Where("user_id = ?", userID).Order("created_at DESC").
+				Limit(historyCount).Find(&histories).Error; err != nil {
+				return err
+			}
+		}
+		for _, h := range histories {
+			if crypto.CheckPassword(h.PasswordHash, newPassword) == nil {
+				return apperr.New(400, "新密码不能与最近使用过的密码相同")
+			}
+		}
 		if err := tx.Model(&user).Update("password", hashed).Error; err != nil {
 			return err
 		}

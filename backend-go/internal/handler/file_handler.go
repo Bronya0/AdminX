@@ -25,7 +25,8 @@ func NewFileHandler(svc *service.FileService, logger *slog.Logger) *FileHandler 
 func (h *FileHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		response.Fail(c, 400, "未提供文件: "+err.Error())
+		h.logger.Error("获取上传文件失败", "error", err)
+		response.Fail(c, 400, "未提供文件")
 		return
 	}
 	// uploadedBy 用 user_id（审计追溯需要唯一标识）

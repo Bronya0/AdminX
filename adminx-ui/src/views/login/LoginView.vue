@@ -178,11 +178,6 @@ onMounted(async () => {
   } catch (e) {
     loginBgImage.value = localStorage.getItem('login_bg_image') || ''
   }
-  // 检查是否需要验证码（从配置读取）
-  // captchaEnabled.value = true
-  // if (captchaEnabled.value) {
-  //   fetchCaptcha()
-  // }
 })
 </script>
 

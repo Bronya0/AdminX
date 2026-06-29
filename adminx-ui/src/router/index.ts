@@ -161,9 +161,14 @@ router.beforeEach(async (to, from) => {
     return '/dashboard'
   }
 
-  // 访问根路径时，按 home_page 跳转
+  // 访问根路径时，按 home_page 跳转（校验目标页面的权限）
   if (to.path === '/') {
-    const target = userStore.user?.home_page || userStore.menus?.[0]?.path || '/dashboard'
+    let target = userStore.user?.home_page || userStore.menus?.[0]?.path || '/dashboard'
+    const targetRoute = router.resolve(target)
+    const targetPerm = targetRoute.meta?.permission as string | undefined
+    if (targetPerm && !userStore.hasPermission(targetPerm)) {
+      target = '/dashboard'
+    }
     if (target !== to.path) return target
   }
 

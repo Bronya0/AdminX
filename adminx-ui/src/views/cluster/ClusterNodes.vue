@@ -116,14 +116,7 @@
               <a-button type="link" size="small" @click="handleEdit(record)">
                 <EditOutlined /> 编辑
               </a-button>
-              <a-button
-                type="link"
-                size="small"
-                :disabled="record.status !== 'online'"
-                @click="handleHeartbeat(record)"
-              >
-                <HeartOutlined /> 心跳
-              </a-button>
+
               <a-popconfirm
                 title="确定要删除该节点吗？"
                 @confirm="handleDelete(record)"
@@ -228,7 +221,7 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  HeartOutlined,
+
 } from '@ant-design/icons-vue'
 import { clusterApi } from '@/api/cluster'
 import type { ClusterNode, ClusterOverview } from '@/types'
@@ -390,6 +383,7 @@ const handleEdit = (record: ClusterNode) => {
     is_active: record.is_active,
   })
   modalVisible.value = true
+  formRef.value?.clearValidate?.()
 }
 
 // 删除
@@ -399,12 +393,6 @@ const handleDelete = async (record: ClusterNode) => {
     message.success('删除成功')
     loadData()
   } catch { /* interceptor handles error */ }
-}
-
-// 心跳
-const handleHeartbeat = async (record: ClusterNode) => {
-  message.info(`向节点 ${record.name} 发送心跳检测...`)
-  // 实际实现需要后端支持心跳检测接口
 }
 
 // 弹窗确认

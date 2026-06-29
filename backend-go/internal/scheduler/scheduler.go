@@ -97,7 +97,7 @@ func (m *Manager) addJob(ctx context.Context, job *model.ScheduleJob) bool {
 	gj, err := m.scheduler.NewJob(
 		jobDef,
 		gocron.NewTask(func() {
-			m.jobSvc.ExecuteJob(ctx, jobID)
+			m.jobSvc.ExecuteJob(context.Background(), jobID)
 		}),
 		gocron.WithName(job.Name),
 	)

@@ -71,6 +71,7 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 		locked, remaining, err := s.lockRepo.IsLocked(username, s.lockDuration)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "检查登录锁失败", "error", err, "username", username)
+				return nil, apperr.ErrInternal
 		}
 		if locked {
 			s.recordLoginLog(nil, username, ip, userAgent, false, fmt.Sprintf("账号已锁定，%d秒后重试", remaining))

@@ -325,12 +325,12 @@ const handleLogout = () => {
     title: '确认退出',
     content: '确定要退出登录吗？',
     onOk: async () => {
-      await router.replace('/login').catch(() => {})
-      message.success('已退出登录')
       if (userStore.refreshToken) {
         try { await authApi.logout(userStore.refreshToken) } catch { /* ignore */ }
       }
       userStore.clearToken()
+      message.success('已退出登录')
+      await router.replace('/login').catch(() => {})
     },
   })
 }

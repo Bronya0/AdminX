@@ -121,7 +121,7 @@ func (s *RoleService) Delete(id string) error {
 		return err
 	}
 	if err := s.roleRepo.Delete(id); err != nil {
-		if err == gorm.ErrInvalidData {
+		if err == repository.ErrSystemRoleNotDeletable {
 			return apperr.New(403, "系统内置角色不允许删除")
 		}
 		return apperr.ErrInternal

@@ -234,8 +234,8 @@ func (s *JobService) executePython(ctx context.Context, job *model.ScheduleJob) 
 		return "", fmt.Errorf("handler %s 签名不兼容，期望 func() (string, error)，实际 %v", job.Handler, ht)
 	}
 	result := reflect.ValueOf(handler).Call([]reflect.Value{})
-	if len(result) > 0 {
-		if err, ok := result[0].Interface().(error); ok && err != nil {
+	if len(result) > 1 {
+		if err, ok := result[1].Interface().(error); ok && err != nil {
 			return "", err
 		}
 		str, ok := result[0].Interface().(string)

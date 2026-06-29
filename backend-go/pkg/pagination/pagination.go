@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -80,7 +81,7 @@ func PreviousURL(c *gin.Context, page, size int) string {
 
 func buildPageURL(c *gin.Context, page, size int) string {
 	scheme := "http"
-	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+	if c.Request.TLS != nil || strings.HasPrefix(c.GetHeader("X-Forwarded-Proto"), "https") {
 		scheme = "https"
 	}
 	// 复制 query 参数，覆盖 page/size

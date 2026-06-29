@@ -255,6 +255,11 @@ const handleMarkAllRead = async () => {
   await notificationApi.markAllRead()
   unreadCount.value = 0
   listData.value.forEach(item => { item.is_read = true })
+  // 同步更新头部 badge（重新查询后端确保一致性）
+  try {
+    const cnt = await notificationApi.unreadCount()
+    unreadCount.value = cnt.count
+  } catch { /* ignore */ }
   message.success('已全部标记已读')
 }
 

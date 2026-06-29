@@ -7,7 +7,6 @@ import (
 
 	"djangoadminx/pkg/response"
 
-	"djangoadminx/internal/model"
 	"djangoadminx/internal/service"
 )
 
@@ -33,12 +32,12 @@ func (h *PolicyHandler) GetPolicy(c *gin.Context) {
 
 // UpdatePolicy PUT/PATCH /policy/policy/
 func (h *PolicyHandler) UpdatePolicy(c *gin.Context) {
-	var p model.PasswordPolicy
-	if err := c.ShouldBindJSON(&p); err != nil {
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
 		response.BindingError(c, err)
 		return
 	}
-	result, err := h.svc.UpdatePolicy(&p)
+	result, err := h.svc.UpdatePolicy(updates)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

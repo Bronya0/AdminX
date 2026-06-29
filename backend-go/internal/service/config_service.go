@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -297,10 +298,12 @@ func (s *ConfigService) parseValue(c *model.Config) interface{} {
 	// 加密配置解密
 	if c.IsEncrypted {
 		if s.aes == nil {
+			slog.Default().Warn("AES 密钥未配置，无法解密", "key", c.Key)
 			return "<<解密失败>>"
 		}
 		decrypted, err := s.aes.Decrypt(raw)
 		if err != nil {
+			slog.Default().Warn("配置解密失败", "key", c.Key, "error", err)
 			return "<<解密失败>>"
 		}
 		raw = decrypted

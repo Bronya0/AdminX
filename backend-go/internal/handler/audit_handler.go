@@ -51,7 +51,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 }
 
 func (h *AuditHandler) Get(c *gin.Context) {
-	response.FailWithData(c, 200, "use list endpoint", nil)
+	response.FailWithData(c, 400, "use list endpoint", nil)
 }
 
 var _ = strconv.Atoi

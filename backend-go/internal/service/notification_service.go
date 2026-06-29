@@ -108,18 +108,39 @@ func (s *NotificationService) ListWebhooks(offset, limit int) ([]model.WebhookCo
 	return s.repo.ListWebhooks(offset, limit)
 }
 
-func (s *NotificationService) CreateWebhook(w *model.WebhookConfig) (*model.WebhookConfig, error) {
+func (s *NotificationService) CreateWebhook(updates map[string]interface{}) (*model.WebhookConfig, error) {
+	name, _ := updates["name"].(string)
+	url, _ := updates["url"].(string)
+	secret, _ := updates["secret"].(string)
+	events, _ := updates["events"].(string)
+	isActive := true
+	if v, ok := updates["is_active"]; ok {
+		if b, ok := v.(bool); ok {
+			isActive = b
+		}
+	}
+	w := &model.WebhookConfig{
+		Name:     name,
+		URL:      url,
+		Secret:   secret,
+		Events:   events,
+		IsActive: isActive,
+	}
 	if err := s.repo.CreateWebhook(w); err != nil {
 		return nil, apperr.ErrInternal
 	}
 	return w, nil
 }
 
-func (s *NotificationService) UpdateWebhook(w *model.WebhookConfig) (*model.WebhookConfig, error) {
-	if err := s.repo.UpdateWebhook(w); err != nil {
+func (s *NotificationService) UpdateWebhook(id string, updates map[string]interface{}) (*model.WebhookConfig, error) {
+	if err := s.db.Model(&model.WebhookConfig{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return nil, apperr.ErrInternal
 	}
-	return w, nil
+	var w model.WebhookConfig
+	if err := s.db.First(&w, "id = ?", id).Error; err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	return &w, nil
 }
 
 func (s *NotificationService) DeleteWebhook(id string) error {

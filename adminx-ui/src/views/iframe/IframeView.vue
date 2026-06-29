@@ -54,7 +54,7 @@ const safeUrl = computed(() => (isSafeUrl(externalUrl.value) ? externalUrl.value
 // 仅对通过校验的 URL 注入 token，并使用 hash 避免 token 进入 query string 被日志记录。
 const iframeUrl = computed(() => {
   if (!safeUrl.value) return ''
-  const sep = safeUrl.value.includes('?') ? '&' : '?'
+  const sep = safeUrl.value.includes('#') ? '&' : '#'
   return `${safeUrl.value}${sep}token=${encodeURIComponent(userStore.token || '')}`
 })
 

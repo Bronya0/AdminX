@@ -1,10 +1,14 @@
 package repository
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 
 	"djangoadminx/internal/model"
 )
+
+var ErrSystemRoleNotDeletable = errors.New("system role cannot be deleted")
 
 // RoleRepo 角色数据访问。
 type RoleRepo struct {
@@ -60,7 +64,7 @@ func (r *RoleRepo) Delete(id string) error {
 		return err
 	}
 	if role.IsSystem {
-		return gorm.ErrInvalidData
+		return ErrSystemRoleNotDeletable
 	}
 	// 清除菜单关联后删除
 	return r.db.Transaction(func(tx *gorm.DB) error {

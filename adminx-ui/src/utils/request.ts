@@ -155,7 +155,7 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
   return apiClient
     .post<{ access: string; refresh: string }>('/accounts/refresh/', { refresh: refreshToken })
     .then((res) => {
-      const payload = res.data as unknown as { access: string; refresh: string }
+      const payload = res as unknown as { access: string; refresh: string }
       userStore.setToken(payload.access, payload.refresh)
       flushRefreshQueue(payload.access, null)
       // 重放原请求（标记 _retried，防止重放后再次 401 时无限刷新）

@@ -434,6 +434,7 @@ const handleEdit = (record: Config) => {
     is_active: record.is_active,
   })
   modalVisible.value = true
+  formRef.value?.clearValidate?.()
 }
 
 // 删除

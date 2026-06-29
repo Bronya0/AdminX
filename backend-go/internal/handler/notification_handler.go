@@ -8,7 +8,6 @@ import (
 	"djangoadminx/pkg/pagination"
 	"djangoadminx/pkg/response"
 
-	"djangoadminx/internal/model"
 	"djangoadminx/internal/service"
 )
 
@@ -88,12 +87,12 @@ func (h *NotificationHandler) ListWebhooks(c *gin.Context) {
 }
 
 func (h *NotificationHandler) CreateWebhook(c *gin.Context) {
-	var w model.WebhookConfig
-	if err := c.ShouldBindJSON(&w); err != nil {
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
 		response.BindingError(c, err)
 		return
 	}
-	result, err := h.svc.CreateWebhook(&w)
+	result, err := h.svc.CreateWebhook(updates)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
@@ -102,13 +101,13 @@ func (h *NotificationHandler) CreateWebhook(c *gin.Context) {
 }
 
 func (h *NotificationHandler) UpdateWebhook(c *gin.Context) {
-	var w model.WebhookConfig
-	if err := c.ShouldBindJSON(&w); err != nil {
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
 		response.BindingError(c, err)
 		return
 	}
-	w.ID = c.Param("id")
-	result, err := h.svc.UpdateWebhook(&w)
+	id := c.Param("id")
+	result, err := h.svc.UpdateWebhook(id, updates)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

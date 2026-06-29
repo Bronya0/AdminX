@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"testing"
 
-	"djangoadminx/internal/model"
 	"djangoadminx/internal/repository"
 )
 
@@ -142,7 +141,7 @@ func TestNotificationService_WebhookCRUD(t *testing.T) {
 	svc := NewNotificationService(db, repository.NewNotificationRepo(db), slog.Default())
 
 	w, err := svc.CreateWebhook(
-		&model.WebhookConfig{Name: "test-webhook", URL: "http://example.com/hook", IsActive: true},
+		map[string]interface{}{"name": "test-webhook", "url": "http://example.com/hook", "is_active": true},
 	)
 	if err != nil {
 		t.Fatalf("CreateWebhook 失败: %v", err)
