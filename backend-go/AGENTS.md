@@ -39,7 +39,7 @@ cmd/server/main.go   ← 唯一组装点
 
 - service 层返回 `*apperr.AppError`（携带业务 code）
 - handler 层用 `response.Error(c, logger, err)` 统一转换
-- **所有响应 HTTP 恒 200**，业务状态在 `code` 字段（对齐 Django）
+- **所有响应 HTTP 恒 200**，业务状态在 `code` 字段（对齐 Python 版）
 
 ### 统一响应
 

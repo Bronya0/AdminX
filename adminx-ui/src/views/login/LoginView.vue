@@ -92,7 +92,7 @@ const captchaSvg = ref('')
 const captchaId = ref('')
 const formRef = ref()
 const siteName = ref('AdminX')
-const siteDesc = ref('企业级 Django Admin 框架')
+const siteDesc = ref('企业级 Admin 框架')
 const loginBgImage = ref('')
 
 // SVG 验证码 data URI（用 img 标签替代 v-html 防 XSS）

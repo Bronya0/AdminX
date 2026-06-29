@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/pkg/response"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/captcha"
+	"adminx/internal/captcha"
 )
 
 // CaptchaHandler 验证码 HTTP 处理器。

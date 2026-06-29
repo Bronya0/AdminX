@@ -1,6 +1,6 @@
-// Package router 注册所有 HTTP 路由，对齐 Django 的 urls.py 路由树。
+// Package router 注册所有 HTTP 路由，对齐 AdminX 的 urls.py 路由树。
 //
-// 路由前缀: /djangoadminx/api/v1/（对齐 Django FORCE_SCRIPT_NAME）。
+// 路由前缀: /adminx/api/v1/。
 // 完整覆盖阶段 1-6 所有模块。
 package router
 
@@ -13,11 +13,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/config"
-	"djangoadminx/internal/handler"
-	"djangoadminx/internal/jwt"
-	appmw "djangoadminx/internal/middleware"
-	"djangoadminx/pkg/response"
+	"adminx/internal/config"
+	"adminx/internal/handler"
+	"adminx/internal/jwt"
+	appmw "adminx/internal/middleware"
+	"adminx/pkg/response"
 )
 
 // Deps 路由依赖（依赖注入）。
@@ -83,7 +83,7 @@ func New(deps *Deps) *gin.Engine {
 		public.GET("/captcha/captcha/", deps.CapH.Generate)
 		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
 
-		// cluster 业务组件注册/心跳（AllowAny，对齐 Django）
+		// cluster 业务组件注册/心跳（AllowAny，对齐 AdminX）
 		if deps.ClsH != nil {
 			public.POST("/cluster/components/register/", deps.ClsH.Register)
 			public.POST("/cluster/components/heartbeat/", deps.ClsH.Heartbeat)

@@ -26,7 +26,7 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
-// RequestLog 记录每个请求的方法、路径、状态码、耗时（对齐 Django RequestLogMiddleware）。
+// RequestLog 记录每个请求的方法、路径、状态码、耗时（对齐 AdminX RequestLogMiddleware）。
 func RequestLog() gin.HandlerFunc {
 	logger := slog.Default()
 	return func(c *gin.Context) {

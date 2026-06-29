@@ -12,10 +12,10 @@ import (
 
 	"gorm.io/gorm"
 
-	apperr "djangoadminx/pkg/errors"
+	apperr "adminx/pkg/errors"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 var _ = time.Second // 保留 time 引用（executeShell 超时用到）

@@ -4,7 +4,7 @@ package repository
 import (
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // UserRepo 用户数据访问。

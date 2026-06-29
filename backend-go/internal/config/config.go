@@ -32,7 +32,7 @@ type Config struct {
 type ServerConfig struct {
 	Host       string `mapstructure:"host"`
 	Port       int    `mapstructure:"port"`
-	BasePath   string `mapstructure:"base_path"` // 对应 Django FORCE_SCRIPT_NAME，如 /djangoadminx
+	BasePath   string `mapstructure:"base_path"` // 对应 FORCE_SCRIPT_NAME，如 /adminx
 	Mode       string `mapstructure:"mode"`      // debug / release / test
 	TimeoutSec int    `mapstructure:"timeout_sec"`
 }
@@ -134,13 +134,13 @@ func setDefaults(v *viper.Viper) {
 	// Server
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8000)
-	v.SetDefault("server.base_path", "/djangoadminx")
+	v.SetDefault("server.base_path", "/adminx")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("server.timeout_sec", 120)
 
 	// Database
 	v.SetDefault("database.driver", "postgres")
-	v.SetDefault("database.dsn", "postgres://postgres:postgres@localhost:5432/djangoadminx?sslmode=disable")
+	v.SetDefault("database.dsn", "postgres://postgres:postgres@localhost:5432/adminx?sslmode=disable")
 	v.SetDefault("database.max_open_conns", 100)
 	v.SetDefault("database.max_idle_conns", 10)
 	v.SetDefault("database.conn_max_lifetime", "1h")
@@ -153,7 +153,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.secret", "change-me-in-production")
 	v.SetDefault("jwt.access_expire", "30m")
 	v.SetDefault("jwt.refresh_expire", "168h")
-	v.SetDefault("jwt.issuer", "djangoadminx")
+	v.SetDefault("jwt.issuer", "adminx")
 
 	// Logging
 	v.SetDefault("logging.level", "info")

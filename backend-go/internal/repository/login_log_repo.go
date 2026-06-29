@@ -3,7 +3,7 @@ package repository
 import (
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // LoginLogRepo 登录日志数据访问。

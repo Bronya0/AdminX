@@ -5,13 +5,13 @@
 server:
   host: "0.0.0.0"
   port: 8000
-  base_path: "/djangoadminx"        # 对应 Django FORCE_SCRIPT_NAME
-  mode: "debug"                      # debug / release / test
+  base_path: "/adminx"                  # URL 基础路径
+  mode: "debug"                         # debug / release / test
   timeout_sec: 120
 
 database:
   driver: "postgres"
-  dsn: "postgres://postgres:postgres@localhost:5432/djangoadminx?sslmode=disable"
+  dsn: "postgres://postgres:postgres@localhost:5432/adminx?sslmode=disable"
   max_open_conns: 100
   max_idle_conns: 10
   conn_max_lifetime: "1h"
@@ -24,7 +24,7 @@ jwt:
   secret: "change-me-in-production"  # 生产必须改（DJA_JWT_SECRET）
   access_expire: "30m"
   refresh_expire: "168h"
-  issuer: "djangoadminx"
+  issuer: "adminx"
 
 logging:
   level: "info"                      # debug / info / warn / error

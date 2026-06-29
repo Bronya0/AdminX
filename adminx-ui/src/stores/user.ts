@@ -30,7 +30,7 @@ export const useUserStore = defineStore(
     const menus = ref<Menu[]>([])
     const theme = ref<ThemeConfig>({ ...defaultTheme })
     const siteName = ref<string>('AdminX')
-    const siteDesc = ref<string>('企业级 Django Admin 框架')
+    const siteDesc = ref<string>('企业级 Admin 框架')
     const siteLogo = ref<string>('')
     const favicon = ref<string>('')
     const idleTimeout = ref<number>(30) // 会话空闲超时（分钟），0=不超时

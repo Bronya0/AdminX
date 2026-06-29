@@ -1,6 +1,6 @@
 // Package model 定义所有 GORM 数据模型。
 //
-// 设计约定（独立于 Django schema，Go 风格）:
+// 设计约定（独立于 AdminX schema，Go 风格）:
 //   - UUID 主键: string 类型 + gorm type:uuid + default:gen_random_uuid()
 //   - 软删除: 仅 User 使用 gorm.DeletedAt
 //   - 时间戳: time.Time + autoCreateTime/autoUpdateTime
@@ -53,7 +53,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// IsOnline 在线判定：最后活动时间在 5 分钟以内（对齐 Django）。
+// IsOnline 在线判定：最后活动时间在 5 分钟以内（对齐 AdminX）。
 func (u *User) IsOnline() bool {
 	if u.LastActivity == nil {
 		return false

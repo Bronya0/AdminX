@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AdminX 一键部署脚本 — Ubuntu/Debian
+# DjangoAdminX 一键部署脚本 — Ubuntu/Debian
 # 用法: bash scripts/deploy.sh
 set -euo pipefail
 
@@ -7,7 +7,7 @@ APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$APP_DIR"
 
 echo "=========================================="
-echo " AdminX 一键部署"
+echo " DjangoAdminX 一键部署"
 echo "=========================================="
 
 # ── 1. 系统依赖 ──

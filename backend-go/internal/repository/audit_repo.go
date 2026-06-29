@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // AuditRepo 审计日志数据访问。

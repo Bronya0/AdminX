@@ -5,11 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/pkg/pagination"
-	"djangoadminx/pkg/response"
+	"adminx/pkg/pagination"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/repository"
-	"djangoadminx/internal/service"
+	"adminx/internal/repository"
+	"adminx/internal/service"
 )
 
 // JobHandler 定时任务 HTTP 处理器。

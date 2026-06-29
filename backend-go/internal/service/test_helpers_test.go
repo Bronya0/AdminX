@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // setupTestDB 初始化 SQLite :memory: 数据库。

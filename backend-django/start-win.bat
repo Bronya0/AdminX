@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 REM Windows 开发调试脚本 — manage.py runserver 模式
 REM 使用方式: 双击运行
@@ -19,7 +19,7 @@ REM 默认使用 dev 配置（manage.py 已默认 config.settings.dev）
 set DJANGO_SETTINGS_MODULE=config.settings.dev
 
 echo ^>^>^> 启动调度器进程（独立窗口）...
-start "AdminX Scheduler" cmd /c "cd /d %~dp0 && call .venv\Scripts\activate.bat && python manage.py run_scheduler"
+start "DjangoAdminX Scheduler" cmd /c "cd /d %~dp0 && call .venv\Scripts\activate.bat && python manage.py run_scheduler"
 
 echo ^>^>^> 执行数据库迁移...
 python manage.py migrate --noinput

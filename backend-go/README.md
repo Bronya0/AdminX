@@ -110,7 +110,7 @@ bash scripts/dev.sh    # 开发（go run，热重载自行配 air）
 bash scripts/build.sh  # 构建二进制到 bin/
 ```
 
-启动后访问 `http://localhost:8000/djangoadminx/api/v1/common/health/`。
+启动后访问 `http://localhost:8000/adminx/api/v1/common/health/`。
 
 ### 前端联调
 
@@ -118,16 +118,16 @@ bash scripts/build.sh  # 构建二进制到 bin/
 
 ## 架构设计
 
-### 与 Django 实现的差异
+### 与 Python 实现的差异
 
-| 维度 | Django | Go |
+| 维度 | Python 版 | Go 版 |
 |---|---|---|
 | 数据库 | 独立（不共享 schema） | 独立（AutoMigrate 从零建表） |
 | 密码哈希 | pbkdf2_sha256 | bcrypt |
 | 配置加密 | Fernet | AES-GCM（标准库） |
 | 调度器 HA | Redis leader 锁（进程级） | gocron 任务级锁（多实例并行不同任务） |
 | 响应格式 | `{code,msg,data}` HTTP 200 | 完全一致 |
-| 路由前缀 | `/djangoadminx/api/v1/` | 完全一致 |
+| 路由前缀 | `/adminx/api/v1/` | 完全一致 |
 
 ### HA 部署
 
@@ -149,7 +149,7 @@ Nginx (负载均衡)
 - JWT 防 `alg:none` 攻击（强制 HMAC 算法校验）
 - 登出后 access token 通过 `last_logout` 二次失效（即使未过期）
 - logout 校验 refresh token 归属（防 DoS）
-- RBAC glob 路径匹配（对齐 Django `fnmatch`）
+- RBAC glob 路径匹配（对齐 Python 版 `fnmatch`）
 - 加密配置明文不缓存到 Redis
 - 限流：anon(30/min) / user / introspect(300/min) 三级
 

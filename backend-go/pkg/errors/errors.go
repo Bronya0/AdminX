@@ -1,6 +1,6 @@
 // Package errors 定义应用级错误类型与哨兵错误。
 //
-// AppError 携带 HTTP 业务状态码（对齐 Django 的 {code,msg,data} 中的 code 值），
+// AppError 携带 HTTP 业务状态码（对齐 AdminX 的 {code,msg,data} 中的 code 值），
 // handler 层通过 errors.As 提取 code 决定返回的业务码。
 package errors
 
@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-// AppError 应用错误，Code 对齐 Django StandardJsonRenderer 的 code 值。
+// AppError 应用错误，Code 对齐 AdminX StandardJsonRenderer 的 code 值。
 type AppError struct {
 	Code    int    // 业务状态码（200/400/401/403/404/409/423/500...）
 	Message string // 用户可见的错误信息

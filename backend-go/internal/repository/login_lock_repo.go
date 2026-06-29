@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // LoginLockRepo 登录锁定数据访问。

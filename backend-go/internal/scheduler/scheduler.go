@@ -17,9 +17,9 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/redis/go-redis/v9"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
-	"djangoadminx/internal/service"
+	"adminx/internal/model"
+	"adminx/internal/repository"
+	"adminx/internal/service"
 )
 
 // Manager 调度器管理器。

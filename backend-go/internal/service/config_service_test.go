@@ -7,10 +7,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"djangoadminx/pkg/crypto"
+	"adminx/pkg/crypto"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 func newTestAES() *crypto.AESGCM {

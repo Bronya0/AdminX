@@ -110,7 +110,7 @@
             </a-form-item>
 
             <a-form-item label="站点描述">
-              <a-textarea v-model:value="form.siteDesc" placeholder="如: 企业级 Django Admin 框架" :rows="2" @change="onSiteDescChange" />
+              <a-textarea v-model:value="form.siteDesc" placeholder="如: 企业级 Admin 框架" :rows="2" @change="onSiteDescChange" />
             </a-form-item>
 
             <a-form-item label="Logo URL">

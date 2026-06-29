@@ -5,10 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/pkg/pagination"
-	"djangoadminx/pkg/response"
+	"adminx/pkg/pagination"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/service"
+	"adminx/internal/service"
 )
 
 // NotificationHandler 通知中心 HTTP 处理器。

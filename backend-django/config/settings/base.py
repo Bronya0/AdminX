@@ -171,7 +171,7 @@ SIMPLE_JWT = {
 
 # ---------- Spectacular (API 文档) ----------
 SPECTACULAR_SETTINGS = {
-    "TITLE": "AdminX API",
+    "TITLE": "DjangoAdminX API",
     "DESCRIPTION": "企业级 Django Admin 框架 API",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,

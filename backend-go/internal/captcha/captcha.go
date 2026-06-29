@@ -1,6 +1,6 @@
 // Package captcha 图片验证码（SVG 渲染 + Redis 存储）。
 //
-// 对齐 Django captcha: 生成验证码 → 存 Redis → 返回 captcha_id + SVG 图片。
+// 对齐 AdminX captcha: 生成验证码 → 存 Redis → 返回 captcha_id + SVG 图片。
 package captcha
 
 import (

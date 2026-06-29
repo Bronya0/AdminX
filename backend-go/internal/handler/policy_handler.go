@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/pkg/response"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/service"
+	"adminx/internal/service"
 )
 
 // PolicyHandler 密码策略 HTTP 处理器。

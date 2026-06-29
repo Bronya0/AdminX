@@ -3,11 +3,11 @@ package service
 import (
 	"gorm.io/gorm"
 
-	apperr "djangoadminx/pkg/errors"
-	"djangoadminx/pkg/crypto"
+	apperr "adminx/pkg/errors"
+	"adminx/pkg/crypto"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 // UserService 用户业务逻辑。

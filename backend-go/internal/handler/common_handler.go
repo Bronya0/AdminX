@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"djangoadminx/pkg/response"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/service"
+	"adminx/internal/model"
+	"adminx/internal/service"
 )
 
 // CommonHandler 通用端点（dashboard/health/site-info）。

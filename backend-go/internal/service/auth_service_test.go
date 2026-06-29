@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"djangoadminx/internal/jwt"
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/jwt"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 func TestAuthService_Login_Success(t *testing.T) {

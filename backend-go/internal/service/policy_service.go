@@ -3,10 +3,10 @@ package service
 import (
 	"gorm.io/gorm"
 
-	"djangoadminx/pkg/crypto"
-	apperr "djangoadminx/pkg/errors"
+	"adminx/pkg/crypto"
+	apperr "adminx/pkg/errors"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // PolicyService 密码策略。

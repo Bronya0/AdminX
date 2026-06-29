@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	apperr "djangoadminx/pkg/errors"
+	apperr "adminx/pkg/errors"
 
-	"djangoadminx/internal/config"
-	"djangoadminx/internal/model"
+	"adminx/internal/config"
+	"adminx/internal/model"
 )
 
 // FileService 文件中心。

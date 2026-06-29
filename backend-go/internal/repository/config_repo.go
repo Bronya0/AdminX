@@ -3,7 +3,7 @@ package repository
 import (
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // ConfigRepo 配置中心数据访问。

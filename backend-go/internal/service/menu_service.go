@@ -3,10 +3,10 @@ package service
 import (
 	"gorm.io/gorm"
 
-	apperr "djangoadminx/pkg/errors"
+	apperr "adminx/pkg/errors"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 // MenuService 菜单业务逻辑。

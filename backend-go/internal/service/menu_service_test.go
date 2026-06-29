@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"djangoadminx/internal/repository"
+	"adminx/internal/repository"
 )
 
 func TestMenuService_Create(t *testing.T) {

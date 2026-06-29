@@ -6,7 +6,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// Menu 动态菜单（自增主键，对齐 Django 的 treebeard MP_Node BigAuto）。
+// Menu 动态菜单（自增主键，对齐 AdminX 的 treebeard MP_Node BigAuto）。
 //
 // 注意: path 字段是前端路由路径（非 treebeard 物化路径）。
 // 树形结构在前端按 path 前缀匹配重建（参考 menuTree.ts）。

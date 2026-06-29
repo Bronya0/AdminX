@@ -7,10 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/internal/jwt"
-	"djangoadminx/internal/middleware"
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/jwt"
+	"adminx/internal/middleware"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 // ── 跨实体联动: 用户 ↔ 角色 ↔ 菜单 → 权限 ──

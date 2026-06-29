@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/pkg/response"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/service"
+	"adminx/internal/service"
 )
 
 // MenuHandler 菜单 CRUD + 树查询。

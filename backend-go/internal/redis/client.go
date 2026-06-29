@@ -12,7 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"djangoadminx/internal/config"
+	"adminx/internal/config"
 )
 
 // Init 初始化 Redis 客户端并验证连通性。

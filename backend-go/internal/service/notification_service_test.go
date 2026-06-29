@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"djangoadminx/internal/repository"
+	"adminx/internal/repository"
 )
 
 func TestNotificationService_Create(t *testing.T) {

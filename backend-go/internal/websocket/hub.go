@@ -20,7 +20,7 @@ import (
 // 日志/事件广播的 Redis channel。
 const channelLogs = "ws:logs"
 
-// Message 推送给客户端的消息体（对齐 Django LogConsumer: {line, level}）。
+// Message 推送给客户端的消息体（对齐 AdminX LogConsumer: {line, level}）。
 type Message struct {
 	Line  string `json:"line"`
 	Level string `json:"level"`

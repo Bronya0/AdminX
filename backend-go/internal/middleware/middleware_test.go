@@ -10,8 +10,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"djangoadminx/internal/jwt"
-	"djangoadminx/internal/model"
+	"adminx/internal/jwt"
+	"adminx/internal/model"
 )
 
 // ── matchPath 纯逻辑测试 ──

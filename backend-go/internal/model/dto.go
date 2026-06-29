@@ -2,7 +2,7 @@
 //
 // 直接序列化 GORM model 会暴露内部结构（如密码字段、角色对象数组），
 // 且前端期望的扁平字段（role_names、is_online）需要计算。
-// DTO 层负责 model → 前端友好结构的转换，对齐 Django UserSerializer 字段。
+// DTO 层负责 model → 前端友好结构的转换，对齐 AdminX UserSerializer 字段。
 package model
 
 import (
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// UserDTO 用户序列化视图（对齐前端 User 接口 + Django UserSerializer）。
+// UserDTO 用户序列化视图（对齐前端 User 接口 + AdminX UserSerializer）。
 type UserDTO struct {
 	ID           string      `json:"id"`
 	Username     string      `json:"username"`
@@ -27,7 +27,7 @@ type UserDTO struct {
 	LastActivity *time.Time  `json:"last_activity"`
 	DateJoined   time.Time   `json:"date_joined"`
 	Roles        []string    `json:"roles"`      // 角色名数组（前端期望 string[]）
-	RoleNames    []string    `json:"role_names"` // 同 roles，Django 兼容字段
+	RoleNames    []string    `json:"role_names"` // 同 roles，AdminX 兼容字段
 }
 
 // ToUserDTO 将 User model 转为 DTO。

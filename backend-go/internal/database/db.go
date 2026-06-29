@@ -9,9 +9,9 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"djangoadminx/internal/config"
+	"adminx/internal/config"
 	// 注册模型包以便 AutoMigrate 能发现所有表
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // Init 初始化 GORM 连接并返回 *gorm.DB。

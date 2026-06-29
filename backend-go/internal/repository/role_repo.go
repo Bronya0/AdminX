@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 var ErrSystemRoleNotDeletable = errors.New("system role cannot be deleted")

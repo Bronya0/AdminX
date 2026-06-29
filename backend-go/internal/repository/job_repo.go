@@ -3,7 +3,7 @@ package repository
 import (
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // JobRepo 定时任务数据访问。

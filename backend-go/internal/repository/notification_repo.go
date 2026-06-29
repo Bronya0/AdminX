@@ -3,7 +3,7 @@ package repository
 import (
 	"gorm.io/gorm"
 
-	"djangoadminx/internal/model"
+	"adminx/internal/model"
 )
 
 // NotificationRepo 通知数据访问。

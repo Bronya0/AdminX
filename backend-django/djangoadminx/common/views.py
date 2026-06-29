@@ -42,7 +42,7 @@ def site_info(request):
         "code": 200,
         "msg": "success",
         "data": {
-            "site_name": Config.get_value("SITE_NAME", default="AdminX"),
+            "site_name": Config.get_value("SITE_NAME", default="DjangoAdminX"),
             "site_desc": Config.get_value("SITE_DESC", default="企业级 Django Admin 框架"),
             "site_logo": Config.get_value("SITE_LOGO", default=""),
             "site_theme_color": Config.get_value("SITE_THEME_COLOR", default="#1890ff"),

@@ -1,4 +1,4 @@
-// Package pagination 实现对齐 Django StandardPagination 的分页逻辑。
+// Package pagination 实现对齐 AdminX StandardPagination 的分页逻辑。
 //
 // 参数: ?page=1&size=10（size 上限 200）。
 // 返回结构由 pkg/response.PaginatedData 定义。
@@ -61,7 +61,7 @@ func Paginate(p Params) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// NextURL 构造下一页的完整 URL（对齐 Django 的 next 字段）。
+// NextURL 构造下一页的完整 URL（对齐 AdminX 的 next 字段）。
 // 无下一页返回空字符串。
 func NextURL(c *gin.Context, page, size int, count int64) string {
 	totalPages := int(math.Ceil(float64(count) / float64(size)))

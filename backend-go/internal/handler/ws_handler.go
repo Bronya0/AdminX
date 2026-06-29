@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	gorillaws "github.com/gorilla/websocket"
 
-	"djangoadminx/internal/jwt"
-	wsport "djangoadminx/internal/websocket"
-	"djangoadminx/pkg/response"
+	"adminx/internal/jwt"
+	wsport "adminx/internal/websocket"
+	"adminx/pkg/response"
 )
 
 // WSHandler WebSocket 处理器。

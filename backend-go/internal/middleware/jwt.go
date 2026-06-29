@@ -2,7 +2,7 @@
 //
 // 从 Authorization: Bearer <token> 解析 token，验证签名+过期，
 // 将 user_id/username/is_superuser 写入 gin.Context。
-// 同时更新用户 last_activity（60s 防抖，对齐 Django UserActivityMiddleware）。
+// 同时更新用户 last_activity（60s 防抖，对齐 AdminX UserActivityMiddleware）。
 package middleware
 
 import (
@@ -15,10 +15,10 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"djangoadminx/pkg/response"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/jwt"
-	"djangoadminx/internal/model"
+	"adminx/internal/jwt"
+	"adminx/internal/model"
 )
 
 // JWTAuth 返回 JWT 鉴权中间件。
@@ -68,7 +68,7 @@ func JWTAuth(jwtMgr *jwt.Manager, db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// 校验 last_logout（对齐 Django: logout 后旧 access token 失效）
+		// 校验 last_logout（对齐 AdminX: logout 后旧 access token 失效）
 		if user.LastLogout != nil && claims.IssuedAt != nil {
 			if claims.IssuedAt.Time.Before(*user.LastLogout) {
 				response.Fail(c, 401, "认证令牌已失效，请重新登录")

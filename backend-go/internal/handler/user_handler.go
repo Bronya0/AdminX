@@ -6,11 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"djangoadminx/pkg/pagination"
-	"djangoadminx/pkg/response"
+	"adminx/pkg/pagination"
+	"adminx/pkg/response"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/service"
+	"adminx/internal/model"
+	"adminx/internal/service"
 )
 
 // UserHandler 用户 CRUD。

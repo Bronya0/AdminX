@@ -1,5 +1,5 @@
 [Unit]
-Description=AdminX APScheduler
+Description=DjangoAdminX APScheduler
 After=network.target redis.target
 
 [Service]

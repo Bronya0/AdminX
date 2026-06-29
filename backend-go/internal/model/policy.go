@@ -25,7 +25,7 @@ type PasswordPolicy struct {
 
 func (PasswordPolicy) TableName() string { return "password_policies" }
 
-// BeforeSave 单例强制：ID 恒为 1（对齐 Django 的 save() 钩子）。
+// BeforeSave 单例强制：ID 恒为 1（对齐 AdminX 的 save() 钩子）。
 func (p *PasswordPolicy) BeforeSave(tx *gorm.DB) error {
 	p.ID = 1
 	return nil

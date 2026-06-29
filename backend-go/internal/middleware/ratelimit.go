@@ -1,6 +1,6 @@
 // Package middleware — 基于 Redis 的限流中间件（固定窗口计数器）。
 //
-// 对齐 Django DRF Throttling 三级限流:
+// 对齐 AdminX DRF Throttling 三级限流:
 //   - anon: 匿名用户（按 IP）
 //   - user: 认证用户（按 user_id）
 //   - introspect: token 校验端点专用
@@ -18,7 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
-	"djangoadminx/pkg/response"
+	"adminx/pkg/response"
 )
 
 // rateLimitScript 原子执行 INCR + EXPIRE，避免进程崩溃导致 key 无 TTL 永久封禁。

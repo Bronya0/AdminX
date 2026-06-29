@@ -1,5 +1,5 @@
 [Unit]
-Description=AdminX Scheduler (APScheduler)
+Description=DjangoAdminX Scheduler (APScheduler)
 After=network.target postgresql.service djangoadminx-web.service
 Requires=djangoadminx-web.service
 
@@ -7,10 +7,10 @@ Requires=djangoadminx-web.service
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/path/to/AdminX
+WorkingDirectory=/path/to/DjangoAdminX
 Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/path/to/AdminX/.venv/bin/python manage.py run_scheduler
+ExecStart=/path/to/DjangoAdminX/.venv/bin/python manage.py run_scheduler
 Restart=always
 RestartSec=10
 StandardOutput=journal

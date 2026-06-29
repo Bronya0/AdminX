@@ -5,8 +5,8 @@ import (
 
 	"gorm.io/datatypes"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 // AuditService 审计日志服务。

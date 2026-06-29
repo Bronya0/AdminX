@@ -5,10 +5,10 @@ import (
 
 	"gorm.io/gorm"
 
-	apperr "djangoadminx/pkg/errors"
+	apperr "adminx/pkg/errors"
 
-	"djangoadminx/internal/model"
-	"djangoadminx/internal/repository"
+	"adminx/internal/model"
+	"adminx/internal/repository"
 )
 
 // ClusterService 集群管理业务。
