@@ -1,4 +1,4 @@
-"""菜单注册 — 向 DjangoAdminX 平台注册自身菜单（幂等）"""
+"""菜单注册 — 向 AdminX 平台注册自身菜单（幂等）"""
 
 import logging
 

@@ -106,7 +106,7 @@
         <a-tab-pane key="site" tab="站点信息">
           <a-form layout="vertical" style="max-width: 600px;">
             <a-form-item label="站点名称">
-              <a-input v-model:value="form.siteName" placeholder="如: DjangoAdminX" @change="onSiteNameChange" />
+              <a-input v-model:value="form.siteName" placeholder="如: AdminX" @change="onSiteNameChange" />
             </a-form-item>
 
             <a-form-item label="站点描述">

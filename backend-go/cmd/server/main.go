@@ -1,4 +1,4 @@
-// Package main 是 DjangoAdminX Go 后端的入口。
+// Package main 是 AdminX Go 后端的入口。
 //
 // 完整启动流程: 配置 → 日志 → DB → Redis → AES → JWT → repository → service → handler → router → HTTP。
 // 支持 SIGINT/SIGTERM 优雅关闭。
@@ -43,7 +43,7 @@ func main() {
 
 	// 2. 日志
 	log := logger.Init(cfg.Logging.Level, cfg.Logging.Format)
-	log.Info("DjangoAdminX Go 后端启动中", "mode", cfg.Server.Mode)
+	log.Info("AdminX Go 后端启动中", "mode", cfg.Server.Mode)
 
 	// 3. 数据库
 	db, err := database.Init(cfg, log)

@@ -1,4 +1,4 @@
-# DjangoAdminX Bug Report — 全部已修复
+# AdminX Bug Report — 全部已修复
 
 ## 前端 Bug (12个)
 

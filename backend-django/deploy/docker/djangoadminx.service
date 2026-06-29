@@ -1,5 +1,5 @@
 [Unit]
-Description=DjangoAdminX Gunicorn
+Description=AdminX Gunicorn
 After=network.target redis.target postgresql.target
 
 [Service]

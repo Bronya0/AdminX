@@ -29,7 +29,7 @@ class PostUpdate(BaseModel):
     status: Literal["draft", "published"] | None = None
 
 
-# ─── 统一响应模型（与 DjangoAdminX 平台保持一致） ───
+# ─── 统一响应模型（与 AdminX 平台保持一致） ───
 
 class ApiResponse(BaseModel):
     code: int = 200

@@ -91,7 +91,7 @@ const captchaEnabled = ref(false)
 const captchaSvg = ref('')
 const captchaId = ref('')
 const formRef = ref()
-const siteName = ref('DjangoAdminX')
+const siteName = ref('AdminX')
 const siteDesc = ref('企业级 Django Admin 框架')
 const loginBgImage = ref('')
 

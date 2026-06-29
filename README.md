@@ -1,4 +1,4 @@
-# DjangoAdminX
+# AdminX
 
 > 企业级 Django Admin 框架底座 — RBAC 权限、动态菜单、JWT 认证、配置中心（含业务选项列表）、定时任务、集群管理、系统监控、文件中心、加密工具、高可用部署。
 
@@ -113,8 +113,8 @@ pip install aiohttp
 
 ```bash
 # 克隆
-git clone https://github.com/Bronya0/DjangoAdminX.git
-cd DjangoAdminX
+git clone https://github.com/Bronya0/AdminX.git
+cd AdminX
 
 # ── 后端（Django） ──────────────────────────────
 cd backend-django
@@ -211,7 +211,7 @@ docker compose up -d
 本仓库为 monorepo，前端、Django 后端、Go 后端各自独立目录，共享同一 git 仓库与 CI。
 
 ```
-DjangoAdminX/
+AdminX/
 ├── adminx-ui/                     # 前端（Vue3 + Ant Design Vue）
 ├── backend-django/                # 后端实现一：Django + DRF（当前主实现）
 │   ├── djangoadminx/              #   框架代码（accounts/menu/config_center/...）
@@ -472,7 +472,7 @@ python manage.py test djangoadminx.accounts
 
 ```bash
 # 1. 修改路径
-sed -i 's|/path/to/DjangoAdminX|/var/www/djangoadminx|g' deploy/systemd/*.service
+sed -i 's|/path/to/AdminX|/var/www/djangoadminx|g' deploy/systemd/*.service
 
 # 2. 复制到系统目录
 sudo cp deploy/systemd/djangoadminx-*.service /etc/systemd/system/

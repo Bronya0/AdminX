@@ -76,7 +76,7 @@ else:
 
 # ─── JWT introspection 中间件 ───
 # 拦截 /api/v1/posts/* 请求，提取 Authorization header，
-# 转发给 DjangoAdminX introspect 接口校验，
+# 转发给 AdminX introspect 接口校验，
 # 校验通过后在 request.state.user 注入用户信息。
 PROTECTED_PREFIXES = ("/api/v1/posts", "/api/v1/register", "/api/v1/unregister")
 

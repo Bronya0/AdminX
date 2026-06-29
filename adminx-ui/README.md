@@ -1,6 +1,6 @@
 # AdminX UI
 
-基于 Vue3 + Ant Design Vue 4.x 的 DjangoAdminX 前端实现
+基于 Vue3 + Ant Design Vue 4.x 的 AdminX 前端实现
 
 ## 技术栈
 

@@ -1,4 +1,4 @@
-# DjangoAdminX Go 后端配置示例
+# AdminX Go 后端配置示例
 # 复制为 config.yaml 后按实际环境修改。
 # 环境变量可覆盖任意字段，前缀 DJA_，下划线分隔，如 DJA_JWT_SECRET。
 

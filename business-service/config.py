@@ -3,7 +3,7 @@
 import os
 
 PLATFORM_URL = os.getenv("PLATFORM_URL", "http://localhost:9999")
-"""DjangoAdminX 平台地址"""
+"""AdminX 平台地址"""
 
 PLATFORM_ADMIN_USER = os.getenv("PLATFORM_ADMIN_USER", "admin")
 """用于注册菜单的平台管理员账号"""

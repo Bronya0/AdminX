@@ -1,4 +1,4 @@
-"""JWT introspection — 将 JWT 转发给 DjangoAdminX 平台校验"""
+"""JWT introspection — 将 JWT 转发给 AdminX 平台校验"""
 
 import logging
 

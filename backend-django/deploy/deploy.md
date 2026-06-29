@@ -34,8 +34,8 @@
 
 ```bash
 # 克隆
-git clone https://github.com/Bronya0/DjangoAdminX.git
-cd DjangoAdminX
+git clone https://github.com/Bronya0/AdminX.git
+cd AdminX
 
 # 一键启动全部服务
 docker compose up -d
@@ -152,7 +152,7 @@ upstream django_backend {
 
 ```bash
 # 每台节点:
-git clone https://github.com/Bronya0/DjangoAdminX.git
+git clone https://github.com/Bronya0/AdminX.git
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 

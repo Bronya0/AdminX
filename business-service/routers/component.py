@@ -1,5 +1,5 @@
 """
-组件注册/心跳/注销 — 与 DjangoAdminX 平台对接
+组件注册/心跳/注销 — 与 AdminX 平台对接
 
 协议约定：
   POST /api/v1/cluster/components/register/    注册（幂等）

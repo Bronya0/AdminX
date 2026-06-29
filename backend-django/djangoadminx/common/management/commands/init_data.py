@@ -97,7 +97,7 @@ DEFAULT_CONFIGS = [
     {"key": "IP_BLACKLIST", "value": "", "value_type": "string", "desc": "IP 黑名单（逗号分隔）", "group": "security"},
     {"key": "LOGIN_MAX_ATTEMPTS", "value": "5", "value_type": "int", "desc": "登录锁定阈值：连续失败达此次数后，账号将被临时锁定", "group": "security"},
     {"key": "LOGIN_LOCK_DURATION", "value": "15", "value_type": "int", "desc": "登录锁定持续时间（分钟）：达到失败次数后，锁定多长时间自动解封", "group": "security"},
-    {"key": "SITE_NAME", "value": "DjangoAdminX", "value_type": "string", "desc": "站点名称", "group": "site"},
+    {"key": "SITE_NAME", "value": "AdminX", "value_type": "string", "desc": "站点名称", "group": "site"},
     {"key": "SITE_DESC", "value": "企业级 Django Admin 框架", "value_type": "string", "desc": "站点描述", "group": "site"},
     {"key": "SITE_LOGO", "value": "", "value_type": "string", "desc": "站点 Logo URL", "group": "site"},
     {"key": "SITE_THEME_COLOR", "value": "#1890ff", "value_type": "string", "desc": "站点主题色", "group": "site"},

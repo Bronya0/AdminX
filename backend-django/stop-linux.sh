@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 安全停止所有 DjangoAdminX 服务
+# 安全停止所有 AdminX 服务
 set -uo pipefail
 
 cd "$(dirname "$0")"
