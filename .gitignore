@@ -17,6 +17,10 @@ backend-django/media/
 backend-django/staticfiles/
 backend-django/.coverage
 
+# 项目根运行时目录
+logs/
+media/
+
 # IDE
 .idea/
 .vscode/

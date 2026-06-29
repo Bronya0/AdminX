@@ -1,2 +1,0 @@
-INFO 2026-05-21 10:35:23,928 autoreload Watching for file changes with StatReloader
-INFO 2026-05-21 10:50:12,727 basehttp "GET /api/v1/common/site-info/ HTTP/1.1" 200 260
