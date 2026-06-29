@@ -16,6 +16,7 @@ require (
 	golang.org/x/crypto v0.40.0
 	gorm.io/datatypes v1.2.1
 	gorm.io/driver/postgres v1.5.9
+	gorm.io/driver/sqlite v1.4.3
 	gorm.io/gorm v1.25.12
 )
 
@@ -53,6 +54,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-sqlite3 v1.14.15 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect

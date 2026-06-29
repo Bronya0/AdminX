@@ -66,8 +66,9 @@ func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, err
 	err := db.Model(&model.Menu{}).
 		Distinct("menus.path").
 		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
-		Joins("JOIN user_roles ON user_roles.role_id = role_menus.role_id").
-		Where("user_roles.user_id = ? AND menus.is_active = ? AND menus.path != ''", userID, true).
+			Joins("JOIN user_roles ON user_roles.role_id = role_menus.role_id").
+			Joins("JOIN roles ON roles.id = role_menus.role_id").
+		Where("user_roles.user_id = ? AND menus.is_active = ? AND roles.is_active = ? AND menus.path != ''", userID, true, true).
 		Find(&menuPaths).Error
 	if err != nil {
 		return false, err
@@ -145,4 +146,14 @@ func keys(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// CheckPermissionForTest 测试用权限检查入口（绕过 gin 中间件）。
+// 外部包通过 interface{} 传入 *gorm.DB，规避 *gorm.DB 强制导入。
+func CheckPermissionForTest(db interface{}, userID, method, requestPath string) (bool, error) {
+	gormDB, ok := db.(*gorm.DB)
+	if !ok {
+		return false, nil
+	}
+	return checkPermission(gormDB, userID, method, requestPath)
 }
