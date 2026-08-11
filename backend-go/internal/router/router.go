@@ -122,7 +122,6 @@ func New(deps *Deps) *gin.Engine {
 		me.GET("/accounts/users/me/", deps.AuthH.Me)
 		me.PATCH("/accounts/users/me/", deps.AuthH.UpdateMe)
 		me.POST("/accounts/logout/", deps.AuthH.Logout)
-		me.GET("/accounts/login-logs/", deps.AuthH.LoginLogs)
 		me.GET("/menu/user_tree/", deps.MenuH.UserTree)
 		me.GET("/accounts/roles/all/", deps.RoleH.All)
 		me.GET("/notification/messages/", deps.NotifH.List)

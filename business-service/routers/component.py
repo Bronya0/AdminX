@@ -133,8 +133,8 @@ async def _download_and_verify(url: str, checksum: str) -> Path:
     try:
         async with httpx.AsyncClient(timeout=300, follow_redirects=False) as client:
             async with client.stream("GET", url) as resp:
-                # 重定向一律拒绝（防 SSRF 绕过）
-                if resp.is_redirect or resp.is_informational:
+                # 重定向一律拒绝（防 SSRF 绕过）；300 也视为异常
+                if resp.is_redirect or resp.is_informational or resp.status_code == 300:
                     raise RuntimeError(f"拒绝重定向: {resp.status_code} {url}")
                 resp.raise_for_status()
                 total = 0
@@ -150,8 +150,17 @@ async def _download_and_verify(url: str, checksum: str) -> Path:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
     if checksum:
-        actual = hashlib.sha256(dest.read_bytes()).hexdigest()
+        try:
+            actual = hashlib.sha256(dest.read_bytes()).hexdigest()
+        except OSError as e:
+            # 读取失败清理临时目录
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise RuntimeError(f"读取升级包失败: {e}") from e
         if actual != checksum:
+            # 校验失败清理临时目录
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
             raise RuntimeError(f"SHA-256 校验失败: 期望 {checksum}, 实际 {actual}")
         logger.info("包完整性校验通过")
     return dest

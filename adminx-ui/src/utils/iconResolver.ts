@@ -6,6 +6,7 @@ import {
   DatabaseOutlined, KeyOutlined, SafetyOutlined, ToolOutlined,
   CloudOutlined, FolderOutlined, LinkOutlined, GlobalOutlined,
   ApiOutlined, CodeOutlined, BugOutlined, ThunderboltOutlined, SkinOutlined,
+  ShopOutlined,
 } from '@ant-design/icons-vue'
 import type { Component } from 'vue'
 
@@ -23,6 +24,7 @@ const iconMap: Record<string, Component> = {
   DatabaseOutlined, KeyOutlined, SafetyOutlined, ToolOutlined,
   CloudOutlined, FolderOutlined, LinkOutlined, GlobalOutlined,
   ApiOutlined, CodeOutlined, BugOutlined, ThunderboltOutlined, SkinOutlined,
+  ShopOutlined,
 }
 
 export function resolveIcon(iconName?: string): Component {

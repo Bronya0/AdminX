@@ -136,7 +136,7 @@ func (s *NotificationService) CreateWebhook(updates map[string]interface{}) (*mo
 }
 
 func (s *NotificationService) UpdateWebhook(id string, updates map[string]interface{}) (*model.WebhookConfig, error) {
-	if u, ok := updates["url"].(string); ok && u != "" && !validWebhookURL(u) {
+	if u, ok := updates["url"].(string); ok && !validWebhookURL(u) {
 		return nil, apperr.New(400, "webhook URL 非法")
 	}
 	if err := s.db.Model(&model.WebhookConfig{}).Where("id = ?", id).Updates(updates).Error; err != nil {
@@ -239,7 +239,7 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 	s.log.Info("webhook 已发送", "name", cfg.Name, "status", resp.StatusCode)
 }
 
-// validWebhookURL 校验 webhook URL（必须 http/https 且能解析出 host）。
+// validWebhookURL 校验 webhook URL（必须 http/https 且能解析出 host，scheme 大小写不敏感）。
 func validWebhookURL(raw string) bool {
 	if raw == "" {
 		return false
@@ -248,7 +248,8 @@ func validWebhookURL(raw string) bool {
 	if err != nil {
 		return false
 	}
-	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+	scheme := strings.ToLower(u.Scheme)
+	return (scheme == "http" || scheme == "https") && u.Host != ""
 }
 
 // matchEvent 检查事件类型是否在 webhook 关注列表中。

@@ -96,7 +96,7 @@ const loading = ref(false)
 // 菜单权限
 const allMenus = ref<Menu[]>([])
 const menuSearchText = ref('')
-const menuExpandedKeys = ref<string[]>([])
+const menuExpandedKeys = ref<(string | number)[]>([])
 const originalMenuTreeData = ref<any[]>([])
 const filteredMenuTreeData = ref<any[]>([])
 const parentTreeData = ref<any[]>([])
@@ -115,8 +115,8 @@ const loadData = async () => {
 }
 
 const expandAllMenuTree = () => {
-  const collect = (nodes: any[]): string[] => {
-    const keys: string[] = []
+  const collect = (nodes: any[]): (string | number)[] => {
+    const keys: (string | number)[] = []
     for (const n of nodes) {
       keys.push(n.key)
       if (n.children) keys.push(...collect(n.children))

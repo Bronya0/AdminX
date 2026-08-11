@@ -176,6 +176,19 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 		return nil, apperr.New(401, "令牌类型错误，需要 refresh token")
 	}
 
+	// 先校验用户仍存在且活跃（避免 DB 瞬时故障时烧掉有效 token）
+	user, err := s.userRepo.FindByID(claims.UserID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, apperr.New(401, "用户不存在")
+		}
+		s.logger.ErrorContext(ctx, "查询用户失败", "error", err)
+		return nil, apperr.ErrInternal
+	}
+	if !user.IsActive {
+		return nil, apperr.New(403, "账号已被禁用")
+	}
+
 	// 原子消费（防并发重放）：SETNX 成功才算首次使用；重复使用/已注销的 token 拒绝
 	consumed, err := s.jwtMgr.ConsumeRefreshToken(ctx, refreshToken)
 	if err != nil {
@@ -187,16 +200,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 		return nil, apperr.New(401, "refresh token 已被使用或吊销")
 	}
 
-	// 校验用户仍存在且活跃
-	user, err := s.userRepo.FindByID(claims.UserID)
-	if err != nil {
-		return nil, apperr.New(401, "用户不存在")
-	}
-	if !user.IsActive {
-		return nil, apperr.New(403, "账号已被禁用")
-	}
-
-	// 轮换: 旧 refresh 已在上面原子消费（拉黑），签发新 token
+	// 轮换: 旧 refresh 已原子消费（拉黑），签发新 token
 	access, err := s.jwtMgr.GenerateAccessToken(user.ID, user.Username)
 	if err != nil {
 		return nil, apperr.ErrInternal

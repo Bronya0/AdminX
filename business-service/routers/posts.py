@@ -123,4 +123,4 @@ async def delete_post(post_id: int, request: Request):
         if p.id == post_id:
             _db.pop(i)
             return {"code": 200, "msg": "已删除"}
-    raise HTTPException(status_code=404, detail="文章不存在")
+    raise _not_found(post_id)

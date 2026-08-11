@@ -5,7 +5,8 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -56,6 +57,16 @@ app = FastAPI(
     redoc_url="/redoc" if DEBUG else None,
     lifespan=lifespan,
 )
+
+
+# ─── 统一错误响应 {code, msg, data} 契约 ───
+# detail 为 dict（如 {"code": 404, "msg": ...}）时平铺返回，否则走默认包装。
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    if isinstance(exc.detail, dict):
+        body = exc.detail
+        return JSONResponse(status_code=body.get("code", exc.status_code), content=body)
+    return JSONResponse(status_code=exc.status_code, content={"code": exc.status_code, "msg": exc.detail, "data": None})
 
 # ─── CORS ───
 if CORS_ORIGINS == "*":

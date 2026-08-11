@@ -179,7 +179,8 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
     })
     .catch((e) => {
       flushRefreshQueue(null, e)
-      forceLogout('登录已过期，请重新登录')
+      // 不传 msg：拦截器已提示过 refresh 失败原因，避免双 toast
+      forceLogout()
       return Promise.reject(e)
     })
 }

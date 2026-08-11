@@ -24,13 +24,14 @@ import (
 
 // Manager 调度器管理器。
 type Manager struct {
-	scheduler gocron.Scheduler
-	jobSvc    *service.JobService
-	jobRepo   *repository.JobRepo
-	rdb       *redis.Client
-	logger    *slog.Logger
-	jobIDs    map[string]gocron.Job // job.UUID → gocron.Job（用于 reload 移除）
-	mu        sync.Mutex            // 保护 jobIDs 并发访问
+	scheduler       gocron.Scheduler
+	jobSvc          *service.JobService
+	jobRepo         *repository.JobRepo
+	rdb             *redis.Client
+	logger          *slog.Logger
+	jobIDs          map[string]gocron.Job // job.UUID → gocron.Job（用于 reload 移除）
+	mu              sync.Mutex            // 保护 jobIDs / heartbeatCancel 并发访问
+	heartbeatCancel context.CancelFunc    // 心跳 goroutine 的取消句柄（防止 Reload 重复启动泄漏）
 }
 
 // New 构造调度器。
@@ -83,7 +84,22 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.scheduler.Start()
 	m.logger.Info("调度器已启动", "loaded_jobs", loaded)
 
-	// 启动心跳 goroutine：每 10s 写一次调度器心跳，供 /jobs/status/ 查询存活状态
+	// 启动心跳 goroutine（幂等：已有则复用，防止 Reload 重复启动泄漏）
+	m.startHeartbeat()
+	return nil
+}
+
+// startHeartbeat 启动心跳 goroutine：每 10s 写一次调度器心跳，供 /jobs/status/ 查询存活状态。
+// 用 Manager 内部 context 管理生命周期，Stop 时可取消。
+func (m *Manager) startHeartbeat() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.heartbeatCancel != nil {
+		return // 已在运行
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.heartbeatCancel = cancel
+
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
@@ -100,7 +116,6 @@ func (m *Manager) Start(ctx context.Context) error {
 			}
 		}
 	}()
-	return nil
 }
 
 // addJob 向调度器注册单个任务。
@@ -188,8 +203,14 @@ func (m *Manager) Reload(ctx context.Context) error {
 	return m.Start(ctx)
 }
 
-// Stop 停止调度器。
+// Stop 停止调度器（含心跳 goroutine）。
 func (m *Manager) Stop() error {
+	m.mu.Lock()
+	if m.heartbeatCancel != nil {
+		m.heartbeatCancel()
+		m.heartbeatCancel = nil
+	}
+	m.mu.Unlock()
 	return m.scheduler.Shutdown()
 }
 

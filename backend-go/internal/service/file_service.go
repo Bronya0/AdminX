@@ -35,7 +35,7 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 	// 限制 100MB（基于实际写入的流式计数）
 	const maxSize = 100 * 1024 * 1024
 
-	// 扩展名白名单（防上传可执行/危险类型）
+	// 扩展名白名单（防上传可执行/危险类型；svg 可内嵌脚本，排除防存储型 XSS）
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	if !allowedUploadExt(ext) {
 		return nil, apperr.New(400, "不支持的文件类型: "+ext)
@@ -67,8 +67,10 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 	}
 
 	// io.CopyN → Sync → Close 三步都必须成功，任一失败都清理已写文件
+	var written int64
 	copyErr := func() error {
-		written, err := io.CopyN(dst, src, maxSize+1)
+		var err error
+		written, err = io.CopyN(dst, src, maxSize+1)
 		if err != nil && err != io.EOF {
 			return apperr.Wrap(500, "写入文件失败", err)
 		}
@@ -100,7 +102,7 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 	url := fmt.Sprintf("/media/uploads/%s", storagePath)
 	record := &model.FileRecord{
 		OriginalName:   file.Filename,
-		Size:           file.Size,
+		Size:           written, // 存实际写入字节数（multipart 头声明的 Size 可伪造）
 		MimeType:       contentType,
 		StorageBackend: "local",
 		StoragePath:    storagePath,
@@ -115,10 +117,10 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 	return record, nil
 }
 
-// allowedUploadExt 允许上传的扩展名白名单。
+// allowedUploadExt 允许上传的扩展名白名单（不含 svg：可内嵌脚本，防存储型 XSS）。
 func allowedUploadExt(ext string) bool {
 	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp",
 		".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
 		".txt", ".md", ".csv", ".zip", ".rar", ".7z", ".tar", ".gz":
 		return true

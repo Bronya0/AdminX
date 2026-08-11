@@ -156,10 +156,12 @@ input[type="text"] { flex: 1; min-width: 200px; }
 
 <script>
 // ── 从 URL 读取平台参数 ──
+// 兼容两种传参方式：query（旧）与 hash（平台新标签菜单现在用 hash 携带 token，避免进日志）
 const params = new URLSearchParams(location.search);
-const primary = params.get('primary');
-const dark = params.get('dark');
-const token = params.get('token');
+const hashParams = new URLSearchParams(location.hash.slice(1));
+const primary = params.get('primary') || hashParams.get('primary');
+const dark = params.get('dark') || hashParams.get('dark');
+const token = params.get('token') || hashParams.get('token');
 
 if (dark === '1') document.documentElement.classList.add('dark');
 if (primary) {

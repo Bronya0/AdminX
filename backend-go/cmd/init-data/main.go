@@ -59,6 +59,13 @@ func main() {
 	}
 	fmt.Println("✓ 默认菜单已创建")
 
+	// 4. 内置角色绑定默认菜单（幂等）
+	if err := bindDefaultRoleMenus(db); err != nil {
+		fmt.Fprintf(os.Stderr, "绑定角色菜单失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("✓ 内置角色菜单已绑定")
+
 	fmt.Println("\n初始化完成。请使用配置的凭证登录。")
 }
 
@@ -113,6 +120,9 @@ func createDefaultMenus(db *gorm.DB) error {
 		{Code: "system-user", Name: "用户管理", Path: "/system/users", Component: "system/UserList", PermissionCode: "user", MenuType: "menu", SortOrder: 1, AllowedPaths: mustJSONPath("/api/v1/accounts/users/*")},
 		{Code: "system-role", Name: "角色管理", Path: "/system/roles", Component: "system/RoleList", PermissionCode: "role", MenuType: "menu", SortOrder: 2, AllowedPaths: mustJSONPath("/api/v1/accounts/roles/*")},
 		{Code: "system-menu", Name: "菜单管理", Path: "/system/menus", Component: "system/MenuList", PermissionCode: "menu", MenuType: "menu", SortOrder: 3, AllowedPaths: mustJSONPath("/api/v1/menu/*")},
+		{Code: "system-config", Name: "配置中心", Path: "/system/config", Component: "config/ConfigCenter", PermissionCode: "config", MenuType: "menu", SortOrder: 4, AllowedPaths: mustJSONPath("/api/v1/config/*")},
+		{Code: "audit", Name: "安全审计", Icon: "AuditOutlined", Path: "/audit", MenuType: "menu", SortOrder: 3},
+		{Code: "audit-login-log", Name: "登录日志", Path: "/audit/login-log", Component: "audit/LoginLogList", PermissionCode: "loginlog", MenuType: "menu", SortOrder: 2, AllowedPaths: mustJSONPath("/api/v1/accounts/login-logs/*")},
 	}
 	for _, m := range menus {
 		var count int64
@@ -122,6 +132,36 @@ func createDefaultMenus(db *gorm.DB) error {
 		}
 		if err := db.Create(&m).Error; err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// bindDefaultRoleMenus 为内置角色绑定默认菜单（三权分立开箱可用）。
+func bindDefaultRoleMenus(db *gorm.DB) error {
+	bindings := []struct {
+		roleName  string
+		menuCodes []string
+	}{
+		{"security_admin", []string{"dashboard", "system-config"}},
+		{"audit_admin", []string{"dashboard", "audit-login-log"}},
+	}
+	for _, b := range bindings {
+		var role model.Role
+		if err := db.Where("name = ?", b.roleName).First(&role).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				continue
+			}
+			return err
+		}
+		var menus []model.Menu
+		if err := db.Where("code IN ?", b.menuCodes).Find(&menus).Error; err != nil {
+			return err
+		}
+		if len(menus) > 0 {
+			if err := db.Model(&role).Association("Menus").Append(menus); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
