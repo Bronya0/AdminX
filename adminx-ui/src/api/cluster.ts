@@ -10,7 +10,7 @@ export const clusterApi = {
   createNode: (data: Partial<ClusterNode>): Promise<ClusterNode> =>
     request.post('/cluster/nodes/', data),
   updateNode: (id: string, data: Partial<ClusterNode>): Promise<ClusterNode> =>
-    request.put(`/cluster/nodes/${id}/`, data),
+    request.patch(`/cluster/nodes/${id}/`, data),
   deleteNode: (id: string): Promise<void> =>
     request.delete(`/cluster/nodes/${id}/`),
   getOverview: (): Promise<ClusterOverview> =>

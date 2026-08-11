@@ -37,6 +37,14 @@ function forceLogout(msg?: string) {
   }
 }
 
+// 登录/刷新接口自身的失败不触发 token 刷新重试（否则输错密码会被误判为"登录已过期"强制登出）
+const NO_AUTH_RETRY_PATHS = ['/accounts/login/', '/accounts/refresh/']
+
+function isNoRetryUrl(url?: string): boolean {
+  if (!url) return false
+  return NO_AUTH_RETRY_PATHS.some((p) => url.includes(p))
+}
+
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || defaultApiBaseURL,
@@ -63,16 +71,23 @@ apiClient.interceptors.request.use(
 // 响应拦截器
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    const { code, msg, data } = response.data
+    // 防御非 JSON 响应（204/Blob/代理错误页等）
+    const body = response.data as { code?: number; msg?: string; data?: any } | undefined
+    const code = body?.code
 
     // 业务成功：code < 400（包括 200, 201, 204 等）
-    if (code >= 200 && code < 400) {
-      return data
+    if (typeof code === 'number' && code >= 200 && code < 400) {
+      return body?.data
     }
 
     // 认证失败（token 过期/无效）→ 尝试用 refresh token 换新并重放请求
     if (code === 401) {
       const cfg = response.config as InternalAxiosRequestConfig & { _retried?: boolean }
+      // 登录/刷新接口自身的失败：不重试、不强制登出（如密码错误）
+      if (isNoRetryUrl(cfg?.url)) {
+        message.error(body?.msg || '认证失败')
+        return Promise.reject(new Error(body?.msg || '认证失败'))
+      }
       if (cfg?._retried) {
         forceLogout('登录已过期，请重新登录')
         return Promise.reject(new Error('认证失败'))
@@ -81,44 +96,52 @@ apiClient.interceptors.response.use(
     }
 
     // 其他业务错误 — 仅显示一次通用提示
-    message.error(msg || '请求失败')
-    return Promise.reject(new Error(msg || '请求失败'))
+    message.error(body?.msg || '请求失败')
+    return Promise.reject(new Error(body?.msg || '请求失败'))
   },
   async (error: AxiosError) => {
     const { response, config } = error
 
-    if (response) {
-      const { status, data } = response
-      const responseData = data as { msg?: string; detail?: string }
-      const msg = responseData?.msg || responseData?.detail || '请求失败'
-
-      // access token 过期：HTTP 401，尝试 refresh 后重放
-      if (status === 401 && (config as InternalAxiosRequestConfig & { _retried?: boolean })?._retried !== true) {
-        return handleTokenExpired(config || {})
-      }
-
-      switch (status) {
-        case 401:
-          // 已经重试过仍失败 → 强制登出（下方 forceLogout 已处理跳转）
-          forceLogout('登录已过期，请重新登录')
-          break
-        case 403:
-          message.error('没有权限执行此操作')
-          break
-        case 404:
-          message.error('请求的资源不存在')
-          break
-        case 500:
-        case 502:
-        case 503:
-          message.error('服务器错误，请稍后重试')
-          break
-        default:
-          message.error(msg)
-      }
-    } else {
+    if (!response) {
       if (axios.isCancel(error)) return Promise.reject(error)
       message.error('网络错误，请检查网络连接')
+      return Promise.reject(error)
+    }
+
+    const { status, data } = response
+    const responseData = data as { msg?: string; detail?: string }
+    const msg = responseData?.msg || responseData?.detail || '请求失败'
+    const cfg = config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined
+    const isAuthEndpoint = isNoRetryUrl(cfg?.url)
+
+    // access token 过期：HTTP 401，尝试 refresh 后重放（登录/刷新端点除外）
+    if (status === 401 && !isAuthEndpoint && cfg?._retried !== true) {
+      return handleTokenExpired(config || {})
+    }
+
+    switch (status) {
+      case 401:
+        if (isAuthEndpoint) {
+          // 登录/刷新自身失败（HTTP 层）：直接提示，不强制登出
+          message.error(msg)
+        } else {
+          // 已经重试过仍失败 → 强制登出
+          forceLogout('登录已过期，请重新登录')
+        }
+        break
+      case 403:
+        message.error('没有权限执行此操作')
+        break
+      case 404:
+        message.error('请求的资源不存在')
+        break
+      case 500:
+      case 502:
+      case 503:
+        message.error('服务器错误，请稍后重试')
+        break
+      default:
+        message.error(msg)
     }
 
     return Promise.reject(error)
@@ -141,14 +164,7 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
   if (isRefreshing) {
     return new Promise<string>((resolve, reject) => {
       refreshQueue.push({ resolve, reject })
-    }).then((token) =>
-      apiClient({
-        ...config,
-        headers: { ...config.headers, Authorization: `Bearer ${token}` },
-        transformRequest: [(data: any) => typeof data === 'string' ? data : JSON.stringify(data)],
-        _retried: true,
-      } as AxiosRequestConfig & { _retried?: boolean })
-    )
+    }).then((token) => replayWithToken(config, token))
   }
 
   isRefreshing = true
@@ -159,18 +175,22 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
       userStore.setToken(payload.access, payload.refresh)
       flushRefreshQueue(payload.access, null)
       // 重放原请求（标记 _retried，防止重放后再次 401 时无限刷新）
-      return apiClient({
-        ...config,
-        headers: { ...config.headers, Authorization: `Bearer ${payload.access}` },
-        transformRequest: [(data: any) => typeof data === 'string' ? data : JSON.stringify(data)],
-        _retried: true,
-      } as AxiosRequestConfig & { _retried?: boolean })
+      return replayWithToken(config, payload.access)
     })
     .catch((e) => {
       flushRefreshQueue(null, e)
       forceLogout('登录已过期，请重新登录')
       return Promise.reject(e)
     })
+}
+
+// 用新 token 重放原请求（保留原 transformRequest 等配置，避免 FormData 等被错误序列化）
+function replayWithToken(config: AxiosRequestConfig, token: string) {
+  return apiClient({
+    ...config,
+    headers: { ...config.headers, Authorization: `Bearer ${token}` },
+    _retried: true,
+  } as AxiosRequestConfig & { _retried?: boolean })
 }
 
 // 封装请求方法

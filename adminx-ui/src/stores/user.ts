@@ -175,7 +175,8 @@ export const useUserStore = defineStore(
   {
     persist: {
       key: 'user-store',
-      pick: ['token', 'refreshToken', 'theme', 'appVersion'],
+      // refreshToken 不持久化到 localStorage：避免 XSS 窃取后长期保持登录，仅保留会话内
+      pick: ['token', 'theme', 'appVersion'],
     },
   }
 )

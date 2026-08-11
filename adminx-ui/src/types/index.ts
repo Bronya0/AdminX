@@ -114,7 +114,7 @@ export interface Menu {
   sort_order: number
   depth: number
   numchild: number
-  parent?: string
+  parent?: number | null
   children?: Menu[]
   allowed_paths: string
   created_at: string

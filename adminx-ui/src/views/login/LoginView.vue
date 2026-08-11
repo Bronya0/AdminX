@@ -142,9 +142,9 @@ const handleSubmit = async () => {
     await Promise.all([userStore.fetchUserInfo(), userStore.fetchSiteInfo()])
     message.success('登录成功')
     router.push(userStore.user?.home_page || '/')
-  } catch (e: any) {
+  } catch {
+    // 错误提示已由全局拦截器统一处理，这里不再重复弹；失败时刷新验证码
     if (captchaEnabled.value) fetchCaptcha()
-    message.error(e?.message || '登录失败')
   } finally {
     loading.value = false
   }

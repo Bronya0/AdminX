@@ -45,7 +45,7 @@ export const userApi = {
   createUser: (data: Partial<User> & { password: string; roles?: string[] }): Promise<User> =>
     request.post('/accounts/users/', data),
 
-  updateUser: (id: string, data: Partial<User> & { roles?: string[] }): Promise<User> =>
+  updateUser: (id: string, data: Partial<User> & { roles?: string[]; password?: string }): Promise<User> =>
     request.patch(`/accounts/users/${id}/`, data),
 
   deleteUser: (id: string): Promise<void> =>

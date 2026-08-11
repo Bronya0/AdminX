@@ -12,8 +12,7 @@
               <a-input-search v-model:value="menuSearchText" placeholder="搜索菜单名称..." allow-clear style="width: 240px; margin-left: 16px;" @change="filterMenuTree" />
             </div>
           </div>
-          <a-tree v-model:expandedKeys="menuExpandedKeys" :tree-data="filteredMenuTreeData" :loading="loading"
-            :draggable="true" :block-node="true" @drop="handleMenuDrop">
+          <a-tree v-model:expandedKeys="menuExpandedKeys" :tree-data="filteredMenuTreeData" :loading="loading" :block-node="true">
             <template #title="{ key, title, is_active, path, permission_code }">
               <div class="tree-node-content">
                 <span class="node-name">{{ title }}</span>
@@ -139,7 +138,7 @@ const modalTitle = ref('新增菜单')
 const isEdit = ref(false)
 const currentId = ref('')
 const formRef = ref()
-const formState = reactive({ name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent: undefined as string | undefined })
+const formState = reactive({ name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent: undefined as number | undefined })
 const formRules = { name: [{ required: true, message: '请输入菜单名称' }], code: [{ required: true, message: '请输入菜单编码' }] }
 const resetForm = () => { Object.assign(formState, { name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent: undefined }) }
 
@@ -163,7 +162,7 @@ const findNode = (nodes: any[], key: string): any | null => {
 }
 
 const handleAdd = () => { isEdit.value = false; modalTitle.value = '新增菜单'; currentId.value = ''; resetForm(); modalVisible.value = true }
-const handleAddChild = (parentKey: string) => { isEdit.value = false; modalTitle.value = '添加子菜单'; currentId.value = ''; resetForm(); formState.parent = parentKey; modalVisible.value = true }
+const handleAddChild = (parentKey: number) => { isEdit.value = false; modalTitle.value = '添加子菜单'; currentId.value = ''; resetForm(); formState.parent = parentKey; modalVisible.value = true }
 const handleEdit = (key: string) => {
   const node = findNode(filteredMenuTreeData.value, key)
   if (!node) return
@@ -194,11 +193,6 @@ const handleModalOk = async () => {
   finally { modalLoading.value = false }
 }
 const handleModalCancel = () => { modalVisible.value = false; formRef.value?.resetFields() }
-const handleMenuDrop = async (info: any) => {
-  const { dragNode, node, dropPosition, dropToGap } = info
-  const position = dropToGap ? (dropPosition === -1 ? 'left' : 'right') : 'first-child'
-  try { await menuApi.moveMenu({ id: dragNode.key, target_id: node.key, position }); message.success('移动成功'); loadData() } catch { /* interceptor handles error */ }
-}
 
 onMounted(() => { loadData() })
 </script>

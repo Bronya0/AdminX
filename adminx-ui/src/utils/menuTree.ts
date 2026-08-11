@@ -8,30 +8,6 @@ import type { Menu, SidebarItem } from '@/types'
  *
  * 改用路由 path 前缀匹配推断层级关系。
  */
-export function flatMenusToTree(menus: Menu[]): Menu[] {
-  if (!menus.length) return []
-
-  const sorted = [...menus].sort((a, b) => a.sort_order - b.sort_order)
-  const nodeMap = new Map<number, Menu & { children: Menu[] }>()
-  const roots: Menu[] = []
-
-  for (const menu of sorted) {
-    nodeMap.set(menu.id, { ...menu, children: [] })
-  }
-
-  for (const menu of sorted) {
-    const node = nodeMap.get(menu.id)!
-    const parent = _findParentByPathPrefix(node, sorted, nodeMap)
-
-    if (parent) {
-      parent.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  }
-
-  return roots
-}
 
 /** 用路由 path 前缀匹配找父节点：/system/user -> 父级可能是 /system */
 function _findParentByPathPrefix(
@@ -174,65 +150,6 @@ export function menusToSidebarItems(
   return result
 }
 
-/**
- * 将 Vue Router 路由配置递归转换为 SidebarItem[]，
- * 同时根据权限过滤。这样侧边栏和路由结构保持完全一致。
- *
- * 规则：
- * - 叶子路由：必须拥有 `meta.permission` 才显示（无 permission 则始终显示）
- * - 父级路由：用户拥有 `meta.permission` 或至少一个子路由可见时显示
- */
-export function routesToSidebar(
-  routes: any[],
-  hasPermission: (code: string) => boolean,
-  parentPath = '',
-): SidebarItem[] {
-  const result: SidebarItem[] = []
-
-  for (const route of routes) {
-    const meta = route.meta || {}
-
-    // 跳过没有 title 的路由（布局容器、重定向等）
-    if (!meta.title) continue
-
-    // 构建完整路径
-    const fullPath = parentPath
-      ? `${parentPath}/${route.path}`
-      : `/${route.path}`
-    const cleanPath = fullPath.replace(/\/+/g, '/')
-
-    const perm = meta.permission as string | undefined
-
-    // 优先处理子路由，用于父级可见性判断
-    let children: SidebarItem[] | undefined
-    if (route.children && route.children.length > 0) {
-      const childItems = routesToSidebar(route.children, hasPermission, cleanPath)
-      if (childItems.length > 0) {
-        children = childItems
-      }
-    }
-
-    // 权限检查：叶子路由严格执行；父级路由有子路由可见则放行
-    if (perm && !hasPermission(perm)) {
-      const hasVisibleChildren = children && children.length > 0
-      if (!hasVisibleChildren) continue
-    }
-
-    const item: SidebarItem = {
-      key: cleanPath,
-      title: meta.title,
-      icon: defaultIcons[meta.title] || meta.icon || 'FileOutlined',
-    }
-
-    if (children) {
-      item.children = children
-    }
-
-    result.push(item)
-  }
-
-  return result
-}
 export function filterTreeBySearch(
   tree: any[],
   searchText: string,

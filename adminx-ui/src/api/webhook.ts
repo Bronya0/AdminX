@@ -12,7 +12,7 @@ export const webhookApi = {
     request.post('/notification/webhooks/', data),
 
   update: (id: string, data: Partial<WebhookConfig>): Promise<WebhookConfig> =>
-    request.put(`/notification/webhooks/${id}/`, data),
+    request.patch(`/notification/webhooks/${id}/`, data),
 
   delete: (id: string): Promise<void> =>
     request.delete(`/notification/webhooks/${id}/`),

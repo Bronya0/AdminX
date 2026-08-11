@@ -224,6 +224,7 @@ import {
 
 } from '@ant-design/icons-vue'
 import { clusterApi } from '@/api/cluster'
+import { formatDateTime } from '@/utils/format'
 import type { ClusterNode, ClusterOverview } from '@/types'
 
 // 表格列定义
@@ -306,7 +307,7 @@ const getStatusText = (status: string) => {
 
 // 格式化时间
 const formatTime = (time: string) => {
-  return new Date(time).toLocaleString()
+  return formatDateTime(time)
 }
 
 // 加载数据

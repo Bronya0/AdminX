@@ -21,7 +21,7 @@ export const menuApi = {
 
   // 更新菜单
   updateMenu: (id: string, data: Partial<Menu>): Promise<Menu> =>
-    request.put(`/menu/${id}/`, data),
+    request.patch(`/menu/${id}/`, data),
 
   // 删除菜单
   deleteMenu: (id: string): Promise<void> =>

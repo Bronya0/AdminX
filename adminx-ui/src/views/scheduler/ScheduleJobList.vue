@@ -181,7 +181,7 @@
         <a-form-item v-else-if="formState.trigger_type === 'cron'" label="Cron 表达式" name="trigger_config">
           <div style="display: flex; gap: 8px;">
             <a-input v-model:value="formState.trigger_config" placeholder="*/5 * * * *" style="flex:1" />
-            <a-select v-model:value="formState.trigger_config" :options="cronOptions" placeholder="常用表达式" allow-clear style="width: 150px" />
+            <a-select v-model:value="cronPreset" :options="cronOptions" placeholder="常用表达式" allow-clear style="width: 150px" @change="onCronPreset" />
           </div>
         </a-form-item>
         <!-- 指定时间 -->
@@ -203,7 +203,7 @@ import {
   EditOutlined, DeleteOutlined, PlayCircleOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import { scheduleJobApi, jobLogApi } from '@/api/webservice'
+import { scheduleJobApi } from '@/api/webservice'
 import { formatDateTime } from '@/utils/format'
 import type { ScheduleJob, JobLog } from '@/types'
 
@@ -289,6 +289,11 @@ const cronOptions = [
   { label: '每月 1 号 0:00', value: '0 0 1 * *' },
 ]
 
+const cronPreset = ref<string>('')
+const onCronPreset = (val: string) => {
+  if (val) formState.value.trigger_config = val
+}
+
 // 间隔字段 → JSON
 const intervalToConfig = () => JSON.stringify({
   ...(formInterval.days ? { days: formInterval.days } : {}),
@@ -336,7 +341,7 @@ const fetchSchedulerStatus = async () => {
 const handleExpand = async (expanded: boolean, record: ScheduleJob) => {
   if (expanded) {
     try {
-      const res = await jobLogApi.list({ page: 1, size: 10, job: record.id })
+      const res = await scheduleJobApi.getLogs({ page: 1, size: 10, job: record.id })
       logMap.value[record.id] = res.results
     } catch { logMap.value[record.id] = [] }
   } else {
@@ -357,6 +362,7 @@ const handleAdd = () => {
   formState.value = { name: '', command_type: 'python', handler: '', command: '', trigger_type: 'interval', trigger_config: '{"hours": 1}', is_active: true }
   formInterval.days = 0; formInterval.hours = 1; formInterval.minutes = 0; formInterval.seconds = 0
   formDate.value = ''
+  cronPreset.value = ''
   modalVisible.value = true
   // 清除上次校验残留
   formRef.value?.clearValidate?.()
@@ -366,6 +372,7 @@ const handleEdit = (job: ScheduleJob) => {
   editingId.value = job.id
   formState.value = { name: job.name, command_type: job.command_type, handler: job.handler || '', command: job.command || '', trigger_type: job.trigger_type, trigger_config: job.trigger_config, is_active: job.is_active }
   formDate.value = ''
+  cronPreset.value = ''
   if (job.trigger_type === 'interval') {
     configToInterval(job.trigger_config)
   }
@@ -381,14 +388,26 @@ const handleEdit = (job: ScheduleJob) => {
 }
 
 const handleModalOk = async () => {
+  try {
+    await formRef.value.validate()
+  } catch (e: any) {
+    if (e?.errorFields) return // 表单校验失败，已由 AntD 提示
+  }
   modalLoading.value = true
   try {
     // 序列化触发配置
     const data = { ...formState.value }
     if (data.trigger_type === 'interval') {
       data.trigger_config = intervalToConfig()
-    } else if (data.trigger_type === 'date' && formDate.value) {
+    } else if (data.trigger_type === 'date') {
+      if (!formDate.value) {
+        message.error('请选择执行时间')
+        return
+      }
       data.trigger_config = JSON.stringify({ run_date: formDate.value })
+    } else if (!data.trigger_config.trim()) {
+      message.error('请输入 Cron 表达式')
+      return
     }
     if (editingId.value) {
       await scheduleJobApi.update(editingId.value, data)
@@ -399,7 +418,7 @@ const handleModalOk = async () => {
     }
     modalVisible.value = false
     fetchData()
-  } finally { modalLoading.value = false }
+  } catch { /* interceptor handles error */ } finally { modalLoading.value = false }
 }
 
 const handleDelete = async (job: ScheduleJob) => {
@@ -427,7 +446,7 @@ const handleRunOnce = async (job: ScheduleJob) => {
 
 const handleToggleActive = async (job: ScheduleJob, checked: boolean) => {
   try {
-    await scheduleJobApi.update(job.id, { is_active: checked } as any)
+    await scheduleJobApi.update(job.id, { is_active: checked })
     job.is_active = checked
     message.success(checked ? '任务已启用' : '任务已禁用')
   } catch {
@@ -458,6 +477,12 @@ const formatTrigger = (job: ScheduleJob) => {
     } catch { return job.trigger_config }
   }
   if (job.trigger_type === 'cron') return job.trigger_config
+  if (job.trigger_type === 'date') {
+    try {
+      const c = JSON.parse(job.trigger_config)
+      return c.run_date || job.trigger_config
+    } catch { return job.trigger_config }
+  }
   return job.trigger_config
 }
 

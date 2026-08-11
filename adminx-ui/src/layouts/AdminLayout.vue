@@ -281,8 +281,10 @@ const openExternal = (item: SidebarItem) => {
   if (item.menu_type === 'iframe') {
     router.push(`/iframe?url=${encodeURIComponent(targetUrl)}&title=${encodeURIComponent(item.title)}`)
   } else {
-    const sep = targetUrl.includes('?') ? '&' : '?'
-    window.open(`${targetUrl}${sep}token=${userStore.token}`, '_blank')
+    // 用 hash 携带 token（不落浏览器历史/服务器日志）
+    const sep = targetUrl.includes('#') ? '&' : '#'
+    const tokenParam = userStore.token ? `token=${encodeURIComponent(userStore.token)}` : ''
+    window.open(`${targetUrl}${sep}${tokenParam}`, '_blank')
   }
 }
 

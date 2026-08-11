@@ -272,7 +272,9 @@ const menuTreeOptions = ref<TreeSelectOption[]>([])
 const buildMenuTreeOptions = (items: Menu[], allowedPaths: Set<string>): TreeSelectOption[] => {
   return items.flatMap((item) => {
     const children = buildMenuTreeOptions(item.children || [], allowedPaths)
-    const isSelectable = Boolean(item.path && item.path !== '/dashboard' && allowedPaths.has(item.path))
+    // 仅叶子菜单（无子菜单）可选为首页，父级菜单没有实际页面组件，选中会导致空白页
+    const hasChildren = Boolean(item.children && item.children.length > 0)
+    const isSelectable = !hasChildren && Boolean(item.path && item.path !== '/dashboard' && allowedPaths.has(item.path))
 
     if (!isSelectable && !children.length) {
       return []
@@ -303,9 +305,9 @@ const loadMenuOptions = async (roles: string[]) => {
     formState.home_page = ''
     return
   }
-    if (!fullMenuTree.value.length) {
-      await loadFullMenuTree()
-    }
+  if (!fullMenuTree.value.length) {
+    await loadFullMenuTree()
+  }
   try {
     const menus = await roleApi.accessibleMenus(roles)
     const allowedPaths = new Set(
@@ -509,7 +511,7 @@ const handlePasswordOk = async () => {
   passwordModalLoading.value = true
   try {
     if (!currentUser.value) return
-    await userApi.updateUser(currentUser.value.id, { password: newPassword.value } as any)
+    await userApi.updateUser(currentUser.value.id, { password: newPassword.value })
     message.success('密码重置成功')
     passwordModalVisible.value = false
     // 清空密码，避免弹窗残留导致下次打开可见上次输入
