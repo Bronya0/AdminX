@@ -91,6 +91,9 @@ func New(deps *Deps) *gin.Engine {
 			public.POST("/cluster/components/heartbeat/",
 				appmw.RateLimit(deps.Redis, "cluster-heartbeat", appmw.Limit{Requests: 120, Window: time.Minute}),
 				deps.ClsH.Heartbeat)
+			public.POST("/cluster/components/unregister/",
+				appmw.RateLimit(deps.Redis, "cluster-unregister", appmw.Limit{Requests: 30, Window: time.Minute}),
+				deps.ClsH.Unregister)
 		}
 	}
 
@@ -163,6 +166,7 @@ func New(deps *Deps) *gin.Engine {
 		rbac.GET("/menu/", deps.MenuH.List)
 		rbac.GET("/menu/:id/", deps.MenuH.Get)
 		rbac.POST("/menu/", deps.MenuH.Create)
+		rbac.POST("/menu/register/", deps.MenuH.Register)
 		rbac.PUT("/menu/:id/", deps.MenuH.Update)
 		rbac.PATCH("/menu/:id/", deps.MenuH.Update)
 		rbac.DELETE("/menu/:id/", deps.MenuH.Delete)

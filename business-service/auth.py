@@ -1,6 +1,7 @@
-"""JWT introspection — 将 JWT 转发给 AdminX 平台校验"""
+"""JWT introspection — 将 JWT 转发给 AdminX 平台校验（带本地 TTL 缓存）"""
 
 import logging
+import time
 
 import httpx
 
@@ -8,11 +9,41 @@ from config import PLATFORM_URL
 
 logger = logging.getLogger("business.auth")
 
+# 本地缓存: token -> (expire_ts, user_info)。
+# 缓存可避免每个业务请求都打平台 introspect（限流 300/min/IP），
+# 平台短暂不可用时也能兜底放行已缓存的有效 token。
+_cache: dict[str, tuple[float, dict]] = {}
+CACHE_TTL = 60  # 秒
+
+
+def _cache_get(token: str) -> dict | None:
+    item = _cache.get(token)
+    if not item:
+        return None
+    expire_ts, info = item
+    if time.time() >= expire_ts:
+        _cache.pop(token, None)
+        return None
+    return info
+
+
+def _cache_set(token: str, info: dict) -> None:
+    # 简单防膨胀：超过 1000 条时清空重建
+    if len(_cache) > 1000:
+        _cache.clear()
+    _cache[token] = (time.time() + CACHE_TTL, info)
+
 
 async def introspect_token(token: str) -> dict | None:
     """将 JWT 转发给平台 introspect 接口校验，返回用户信息或 None"""
     if not token:
         return None
+
+    # 命中本地缓存直接返回
+    cached = _cache_get(token)
+    if cached is not None:
+        return cached
+
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
@@ -32,9 +63,11 @@ async def introspect_token(token: str) -> dict | None:
     if not data.get("valid"):
         return None
 
-    return {
+    info = {
         "user_id": data.get("user_id"),
         "username": data.get("username"),
         "roles": data.get("roles", []),
         "permissions": data.get("permissions", []),
     }
+    _cache_set(token, info)
+    return info

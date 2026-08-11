@@ -97,7 +97,8 @@ def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
     dest_resolved = dest.resolve()
     for member in zf.infolist():
         member_path = (dest / member.filename).resolve()
-        if not str(member_path).startswith(str(dest_resolved)):
+        # is_relative_to 严格判断子路径，防止 ../兄弟目录 前缀绕过
+        if not member_path.is_relative_to(dest_resolved):
             raise RuntimeError(f"zip slip: {member.filename} 解压路径超出目标目录")
     zf.extractall(dest)
 
@@ -117,18 +118,37 @@ def _validate_upgrade_url(url: str) -> None:
 
 
 async def _download_and_verify(url: str, checksum: str) -> Path:
-    """下载升级包到临时目录，可选 SHA-256 校验"""
+    """下载升级包到临时目录，可选 SHA-256 校验。
+
+    安全:
+    - 禁止重定向（防止初始 URL 校验通过后被重定向到内网/云元数据地址）
+    - 下载流式计数限制大小，防止写满磁盘
+    """
     _validate_upgrade_url(url)
     tmp = Path(tempfile.mkdtemp(prefix="upgrade_"))
     filename = url.split("/")[-1].split("?")[0] or "package"
     dest = tmp / filename
     logger.info("下载升级包: %s → %s", url, dest)
-    async with httpx.AsyncClient(timeout=300, follow_redirects=True) as client:
-        async with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                async for chunk in resp.aiter_bytes(65536):
-                    f.write(chunk)
+    max_bytes = 500 * 1024 * 1024  # 500MB 上限
+    try:
+        async with httpx.AsyncClient(timeout=300, follow_redirects=False) as client:
+            async with client.stream("GET", url) as resp:
+                # 重定向一律拒绝（防 SSRF 绕过）
+                if resp.is_redirect or resp.is_informational:
+                    raise RuntimeError(f"拒绝重定向: {resp.status_code} {url}")
+                resp.raise_for_status()
+                total = 0
+                with open(dest, "wb") as f:
+                    async for chunk in resp.aiter_bytes(65536):
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise RuntimeError(f"升级包超过大小上限 {max_bytes // 1024 // 1024}MB")
+                        f.write(chunk)
+    except Exception:
+        # 下载失败清理临时目录
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
     if checksum:
         actual = hashlib.sha256(dest.read_bytes()).hexdigest()
         if actual != checksum:
@@ -288,7 +308,11 @@ async def heartbeat_loop() -> None:
     logger.info("心跳任务启动，间隔 %ds", HEARTBEAT_INTERVAL)
     while True:
         data = await heartbeat()
-        if data is not None:
+        if data is None:
+            # 心跳失败（平台未启动/组件未注册）：尝试重新注册，下次循环再试
+            logger.warning("心跳失败，尝试重新注册组件...")
+            await register()
+        else:
             upgrade_cmd = data.get("upgrade")
             if upgrade_cmd:
                 task = asyncio.create_task(handle_upgrade(upgrade_cmd))

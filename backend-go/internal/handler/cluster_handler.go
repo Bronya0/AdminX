@@ -165,3 +165,19 @@ func (h *ClusterHandler) CancelUninstall(c *gin.Context) {
 	}
 	response.OK(c, nil)
 }
+
+// Unregister POST /cluster/components/unregister/（业务组件注销，幂等）
+func (h *ClusterHandler) Unregister(c *gin.Context) {
+	var req struct {
+		AppLabel string `json:"app_label" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BindingError(c, err)
+		return
+	}
+	if err := h.svc.Unregister(req.AppLabel); err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, nil)
+}

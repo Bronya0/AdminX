@@ -152,6 +152,21 @@ func (s *ClusterService) CancelUninstall(id string) error {
 		Update("uninstall_pending", false).Error
 }
 
+// Unregister 注销组件（按 app_label 删除）。
+func (s *ClusterService) Unregister(appLabel string) error {
+	c, err := s.repo.FindComponentByLabel(appLabel)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil // 未注册视为成功（幂等）
+		}
+		return apperr.ErrInternal
+	}
+	if err := s.repo.DeleteComponent(c.ID); err != nil {
+		return apperr.ErrInternal
+	}
+	return nil
+}
+
 // mustJSONMap map → datatypes.JSON。
 func mustJSONMap(m map[string]interface{}) datatypesJSON {
 	if m == nil {

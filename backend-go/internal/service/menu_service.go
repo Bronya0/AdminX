@@ -94,6 +94,53 @@ func (s *MenuService) Create(in MenuCreateInput) (*model.Menu, error) {
 	return menu, nil
 }
 
+// RegisterOrUpdate 按 code 幂等注册菜单（业务容器对接用）：存在则更新，不存在则创建。
+func (s *MenuService) RegisterOrUpdate(in MenuCreateInput) (*model.Menu, error) {
+	existing, err := s.menuRepo.FindByCode(in.Code)
+	if err == nil && existing != nil {
+		// 已存在：更新业务可写字段
+		if in.Name != "" {
+			existing.Name = in.Name
+		}
+		if in.Icon != "" {
+			existing.Icon = in.Icon
+		}
+		if in.Path != "" {
+			existing.Path = in.Path
+		}
+		if in.Component != "" {
+			existing.Component = in.Component
+		}
+		if in.PermissionCode != "" {
+			existing.PermissionCode = in.PermissionCode
+		}
+		if in.MenuType != "" {
+			existing.MenuType = in.MenuType
+		}
+		if in.IsActive != nil {
+			existing.IsActive = *in.IsActive
+		}
+		if in.IsVisible != nil {
+			existing.IsVisible = *in.IsVisible
+		}
+		if in.SortOrder != 0 {
+			existing.SortOrder = in.SortOrder
+		}
+		if in.AllowedPaths != nil {
+			existing.AllowedPaths = mustJSON(in.AllowedPaths)
+		}
+		if err := s.menuRepo.Update(existing); err != nil {
+			return nil, apperr.ErrInternal
+		}
+		return existing, nil
+	}
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, apperr.ErrInternal
+	}
+	// 不存在：走常规创建
+	return s.Create(in)
+}
+
 // UpdateInput 更新菜单入参（指针字段区分"未传"和"清空"）。
 type MenuUpdateInput struct {
 	Code           string   `json:"code"`

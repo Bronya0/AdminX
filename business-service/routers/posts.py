@@ -21,6 +21,14 @@ def _next_id() -> int:
     return _counter
 
 
+def _not_found(post_id: int):
+    # 与平台统一 {code, msg, data} 契约
+    return HTTPException(
+        status_code=404,
+        detail={"code": 404, "msg": "文章不存在", "data": None},
+    )
+
+
 @router.get("/")
 async def list_posts(
     request: Request,
@@ -75,7 +83,7 @@ async def get_post(post_id: int, request: Request):
     for p in _db:
         if p.id == post_id:
             return {"code": 200, "msg": "ok", "data": p}
-    raise HTTPException(status_code=404, detail="文章不存在")
+    raise _not_found(post_id)
 
 
 @router.put("/{post_id}")
@@ -92,7 +100,7 @@ async def update_post(post_id: int, body: PostCreate, request: Request):
                 updated_at=_now(),
             )
             return {"code": 200, "msg": "更新成功", "data": _db[i]}
-    raise HTTPException(status_code=404, detail="文章不存在")
+    raise _not_found(post_id)
 
 
 @router.patch("/{post_id}")
@@ -105,7 +113,7 @@ async def patch_post(post_id: int, body: PostUpdate, request: Request):
                 setattr(_db[i], field, value)
             _db[i].updated_at = _now()
             return {"code": 200, "msg": "更新成功", "data": _db[i]}
-    raise HTTPException(status_code=404, detail="文章不存在")
+    raise _not_found(post_id)
 
 
 @router.delete("/{post_id}")

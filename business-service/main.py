@@ -51,7 +51,9 @@ app = FastAPI(
     title="业务服务",
     description="三方业务对接示例 — 注册菜单 + JWT introspection 鉴权",
     version="1.0.0",
-    docs_url="/docs",
+    # 生产环境关闭 Swagger 文档（避免暴露接口结构）
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None,
     lifespan=lifespan,
 )
 
@@ -78,7 +80,9 @@ else:
 # 拦截 /api/v1/posts/* 请求，提取 Authorization header，
 # 转发给 AdminX introspect 接口校验，
 # 校验通过后在 request.state.user 注入用户信息。
-PROTECTED_PREFIXES = ("/api/v1/posts", "/api/v1/register", "/api/v1/unregister")
+# 注意: /api/v1/register、/api/v1/unregister 不在此列——
+# 它们使用平台管理员账号自行登录平台，无需业务 JWT。
+PROTECTED_PREFIXES = ("/api/v1/posts",)
 
 
 @app.middleware("http")

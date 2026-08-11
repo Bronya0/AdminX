@@ -2,8 +2,8 @@
 
 import os
 
-PLATFORM_URL = os.getenv("PLATFORM_URL", "http://localhost:9999")
-"""AdminX 平台地址"""
+PLATFORM_URL = os.getenv("PLATFORM_URL", "http://localhost:8000")
+"""AdminX 平台地址（与 Go 后端默认端口 8000 保持一致）"""
 
 PLATFORM_ADMIN_USER = os.getenv("PLATFORM_ADMIN_USER", "admin")
 """用于注册菜单的平台管理员账号"""

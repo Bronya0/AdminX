@@ -19,6 +19,13 @@ func (r *MenuRepo) FindByID(id int64) (*model.Menu, error) {
 	return &m, err
 }
 
+// FindByCode 按 code 查询菜单。
+func (r *MenuRepo) FindByCode(code string) (*model.Menu, error) {
+	var m model.Menu
+	err := r.db.Where("code = ?", code).First(&m).Error
+	return &m, err
+}
+
 // All 查询所有菜单（按 sort_order, id 排序）。
 func (r *MenuRepo) All() ([]model.Menu, error) {
 	var menus []model.Menu

@@ -75,6 +75,22 @@ func (h *MenuHandler) Create(c *gin.Context) {
 	response.Created(c, menu)
 }
 
+// Register POST /menu/register/ — 按 code 幂等注册（业务容器对接用）。
+func (h *MenuHandler) Register(c *gin.Context) {
+	var in service.MenuCreateInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.BindingError(c, err)
+		return
+	}
+	menu, err := h.svc.RegisterOrUpdate(in)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	auditRecord(c, h.audit, "update", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name)
+	response.OK(c, menu)
+}
+
 // Update PUT/PATCH /menu/:id/
 func (h *MenuHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
