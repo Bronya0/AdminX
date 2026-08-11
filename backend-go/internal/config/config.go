@@ -167,8 +167,9 @@ func setDefaults(v *viper.Viper) {
 
 // validate 校验关键配置项。
 func (c *Config) validate() error {
-	if c.JWT.Secret == "change-me-in-production" && c.Server.Mode == "release" {
-		return fmt.Errorf("生产环境必须配置安全的 jwt.secret")
+	// JWT 密钥不允许默认值或空值（任何模式都禁止，防止误用默认密钥伪造 token）
+	if c.JWT.Secret == "" || c.JWT.Secret == "change-me-in-production" {
+		return fmt.Errorf("必须配置安全的 jwt.secret（不允许使用默认值，可通过 DJA_JWT_SECRET 环境变量或 config.yaml 设置）")
 	}
 	if c.Database.DSN == "" {
 		return fmt.Errorf("database.dsn 不能为空")

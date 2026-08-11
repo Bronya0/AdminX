@@ -5,7 +5,7 @@
 package router
 
 import (
-	"net/http"
+	"context"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -83,10 +83,14 @@ func New(deps *Deps) *gin.Engine {
 		public.GET("/captcha/captcha/", deps.CapH.Generate)
 		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
 
-		// cluster 业务组件注册/心跳（AllowAny
+		// cluster 业务组件注册/心跳（公开，但限流防滥用）
 		if deps.ClsH != nil {
-			public.POST("/cluster/components/register/", deps.ClsH.Register)
-			public.POST("/cluster/components/heartbeat/", deps.ClsH.Heartbeat)
+			public.POST("/cluster/components/register/",
+				appmw.RateLimit(deps.Redis, "cluster-register", appmw.Limit{Requests: 30, Window: time.Minute}),
+				deps.ClsH.Register)
+			public.POST("/cluster/components/heartbeat/",
+				appmw.RateLimit(deps.Redis, "cluster-heartbeat", appmw.Limit{Requests: 120, Window: time.Minute}),
+				deps.ClsH.Heartbeat)
 		}
 	}
 
@@ -126,14 +130,19 @@ func New(deps *Deps) *gin.Engine {
 			response.OK(c, gin.H{"note": "POST /policy/change-password/"})
 		})
 		me.POST("/policy/change-password/", deps.PolicyH.ChangePassword)
-		me.GET("/config/by_group/", deps.CfgH.ByGroup)
-		me.GET("/config/get_value/", deps.CfgH.GetValue)
 	}
 
 	// ── RBAC 路由（JWT + RBAC）──
 	rbac := api.Group("")
 	rbac.Use(jwtMW(), appmw.RBAC(deps.DB))
 	{
+		// 配置读取（含加密配置）：仅允许有权限的用户访问，防止普通用户拉取全部明文
+		rbac.GET("/config/by_group/", deps.CfgH.ByGroup)
+		rbac.GET("/config/get_value/", deps.CfgH.GetValue)
+
+		// 登录日志：仅审计管理员（RBAC 规则控制）
+		rbac.GET("/accounts/login-logs/", deps.AuthH.LoginLogs)
+
 		// 用户
 		rbac.GET("/accounts/users/", deps.UserH.List)
 		rbac.GET("/accounts/users/:id/", deps.UserH.Get)
@@ -233,7 +242,13 @@ func healthHandler(db *gorm.DB) gin.HandlerFunc {
 		dbOK := "up"
 		if db != nil {
 			sqlDB, err := db.DB()
-			if err != nil || sqlDB.Ping() != nil {
+			if err == nil {
+				ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+				defer cancel()
+				if sqlDB.PingContext(ctx) != nil {
+					dbOK = "down"
+				}
+			} else {
 				dbOK = "down"
 			}
 		}
@@ -270,4 +285,3 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return cors.New(corsCfg)
 }
 
-var _ = http.StatusOK

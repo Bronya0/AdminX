@@ -13,8 +13,6 @@ import (
 	"adminx/internal/service"
 )
 
-var _ = model.User{} // 确保 model 包被使用
-
 // AuthHandler 认证相关 HTTP 处理器。
 type AuthHandler struct {
 	authSvc *service.AuthService
@@ -164,9 +162,10 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
-	// 不允许自己改 is_superuser / roles
+	// 不允许自己改 is_superuser / roles / password（改密必须走 change-password 接口校验旧密码）
 	in.IsSuperuser = nil
 	in.Roles = nil
+	in.Password = ""
 
 	user, err := h.userSvc.Update(uid, in)
 	if err != nil {

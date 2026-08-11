@@ -31,7 +31,7 @@ func Init(cfg *config.Config, logger *slog.Logger) (*redis.Client, error) {
 		return nil, fmt.Errorf("Redis 连接失败: %w", err)
 	}
 
-	logger.Info("Redis 连接成功", "url", cfg.Redis.URL)
+	logger.Info("Redis 连接成功", "addr", opt.Addr, "db", opt.DB)
 	return client, nil
 }
 

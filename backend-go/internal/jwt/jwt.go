@@ -86,16 +86,26 @@ func (m *Manager) generateToken(userID, username, tokenType string, expire time.
 }
 
 // Parse 解析并验证 token，返回 Claims。
-// 验证签名 + 过期时间；不在此处校验黑名单（由调用方按需调用 IsBlacklisted）。
+// 验证签名（仅允许 HS256）+ 过期时间 + issuer + exp 必填；
+// 不在此处校验黑名单（由调用方按需调用）。
 func (m *Manager) Parse(tokenString string) (*Claims, error) {
 	claims := &Claims{}
+	opts := []jwt.ParserOption{
+		// 钉死签名算法，防止 alg:none / 算法混淆攻击
+		jwt.WithValidMethods([]string{"HS256"}),
+		// 要求 exp 必填，防止无过期时间的 token 永久有效
+		jwt.WithExpirationRequired(),
+	}
+	if m.issuer != "" {
+		opts = append(opts, jwt.WithIssuer(m.issuer))
+	}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 		// 确保使用预期的签名算法（防止 alg:none 攻击）
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("非预期的签名算法: %v", t.Header["alg"])
 		}
 		return m.secret, nil
-	})
+	}, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +113,29 @@ func (m *Manager) Parse(tokenString string) (*Claims, error) {
 		return nil, errors.New("token 无效")
 	}
 	return claims, nil
+}
+
+// ConsumeRefreshToken 原子消费 refresh token（防并发重放）。
+// 首次使用返回 true；已被使用/拉黑返回 false。
+// 无 Redis 时降级放行（无法防重放，但功能可用）。
+func (m *Manager) ConsumeRefreshToken(ctx context.Context, tokenString string) (bool, error) {
+	if m.rdb == nil {
+		return true, nil
+	}
+	claims, err := m.Parse(tokenString)
+	if err != nil {
+		return false, nil
+	}
+	remaining := time.Until(claims.ExpiresAt.Time)
+	if remaining <= 0 {
+		return false, nil // 已过期，拒绝
+	}
+	// SET NX：已存在说明被消费过（logout 拉黑或 refresh 轮换），拒绝
+	ok, err := m.rdb.SetNX(ctx, blacklistKeyPrefix+claims.ID, "1", remaining).Result()
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }
 
 // BlacklistRefreshToken 将 refresh token 加入黑名单（logout / refresh 轮换时调用）。

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"log/slog"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,8 +11,6 @@ import (
 	"adminx/internal/model"
 	"adminx/internal/service"
 )
-
-var _ = model.ClusterNode{}
 
 // ClusterHandler 集群管理 HTTP 处理器。
 type ClusterHandler struct {
@@ -168,5 +165,3 @@ func (h *ClusterHandler) CancelUninstall(c *gin.Context) {
 	}
 	response.OK(c, nil)
 }
-
-var _ = strconv.Atoi

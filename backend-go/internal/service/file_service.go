@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,14 +29,19 @@ func NewFileService(db *gorm.DB, cfg *config.Config) *FileService {
 }
 
 // Upload 上传文件到本地存储。
+// 安全: 用 io.CopyN 流式限制实际写入字节数（multipart 头里的 Size 可被伪造，
+// 不能仅依赖 file.Size 做大小校验）。
 func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*model.FileRecord, error) {
-	// 限制 100MB
-	if file.Size > 100*1024*1024 {
-		return nil, apperr.New(413, "文件过大，最大允许 100MB")
+	// 限制 100MB（基于实际写入的流式计数）
+	const maxSize = 100 * 1024 * 1024
+
+	// 扩展名白名单（防上传可执行/危险类型）
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedUploadExt(ext) {
+		return nil, apperr.New(400, "不支持的文件类型: "+ext)
 	}
 
 	// 生成唯一文件名 + 按日期分目录
-	ext := filepath.Ext(file.Filename)
 	uniqueName := uuid.New().String() + ext
 	subDir := time.Now().Format("2006/01/02")
 
@@ -48,7 +54,7 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 	storagePath := filepath.ToSlash(filepath.Join(subDir, uniqueName))
 	fullPath := filepath.Join(baseDir, storagePath)
 
-	// 写文件
+	// 写文件（流式计数限制，超限即失败并清理）
 	src, err := file.Open()
 	if err != nil {
 		return nil, apperr.Wrap(500, "打开上传文件失败", err)
@@ -60,11 +66,14 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 		return nil, apperr.Wrap(500, "创建目标文件失败", err)
 	}
 
-	// io.Copy → Sync → Close 三步都必须成功，任一失败都清理已写文件，
-	// 避免出现"DB 已记录但磁盘文件不完整/丢失"的数据不一致。
+	// io.CopyN → Sync → Close 三步都必须成功，任一失败都清理已写文件
 	copyErr := func() error {
-		if _, err := io.Copy(dst, src); err != nil {
+		written, err := io.CopyN(dst, src, maxSize+1)
+		if err != nil && err != io.EOF {
 			return apperr.Wrap(500, "写入文件失败", err)
+		}
+		if written > maxSize {
+			return apperr.New(413, "文件过大，最大允许 100MB")
 		}
 		// 刷盘，防止系统崩溃时文件内容缺失
 		if err := dst.Sync(); err != nil {
@@ -104,6 +113,17 @@ func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*mo
 		return nil, apperr.ErrInternal
 	}
 	return record, nil
+}
+
+// allowedUploadExt 允许上传的扩展名白名单。
+func allowedUploadExt(ext string) bool {
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+		".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+		".txt", ".md", ".csv", ".zip", ".rar", ".7z", ".tar", ".gz":
+		return true
+	}
+	return false
 }
 
 // List 文件记录列表。

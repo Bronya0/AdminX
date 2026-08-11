@@ -2,7 +2,6 @@ package handler
 
 import (
 	"log/slog"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,11 +15,12 @@ import (
 // UserHandler 用户 CRUD。
 type UserHandler struct {
 	svc    *service.UserService
+	audit  *service.AuditService
 	logger *slog.Logger
 }
 
-func NewUserHandler(svc *service.UserService, logger *slog.Logger) *UserHandler {
-	return &UserHandler{svc: svc, logger: logger}
+func NewUserHandler(svc *service.UserService, auditSvc *service.AuditService, logger *slog.Logger) *UserHandler {
+	return &UserHandler{svc: svc, audit: auditSvc, logger: logger}
 }
 
 // List GET /accounts/users/
@@ -64,11 +64,17 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	// 创建超管仅限超级管理员，防止普通管理员提权
+	if in.IsSuperuser && !isSuperuser(c) {
+		response.Fail(c, 403, "仅超级管理员可创建超管账号")
+		return
+	}
 	user, err := h.svc.Create(in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "create", "User", user.ID, user.Username)
 	response.Created(c, model.ToUserDTO(user))
 }
 
@@ -79,22 +85,43 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	// 授予/撤销超管仅限超级管理员，防止普通管理员提权
+	if in.IsSuperuser != nil && *in.IsSuperuser && !isSuperuser(c) {
+		response.Fail(c, 403, "仅超级管理员可授予超管权限")
+		return
+	}
+	if in.IsSuperuser != nil && !*in.IsSuperuser && !isSuperuser(c) {
+		response.Fail(c, 403, "仅超级管理员可撤销超管权限")
+		return
+	}
 	user, err := h.svc.Update(c.Param("id"), in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "update", "User", user.ID, user.Username)
 	response.OK(c, model.ToUserDTO(user))
 }
 
 // Delete DELETE /accounts/users/:id/
 func (h *UserHandler) Delete(c *gin.Context) {
-	if err := h.svc.Delete(c.Param("id")); err != nil {
+	id := c.Param("id")
+	if err := h.svc.Delete(id); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "delete", "User", id, id)
 	response.NoContent(c)
 }
 
 // 防止 strconv 未使用警告
-var _ = strconv.Itoa
+
+// isSuperuser 从 gin context 判断当前用户是否为超级管理员。
+func isSuperuser(c *gin.Context) bool {
+	v, exists := c.Get("is_superuser")
+	if !exists {
+		return false
+	}
+	b, ok := v.(bool)
+	return ok && b
+}

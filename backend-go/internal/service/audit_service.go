@@ -23,6 +23,11 @@ func (s *AuditService) List(offset, limit int, action, model_ string, start, end
 	return s.repo.List(offset, limit, action, model_, start, end)
 }
 
+// GetByID 查询单条审计日志。
+func (s *AuditService) GetByID(id string) (*model.AuditLog, error) {
+	return s.repo.FindByID(id)
+}
+
 // Record 记录一条审计日志（通用入口）。
 func (s *AuditService) Record(action, modelName, objectID, objectRepr, operator, ip string, oldVals, newVals datatypes.JSON, diff string) error {
 	log := &model.AuditLog{

@@ -96,9 +96,28 @@ func (s *PolicyService) ChangePassword(userID, oldPassword, newPassword string) 
 		if err := tx.Model(&user).Update("password", hashed).Error; err != nil {
 			return err
 		}
-		return tx.Create(&model.PasswordHistory{
+		if err := tx.Create(&model.PasswordHistory{
 			UserID:       userID,
 			PasswordHash: hashed,
-		}).Error
+		}).Error; err != nil {
+			return err
+		}
+		// 清理超出保留数量的历史记录（仅保留最近 historyCount 条）
+		if historyCount > 0 {
+			var extraIDs []string
+			if err := tx.Model(&model.PasswordHistory{}).
+				Where("user_id = ?", userID).
+				Order("created_at DESC").
+				Offset(historyCount).
+				Pluck("id", &extraIDs).Error; err != nil {
+				return err
+			}
+			if len(extraIDs) > 0 {
+				if err := tx.Where("id IN ?", extraIDs).Delete(&model.PasswordHistory{}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 }

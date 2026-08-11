@@ -14,11 +14,12 @@ import (
 // MenuHandler 菜单 CRUD + 树查询。
 type MenuHandler struct {
 	svc    *service.MenuService
+	audit  *service.AuditService
 	logger *slog.Logger
 }
 
-func NewMenuHandler(svc *service.MenuService, logger *slog.Logger) *MenuHandler {
-	return &MenuHandler{svc: svc, logger: logger}
+func NewMenuHandler(svc *service.MenuService, auditSvc *service.AuditService, logger *slog.Logger) *MenuHandler {
+	return &MenuHandler{svc: svc, audit: auditSvc, logger: logger}
 }
 
 // List GET /menu/ — 全部菜单（扁平，前端建树）。
@@ -70,6 +71,7 @@ func (h *MenuHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "create", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name)
 	response.Created(c, menu)
 }
 
@@ -90,6 +92,7 @@ func (h *MenuHandler) Update(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "update", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name)
 	response.OK(c, menu)
 }
 
@@ -104,5 +107,6 @@ func (h *MenuHandler) Delete(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "delete", "Menu", strconv.FormatInt(id, 10), strconv.FormatInt(id, 10))
 	response.NoContent(c)
 }

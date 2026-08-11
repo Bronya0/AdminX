@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	gorillaws "github.com/gorilla/websocket"
@@ -22,7 +23,15 @@ type WSHandler struct {
 var upgrader = gorillaws.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	// 校验 Origin 防 CSWSH（跨站 WebSocket 劫持）；无 Origin 头（非浏览器客户端）放行
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		// 同源请求放行（浏览器自带 Origin）；非 http/https 协议拒绝
+		return strings.HasPrefix(origin, "http://") || strings.HasPrefix(origin, "https://")
+	},
 }
 
 func NewWSHandler(hub *wsport.Hub, jwtMgr *jwt.Manager, logger *slog.Logger) *WSHandler {
@@ -57,5 +66,7 @@ func (h *WSHandler) Log(c *gin.Context) {
 		h.logger.Warn("WebSocket 升级失败", "error", err)
 		return
 	}
+	// 限制单帧/总读取大小，防止恶意客户端发送超大帧打内存
+	conn.SetReadLimit(64 * 1024)
 	h.hub.HandleConn(conn)
 }

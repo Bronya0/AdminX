@@ -21,7 +21,7 @@ redis:
   url: "redis://localhost:6379/0"
 
 jwt:
-  secret: "change-me-in-production"  # 生产必须改（DJA_JWT_SECRET）
+  secret: "dev-only-change-me-9f8e7d6c5b4a3210"  # 必须改（DJA_JWT_SECRET），默认值/空值会拒绝启动
   access_expire: "30m"
   refresh_expire: "168h"
   issuer: "adminx"

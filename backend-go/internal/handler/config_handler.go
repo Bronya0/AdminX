@@ -3,7 +3,6 @@ package handler
 import (
 	"log/slog"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -135,5 +134,3 @@ func (h *ConfigHandler) Groups(c *gin.Context) {
 	}
 	response.OK(c, groups)
 }
-
-var _ = time.Now

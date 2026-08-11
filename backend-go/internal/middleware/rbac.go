@@ -10,7 +10,7 @@ package middleware
 
 import (
 	"encoding/json"
-	"path"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -107,7 +107,9 @@ func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, err
 }
 
 // matchPath 匹配单条规则
-// 规则格式: 可选 "METHOD:/path"，path 部分用 glob（path.Match）。
+// 规则格式: 可选 "METHOD:/path"，path 部分用 glob（* 跨多级路径，? 单字符）。
+// 用正则实现，使 `*` 能匹配多级路径（path.Match 的 * 不跨 /，
+// 导致 "GET:/api/v1/posts/*" 匹配不到 /api/v1/posts/1/xx 这类多段路径）。
 func matchPath(method, requestPath, rule string) bool {
 	rule = strings.TrimSpace(rule)
 	if rule == "" {
@@ -126,15 +128,35 @@ func matchPath(method, requestPath, rule string) bool {
 		return false
 	}
 
-	// glob 匹配fnmatch）。
-	// path.Match 对含 [ ] 的模式会返回 ErrBadPattern，需显式处理，
-	// 否则会被当成"不匹配"（静默拒绝合法请求）。
-	matched, err := path.Match(rulePath, requestPath)
+	re, err := globToRegex(rulePath)
 	if err != nil {
-		// 模式非法（如未闭合的 [），降级为字面量比较
+		// 模式非法时降级为字面量比较
 		return rulePath == requestPath
 	}
-	return matched
+	return re.MatchString(requestPath)
+}
+
+// globToRegex 将 glob 模式（* 任意多段、? 单字符）编译为正则。
+// * 匹配任意字符（含 /），保证多级路径规则生效。
+func globToRegex(pattern string) (*regexp.Regexp, error) {
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(pattern); i++ {
+		ch := pattern[i]
+		switch ch {
+		case '*':
+			b.WriteString(".*")
+		case '?':
+			b.WriteString(".")
+		case '.', '+', '(', ')', '|', '^', '$', '{', '}', '[', ']', '\\':
+			b.WriteByte('\\')
+			b.WriteByte(ch)
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	b.WriteString("$")
+	return regexp.Compile(b.String())
 }
 
 // keys 提取 map 的 key 切片。

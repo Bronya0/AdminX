@@ -2,7 +2,6 @@ package handler
 
 import (
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,7 +50,10 @@ func (h *AuditHandler) List(c *gin.Context) {
 }
 
 func (h *AuditHandler) Get(c *gin.Context) {
-	response.FailWithData(c, 400, "use list endpoint", nil)
+	log, err := h.svc.GetByID(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, log)
 }
-
-var _ = strconv.Atoi

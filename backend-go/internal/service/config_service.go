@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -409,5 +408,3 @@ func truncate(s string, max int) string {
 	}
 	return string(runes[:max])
 }
-
-var _ = fmt.Sprintf

@@ -6,6 +6,8 @@ import (
 	"gorm.io/gorm"
 
 	"adminx/internal/model"
+
+	apperr "adminx/pkg/errors"
 )
 
 // AuditRepo 审计日志数据访问。
@@ -18,6 +20,19 @@ func NewAuditRepo(db *gorm.DB) *AuditRepo { return &AuditRepo{db: db} }
 // Create 写入审计日志。
 func (r *AuditRepo) Create(log *model.AuditLog) error {
 	return r.db.Create(log).Error
+}
+
+// FindByID 查询单条审计日志。
+func (r *AuditRepo) FindByID(id string) (*model.AuditLog, error) {
+	var log model.AuditLog
+	err := r.db.First(&log, "id = ?", id).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, err
+	}
+	return &log, nil
 }
 
 // List 分页查询审计日志。

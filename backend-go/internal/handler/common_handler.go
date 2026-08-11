@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"log/slog"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -46,7 +48,13 @@ func (h *CommonHandler) Dashboard(c *gin.Context) {
 func (h *CommonHandler) Health(c *gin.Context) {
 	dbOK := "up"
 	sqlDB, err := h.db.DB()
-	if err != nil || sqlDB.Ping() != nil {
+	if err == nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if sqlDB.PingContext(ctx) != nil {
+			dbOK = "down"
+		}
+	} else {
 		dbOK = "down"
 	}
 	response.OK(c, gin.H{"status": "ok", "db": dbOK})

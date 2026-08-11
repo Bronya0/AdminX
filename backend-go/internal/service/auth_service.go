@@ -146,7 +146,7 @@ func (s *AuthService) Logout(ctx context.Context, userID, refreshToken string) e
 			}
 		}
 		// token 解析失败（无效/过期）也允许 logout 成功，只是不拉黑
-		if err := s.jwtMgr.BlacklistRefreshToken(ctx, refreshToken); err != nil {
+		if _, err := s.jwtMgr.ConsumeRefreshToken(ctx, refreshToken); err != nil {
 			s.logger.WarnContext(ctx, "拉黑 refresh token 失败", "error", err)
 		}
 	}
@@ -176,13 +176,15 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 		return nil, apperr.New(401, "令牌类型错误，需要 refresh token")
 	}
 
-	// 黑名单检查
-	blacklisted, err := s.jwtMgr.IsBlacklisted(ctx, refreshToken)
+	// 原子消费（防并发重放）：SETNX 成功才算首次使用；重复使用/已注销的 token 拒绝
+	consumed, err := s.jwtMgr.ConsumeRefreshToken(ctx, refreshToken)
 	if err != nil {
-		s.logger.WarnContext(ctx, "黑名单检查失败", "error", err)
+		// Redis 不可用时降级放行（保持可用性，与黑名单检查原行为一致）
+		s.logger.WarnContext(ctx, "消费 refresh token 失败，降级放行", "error", err)
+		consumed = true
 	}
-	if blacklisted {
-		return nil, apperr.New(401, "refresh token 已被吊销")
+	if !consumed {
+		return nil, apperr.New(401, "refresh token 已被使用或吊销")
 	}
 
 	// 校验用户仍存在且活跃
@@ -194,9 +196,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 		return nil, apperr.New(403, "账号已被禁用")
 	}
 
-	// 轮换: 旧 refresh 拉黑 + 签发新 token
-	_ = s.jwtMgr.BlacklistRefreshToken(ctx, refreshToken)
-
+	// 轮换: 旧 refresh 已在上面原子消费（拉黑），签发新 token
 	access, err := s.jwtMgr.GenerateAccessToken(user.ID, user.Username)
 	if err != nil {
 		return nil, apperr.ErrInternal

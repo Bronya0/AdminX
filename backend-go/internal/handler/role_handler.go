@@ -14,11 +14,12 @@ import (
 // RoleHandler 角色 CRUD。
 type RoleHandler struct {
 	svc    *service.RoleService
+	audit  *service.AuditService
 	logger *slog.Logger
 }
 
-func NewRoleHandler(svc *service.RoleService, logger *slog.Logger) *RoleHandler {
-	return &RoleHandler{svc: svc, logger: logger}
+func NewRoleHandler(svc *service.RoleService, auditSvc *service.AuditService, logger *slog.Logger) *RoleHandler {
+	return &RoleHandler{svc: svc, audit: auditSvc, logger: logger}
 }
 
 // List GET /accounts/roles/
@@ -66,6 +67,7 @@ func (h *RoleHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "create", "Role", role.ID, role.Name)
 	response.Created(c, role)
 }
 
@@ -81,14 +83,17 @@ func (h *RoleHandler) Update(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "update", "Role", role.ID, role.Name)
 	response.OK(c, role)
 }
 
 // Delete DELETE /accounts/roles/:id/
 func (h *RoleHandler) Delete(c *gin.Context) {
-	if err := h.svc.Delete(c.Param("id")); err != nil {
+	id := c.Param("id")
+	if err := h.svc.Delete(id); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecord(c, h.audit, "delete", "Role", id, id)
 	response.NoContent(c)
 }

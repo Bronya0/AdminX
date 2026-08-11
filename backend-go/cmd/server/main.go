@@ -90,7 +90,7 @@ func main() {
 
 	// 8. Service 层
 	authSvc := service.NewAuthService(db, userRepo, lockRepo, logRepo, jwtMgr, log,
-		cfg.Server.Mode != "release", 5, 15*time.Minute)
+		cfg.Server.Mode == "release", 5, 15*time.Minute)
 	userSvc := service.NewUserService(db, userRepo)
 	roleSvc := service.NewRoleService(db, roleRepo)
 	menuSvc := service.NewMenuService(db, menuRepo)
@@ -105,9 +105,9 @@ func main() {
 
 	// 9. Handler 层
 	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, log)
-	userH := handler.NewUserHandler(userSvc, log)
-	roleH := handler.NewRoleHandler(roleSvc, log)
-	menuH := handler.NewMenuHandler(menuSvc, log)
+	userH := handler.NewUserHandler(userSvc, auditSvc, log)
+	roleH := handler.NewRoleHandler(roleSvc, auditSvc, log)
+	menuH := handler.NewMenuHandler(menuSvc, auditSvc, log)
 	cfgH := handler.NewConfigHandler(configSvc, log)
 	auditH := handler.NewAuditHandler(auditSvc, log)
 	jobH := handler.NewJobHandler(jobSvc, jobRepo, log)
@@ -167,6 +167,8 @@ func main() {
 		log.Info("HTTP 服务监听中", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("HTTP 服务启动失败", "error", err)
+			// 手动 cancel 让调度器/WebSocket 子协程退出（os.Exit 不执行 defer）
+			cancel()
 			os.Exit(1)
 		}
 	}()

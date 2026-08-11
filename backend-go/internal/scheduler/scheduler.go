@@ -82,6 +82,24 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 	m.scheduler.Start()
 	m.logger.Info("调度器已启动", "loaded_jobs", loaded)
+
+	// 启动心跳 goroutine：每 10s 写一次调度器心跳，供 /jobs/status/ 查询存活状态
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		// 启动后立即写一次，避免状态接口短暂显示 offline
+		_ = m.jobRepo.WriteHeartbeat()
+		for {
+			select {
+			case <-ticker.C:
+				if err := m.jobRepo.WriteHeartbeat(); err != nil {
+					m.logger.Warn("写调度器心跳失败", "error", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	return nil
 }
 

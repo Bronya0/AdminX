@@ -7,9 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -65,7 +65,7 @@ func (s *NotificationService) Create(ctx context.Context, in NotificationCreateI
 		return nil, apperr.ErrInternal
 	}
 
-	// 异步触发 webhook（信号驱动
+	// 异步触发 webhook（信号驱动，独立 goroutine 内已 recover）
 	go s.dispatchWebhooks(context.Background(), n)
 	return n, nil
 }
@@ -111,6 +111,9 @@ func (s *NotificationService) ListWebhooks(offset, limit int) ([]model.WebhookCo
 func (s *NotificationService) CreateWebhook(updates map[string]interface{}) (*model.WebhookConfig, error) {
 	name, _ := updates["name"].(string)
 	url, _ := updates["url"].(string)
+	if !validWebhookURL(url) {
+		return nil, apperr.New(400, "webhook URL 非法")
+	}
 	secret, _ := updates["secret"].(string)
 	events, _ := updates["events"].(string)
 	isActive := true
@@ -133,6 +136,9 @@ func (s *NotificationService) CreateWebhook(updates map[string]interface{}) (*mo
 }
 
 func (s *NotificationService) UpdateWebhook(id string, updates map[string]interface{}) (*model.WebhookConfig, error) {
+	if u, ok := updates["url"].(string); ok && u != "" && !validWebhookURL(u) {
+		return nil, apperr.New(400, "webhook URL 非法")
+	}
 	if err := s.db.Model(&model.WebhookConfig{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return nil, apperr.ErrInternal
 	}
@@ -154,7 +160,13 @@ func (s *NotificationService) ListWebhookLogs(offset, limit int, webhookID strin
 // ── Webhook 外发 ──
 
 // dispatchWebhooks 向所有匹配的活跃 webhook 发送通知。
+// 在独立 goroutine 中运行，内部 recover 防止 panic 杀死进程。
 func (s *NotificationService) dispatchWebhooks(ctx context.Context, n *model.Notification) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("dispatchWebhooks panic", "panic", r)
+		}
+	}()
 	configs, err := s.repo.ActiveWebhooks()
 	if err != nil {
 		s.log.Error("查询活跃 webhook 失败", "error", err)
@@ -186,7 +198,17 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 		headers["X-Signature"] = hex.EncodeToString(mac.Sum(nil))
 	}
 
-	req, _ := http.NewRequestWithContext(ctx, "POST", cfg.URL, bytes.NewReader(body))
+	// 校验 webhook URL 合法性，防止非法 URL 导致 NewRequest 返回 nil 后 panic
+	if !validWebhookURL(cfg.URL) {
+		s.log.Warn("webhook URL 非法，跳过发送", "name", cfg.Name, "url", cfg.URL)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		s.log.Warn("构造 webhook 请求失败", "name", cfg.Name, "error", err)
+		return
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -217,6 +239,18 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 	s.log.Info("webhook 已发送", "name", cfg.Name, "status", resp.StatusCode)
 }
 
+// validWebhookURL 校验 webhook URL（必须 http/https 且能解析出 host）。
+func validWebhookURL(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
 // matchEvent 检查事件类型是否在 webhook 关注列表中。
 // 空 events 表示匹配所有。
 func matchEvent(eventsCSV, eventType string) bool {
@@ -231,4 +265,3 @@ func matchEvent(eventsCSV, eventType string) bool {
 	return false
 }
 
-var _ = fmt.Sprintf
