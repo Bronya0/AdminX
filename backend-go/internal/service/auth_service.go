@@ -134,17 +134,27 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 
 // Logout 登出。将 refresh token 加入黑名单 + 更新 last_logout。
 // 校验 refresh token 的归属（防止用户拉黑他人 token 的 DoS）。
+// userID 为空时（access token 已过期/缺失，前端 F5 后登出），允许仅凭 refresh token
+// 登出：以 refresh 归属者为操作者，凭持有即有权吊销自己的会话。
 func (s *AuthService) Logout(ctx context.Context, userID, refreshToken string) error {
-	// 校验 refresh token 归属当前用户（防 DoS: 用户拿别人的 refresh 来登出）
+	var parsed *jwt.Claims
 	if refreshToken != "" {
 		if claims, err := s.jwtMgr.Parse(refreshToken); err == nil {
-			if claims.UserID != userID {
-				// refresh token 不属于当前用户，拒绝拉黑（静默成功，不暴露差异）
-				s.logger.WarnContext(ctx, "logout 拒绝: refresh token 归属不匹配",
-					"current_user", userID, "token_user", claims.UserID)
-				return nil
-			}
+			parsed = claims
 		}
+	}
+	// refresh token 归属当前用户（防 DoS: 用户拿别人的 refresh 来登出）
+	if parsed != nil && parsed.GetTokenType() == jwt.TokenTypeRefresh {
+		if userID == "" {
+			userID = parsed.UserID
+		} else if parsed.UserID != userID {
+			// refresh token 不属于当前用户，拒绝拉黑（静默成功，不暴露差异）
+			s.logger.WarnContext(ctx, "logout 拒绝: refresh token 归属不匹配",
+				"current_user", userID, "token_user", parsed.UserID)
+			return nil
+		}
+	}
+	if refreshToken != "" {
 		// token 解析失败（无效/过期）也允许 logout 成功，只是不拉黑
 		if _, err := s.jwtMgr.ConsumeRefreshToken(ctx, refreshToken); err != nil {
 			s.logger.WarnContext(ctx, "拉黑 refresh token 失败", "error", err)
@@ -187,6 +197,12 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 	}
 	if !user.IsActive {
 		return nil, apperr.New(403, "账号已被禁用")
+	}
+
+	// 校验 last_logout：登出后所有旧 refresh token 一并失效（与 JWTAuth 同标准），
+	// 否则未随登出提交的其他 refresh token 可在登出后继续轮换新 token，绕过二次失效。
+	if user.LastLogout != nil && claims.IssuedAt != nil && claims.IssuedAt.Time.Before(*user.LastLogout) {
+		return nil, apperr.New(401, "refresh token 已失效，请重新登录")
 	}
 
 	// 原子消费（防并发重放）：SETNX 成功才算首次使用；重复使用/已注销的 token 拒绝

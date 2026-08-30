@@ -87,12 +87,12 @@ func (h *NotificationHandler) ListWebhooks(c *gin.Context) {
 }
 
 func (h *NotificationHandler) CreateWebhook(c *gin.Context) {
-	var updates map[string]interface{}
-	if err := c.ShouldBindJSON(&updates); err != nil {
+	var in service.WebhookInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BindingError(c, err)
 		return
 	}
-	result, err := h.svc.CreateWebhook(updates)
+	result, err := h.svc.CreateWebhook(in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
@@ -101,13 +101,13 @@ func (h *NotificationHandler) CreateWebhook(c *gin.Context) {
 }
 
 func (h *NotificationHandler) UpdateWebhook(c *gin.Context) {
-	var updates map[string]interface{}
-	if err := c.ShouldBindJSON(&updates); err != nil {
+	var in service.WebhookInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BindingError(c, err)
 		return
 	}
 	id := c.Param("id")
-	result, err := h.svc.UpdateWebhook(id, updates)
+	result, err := h.svc.UpdateWebhook(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import SERVICE_PORT, CORS_ORIGINS, DEBUG, LOG_LEVEL
+from config import SERVICE_PORT, CORS_ORIGINS, DEBUG, LOG_LEVEL, COMPONENT_SECRET
 from routers import posts, register
 from routers import component as comp_module
 from auth import introspect_token
@@ -86,6 +86,26 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# ─── 组件管理端点鉴权 ───
+# /api/v1/register、/api/v1/unregister 可触发向平台注册/注销菜单，
+# 必须防止任何能访问到本服务的人调用：要求与 COMPONENT_SECRET 匹配的
+# X-Component-Token 头（与平台组件端点使用同一密钥）。
+import hmac
+
+
+@app.middleware("http")
+async def component_admin_guard(request: Request, call_next):
+    protected = ("/api/v1/register/", "/api/v1/unregister/")
+    if request.url.path in protected:
+        provided = request.headers.get("X-Component-Token", "")
+        if not COMPONENT_SECRET or not hmac.compare_digest(provided, COMPONENT_SECRET):
+            return JSONResponse(
+                status_code=403,
+                content={"code": 403, "msg": "缺少或错误的 X-Component-Token", "data": None},
+            )
+    return await call_next(request)
+
 
 # ─── JWT introspection 中间件 ───
 # 拦截 /api/v1/posts/* 请求，提取 Authorization header，

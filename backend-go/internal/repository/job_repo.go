@@ -24,7 +24,7 @@ func (r *JobRepo) List(offset, limit int, search string) ([]model.ScheduleJob, i
 	var count int64
 	q := r.db.Model(&model.ScheduleJob{})
 	if search != "" {
-		q = q.Where("name LIKE ?", "%"+search+"%")
+		q = q.Where("name LIKE ?", "%"+EscapeLike(search)+"%")
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err
@@ -94,5 +94,23 @@ func (r *JobRepo) IsSchedulerAlive() (bool, error) {
 	err := r.db.Raw(`SELECT COUNT(*) FROM scheduler_heartbeats
 		WHERE id = '00000000-0000-0000-0000-000000000001'
 		AND last_heartbeat > NOW() - INTERVAL '30 seconds'`).Scan(&count).Error
+	return count > 0, err
+}
+
+// SetReloadPending 标记调度器需要重载（跨进程通知：web 进程写，调度器进程消费）。
+func (r *JobRepo) SetReloadPending() error {
+	return r.db.Exec(`INSERT INTO scheduler_heartbeats (id, last_heartbeat, reload_pending)
+		VALUES ('00000000-0000-0000-0000-000000000001', NOW(), true)
+		ON CONFLICT (id) DO UPDATE SET reload_pending = true`).Error
+}
+
+// ConsumeReloadPending 原子读取并清除 reload_pending，返回是否被置位。
+func (r *JobRepo) ConsumeReloadPending() (bool, error) {
+	var count int64
+	err := r.db.Raw(`WITH updated AS (
+			UPDATE scheduler_heartbeats SET reload_pending = false
+			WHERE id = '00000000-0000-0000-0000-000000000001' AND reload_pending = true
+			RETURNING 1)
+		SELECT COUNT(*) FROM updated`).Scan(&count).Error
 	return count > 0, err
 }

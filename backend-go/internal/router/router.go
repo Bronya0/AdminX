@@ -83,17 +83,20 @@ func New(deps *Deps) *gin.Engine {
 		public.GET("/captcha/captcha/", deps.CapH.Generate)
 		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
 
-		// cluster 业务组件注册/心跳（公开，但限流防滥用）
+		// cluster 业务组件注册/心跳（限流防滥用 + 可选共享密钥）
+		// 配置 security.component_secret 后，业务组件须携带 X-Component-Token 头；
+		// 未配置时保持开放（兼容本地演示），但启动日志会告警。
 		if deps.ClsH != nil {
+			compMW := appmw.ComponentSecret(deps.Config.Security.ComponentSecret)
 			public.POST("/cluster/components/register/",
 				appmw.RateLimit(deps.Redis, "cluster-register", appmw.Limit{Requests: 30, Window: time.Minute}),
-				deps.ClsH.Register)
+				compMW, deps.ClsH.Register)
 			public.POST("/cluster/components/heartbeat/",
 				appmw.RateLimit(deps.Redis, "cluster-heartbeat", appmw.Limit{Requests: 120, Window: time.Minute}),
-				deps.ClsH.Heartbeat)
+				compMW, deps.ClsH.Heartbeat)
 			public.POST("/cluster/components/unregister/",
 				appmw.RateLimit(deps.Redis, "cluster-unregister", appmw.Limit{Requests: 30, Window: time.Minute}),
-				deps.ClsH.Unregister)
+				compMW, deps.ClsH.Unregister)
 		}
 	}
 
@@ -121,7 +124,6 @@ func New(deps *Deps) *gin.Engine {
 	{
 		me.GET("/accounts/users/me/", deps.AuthH.Me)
 		me.PATCH("/accounts/users/me/", deps.AuthH.UpdateMe)
-		me.POST("/accounts/logout/", deps.AuthH.Logout)
 		me.GET("/menu/user_tree/", deps.MenuH.UserTree)
 		me.GET("/accounts/roles/all/", deps.RoleH.All)
 		me.GET("/notification/messages/", deps.NotifH.List)
@@ -132,11 +134,21 @@ func New(deps *Deps) *gin.Engine {
 			response.OK(c, gin.H{"note": "POST /policy/change-password/"})
 		})
 		me.POST("/policy/change-password/", deps.PolicyH.ChangePassword)
+		// 密码策略读取：改密弹窗/用户管理表单都需要按策略做前端校验（策略本身非敏感）
+		me.GET("/policy/policy/", deps.PolicyH.GetPolicy)
+	}
+
+	// ── logout（软鉴权）：access token 过期/缺失时仍可凭 refresh token 吊销会话 ──
+	logout := api.Group("")
+	logout.Use(appmw.JWTSoft(jwt.New(deps.JWTCfg.Secret, deps.JWTCfg.Issuer,
+		deps.JWTCfg.AccessExpire, deps.JWTCfg.RefreshExpire, deps.Redis), deps.DB))
+	{
+		logout.POST("/accounts/logout/", deps.AuthH.Logout)
 	}
 
 	// ── RBAC 路由（JWT + RBAC）──
 	rbac := api.Group("")
-	rbac.Use(jwtMW(), appmw.RBAC(deps.DB))
+	rbac.Use(jwtMW(), appmw.RBAC(deps.DB, deps.Config.Server.BasePath))
 	{
 		// 配置读取（含加密配置）：仅允许有权限的用户访问，防止普通用户拉取全部明文
 		rbac.GET("/config/by_group/", deps.CfgH.ByGroup)
@@ -153,6 +165,9 @@ func New(deps *Deps) *gin.Engine {
 		rbac.PATCH("/accounts/users/:id/", deps.UserH.Update)
 		rbac.DELETE("/accounts/users/:id/", deps.UserH.Delete)
 
+		// 角色选项（用户管理页下拉用）
+		rbac.GET("/accounts/users/roles/", deps.RoleH.All)
+
 		// 角色
 		rbac.GET("/accounts/roles/", deps.RoleH.List)
 		rbac.GET("/accounts/roles/:id/", deps.RoleH.Get)
@@ -164,8 +179,6 @@ func New(deps *Deps) *gin.Engine {
 		// 菜单
 		rbac.GET("/menu/", deps.MenuH.List)
 		rbac.GET("/menu/:id/", deps.MenuH.Get)
-		rbac.POST("/menu/", deps.MenuH.Create)
-		rbac.POST("/menu/register/", deps.MenuH.Register)
 		rbac.PUT("/menu/:id/", deps.MenuH.Update)
 		rbac.PATCH("/menu/:id/", deps.MenuH.Update)
 		rbac.DELETE("/menu/:id/", deps.MenuH.Delete)
@@ -183,14 +196,9 @@ func New(deps *Deps) *gin.Engine {
 		rbac.GET("/audit/", deps.AuditH.List)
 		rbac.GET("/audit/:id/", deps.AuditH.Get)
 
-		// 定时任务
+		// 定时任务（读操作走 RBAC）
 		rbac.GET("/jobs/", deps.JobH.List)
 		rbac.GET("/jobs/:id/", deps.JobH.Get)
-		rbac.POST("/jobs/", deps.JobH.Create)
-		rbac.PUT("/jobs/:id/", deps.JobH.Update)
-		rbac.PATCH("/jobs/:id/", deps.JobH.Update)
-		rbac.DELETE("/jobs/:id/", deps.JobH.Delete)
-		rbac.POST("/jobs/:id/run_once/", deps.JobH.RunOnce)
 		rbac.GET("/jobs/status/", deps.JobH.Status)
 		rbac.GET("/jobs/logs/", deps.JobH.Logs)
 
@@ -202,17 +210,12 @@ func New(deps *Deps) *gin.Engine {
 		rbac.DELETE("/notification/webhooks/:id/", deps.NotifH.DeleteWebhook)
 		rbac.GET("/notification/webhook-logs/", deps.NotifH.WebhookLogs)
 
-		// 集群节点 + 业务组件管理
-		rbac.GET("/cluster/nodes/", deps.ClsH.ListNodes)
+		// 集群节点管理（节点 CRUD 归 RBAC；组件升级指令归超管）
 		rbac.POST("/cluster/nodes/", deps.ClsH.CreateNode)
 		rbac.PUT("/cluster/nodes/:id/", deps.ClsH.UpdateNode)
 		rbac.PATCH("/cluster/nodes/:id/", deps.ClsH.UpdateNode)
 		rbac.DELETE("/cluster/nodes/:id/", deps.ClsH.DeleteNode)
 		rbac.GET("/cluster/components/", deps.ClsH.ListComponents)
-		rbac.POST("/cluster/components/:id/set_upgrade/", deps.ClsH.SetUpgrade)
-		rbac.POST("/cluster/components/:id/cancel_upgrade/", deps.ClsH.CancelUpgrade)
-		rbac.POST("/cluster/components/:id/set_uninstall/", deps.ClsH.SetUninstall)
-		rbac.POST("/cluster/components/:id/cancel_uninstall/", deps.ClsH.CancelUninstall)
 
 		// 文件中心
 		rbac.POST("/files/upload/", deps.FileH.Upload)
@@ -226,10 +229,36 @@ func New(deps *Deps) *gin.Engine {
 		// 仪表盘
 		rbac.GET("/common/dashboard/stats/", deps.MonH.Dashboard)
 
-		// 密码策略管理（仅管理员）
-		rbac.GET("/policy/policy/", deps.PolicyH.GetPolicy)
-		rbac.PUT("/policy/policy/", deps.PolicyH.UpdatePolicy)
-		rbac.PATCH("/policy/policy/", deps.PolicyH.UpdatePolicy)
+		// 菜单树/按角色可访问菜单（读操作，角色授权与 home_page 过滤用）
+		rbac.GET("/accounts/roles/menu_tree/", deps.MenuH.Tree)
+		rbac.POST("/accounts/roles/accessible_menus/", deps.RoleH.AccessibleMenus)
+	}
+
+	// ── 高危管理端点（JWT + RBAC + 超管）──
+	// jobs 写操作/手动执行 = shell 任务可执行任意命令；set_upgrade = 可向业务组件下发
+	// 远程升级（间接 RCE）；菜单创建/注册影响全站权限模型；策略写操作影响认证安全。
+	// 这些端点一律要求超级管理员，避免"有菜单权限即可 RCE"的提权链。
+	admin := api.Group("")
+	admin.Use(jwtMW(), appmw.RBAC(deps.DB, deps.Config.Server.BasePath), appmw.RequireSuperuser())
+	{
+		// 用户/角色全量管理保持 RBAC 即可（超管门槛会造成多管理员无法分工），
+		// 但以下端点必须收口：
+		admin.POST("/menu/", deps.MenuH.Create)
+		admin.POST("/menu/register/", deps.MenuH.Register)
+
+		admin.POST("/jobs/", deps.JobH.Create)
+		admin.PUT("/jobs/:id/", deps.JobH.Update)
+		admin.PATCH("/jobs/:id/", deps.JobH.Update)
+		admin.DELETE("/jobs/:id/", deps.JobH.Delete)
+		admin.POST("/jobs/:id/run_once/", deps.JobH.RunOnce)
+
+		admin.POST("/cluster/components/:id/set_upgrade/", deps.ClsH.SetUpgrade)
+		admin.POST("/cluster/components/:id/cancel_upgrade/", deps.ClsH.CancelUpgrade)
+		admin.POST("/cluster/components/:id/set_uninstall/", deps.ClsH.SetUninstall)
+		admin.POST("/cluster/components/:id/cancel_uninstall/", deps.ClsH.CancelUninstall)
+
+		admin.PUT("/policy/policy/", deps.PolicyH.UpdatePolicy)
+		admin.PATCH("/policy/policy/", deps.PolicyH.UpdatePolicy)
 	}
 
 	// ── WebSocket（无 REST 鉴权，连接时可选校验 token）──

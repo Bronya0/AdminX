@@ -145,66 +145,6 @@
           </a-form>
         </a-tab-pane>
 
-        <!-- ===== NTP 时间同步 ===== -->
-        <a-tab-pane key="ntp" tab="NTP 时间同步">
-          <a-form layout="vertical" style="max-width: 600px;">
-            <a-form-item label="启用 NTP">
-              <a-switch v-model:checked="ntpForm.enabled" @change="onNtpEnabledChange" />
-              <span style="margin-left: 8px; color: #999; font-size: 12px;">
-                开启后系统将定时向 NTP 服务器同步时间
-              </span>
-            </a-form-item>
-
-            <a-form-item label="NTP 服务器地址">
-              <a-input
-                v-model:value="ntpForm.server"
-                placeholder="如: ntp.aliyun.com"
-                :disabled="!ntpForm.enabled"
-                @change="onNtpServerChange"
-              />
-            </a-form-item>
-
-            <a-form-item label="同步间隔（分钟）">
-              <a-input-number
-                v-model:value="ntpForm.interval"
-                :min="5"
-                :max="1440"
-                :disabled="!ntpForm.enabled"
-                style="width: 160px;"
-                @change="onNtpIntervalChange"
-              />
-              <span style="margin-left: 8px; color: #999; font-size: 12px;">建议 30~120 分钟</span>
-            </a-form-item>
-
-            <a-divider />
-
-            <a-form-item label="手动同步">
-              <a-space>
-                <a-button type="primary" @click="syncNtpNow" :loading="ntpSyncing" :disabled="!ntpForm.server">
-                  立即同步
-                </a-button>
-                <a-tag v-if="ntpResult" :color="ntpResult.success ? 'success' : 'error'">
-                  {{ ntpResult.success ? `同步成功，偏差 ${ntpResult.offset} 秒` : ntpResult.error || '同步失败' }}
-                </a-tag>
-              </a-space>
-            </a-form-item>
-
-            <a-alert
-              v-if="ntpForm.enabled && !ntpForm.server"
-              type="warning"
-              message="请先填写 NTP 服务器地址"
-              style="margin-bottom: 16px;"
-              banner
-            />
-            <a-alert
-              v-if="!ntpForm.enabled"
-              type="info"
-              message="NTP 时间同步未启用，系统使用本机时间"
-              banner
-            />
-          </a-form>
-        </a-tab-pane>
-
         <!-- ===== 预览 ===== -->
         <a-tab-pane key="preview" tab="预览">
           <div class="preview-area" :class="{ 'preview-dark': form.isDark }">
@@ -340,13 +280,10 @@ const form = reactive({
 // 同步 store → form（当 store 被其他地方修改时）
 onMounted(() => {
   syncFormFromStore()
-  // 恢复登录背景图（仅限客户端 localStorage）
-  form.loginBgImage = localStorage.getItem('login_bg_image') || ''
-  // 恢复 NTP 配置
-  ntpForm.enabled = localStorage.getItem('ntp_enabled') === '1'
-  ntpForm.server = localStorage.getItem('ntp_server') || ''
-  const savedInterval = localStorage.getItem('ntp_interval')
-  if (savedInterval) ntpForm.interval = Number(savedInterval)
+  // 登录背景图以配置中心为唯一事实源（saveSiteInfo 持久化到后端）
+  commonApi.getSiteInfo().then((res) => {
+    if (res.login_bg_image !== undefined) form.loginBgImage = res.login_bg_image || ''
+  }).catch(() => { /* 静默：保持默认 */ })
 })
 
 const syncFormFromStore = () => {
@@ -463,55 +400,11 @@ const saveAll = async () => {
     userStore.favicon = form.favicon
     userStore.idleTimeout = form.idleTimeout
     userStore.appVersion = form.appVersion
-    // 登录背景到 localStorage
-    if (form.loginBgImage) {
-      localStorage.setItem('login_bg_image', form.loginBgImage)
-    } else {
-      localStorage.removeItem('login_bg_image')
-    }
-    // NTP 配置到 localStorage
-    if (ntpForm.enabled) {
-      localStorage.setItem('ntp_enabled', '1')
-    } else {
-      localStorage.removeItem('ntp_enabled')
-    }
-    localStorage.setItem('ntp_server', ntpForm.server)
-    localStorage.setItem('ntp_interval', String(ntpForm.interval))
     message.success('设置已保存')
   } catch { /* interceptor handles error */ }
   finally { saving.value = false }
 }
 
-// ─── NTP 时间同步 ───
-const ntpForm = reactive({
-  enabled: false,
-  server: '',
-  interval: 60,
-})
-
-const ntpSyncing = ref(false)
-const ntpResult = ref<{ success: boolean; offset?: number; error?: string } | null>(null)
-
-const onNtpEnabledChange = () => {
-  if (!ntpForm.enabled) ntpResult.value = null
-}
-
-const onNtpServerChange = () => {}
-
-const onNtpIntervalChange = () => {}
-
-const syncNtpNow = async () => {
-  ntpSyncing.value = true
-  ntpResult.value = null
-  try {
-    const res = await configApi.ntpSync()
-    ntpResult.value = res
-  } catch {
-    ntpResult.value = { success: false, error: '请求失败' }
-  } finally {
-    ntpSyncing.value = false
-  }
-}
 </script>
 
 <style scoped>

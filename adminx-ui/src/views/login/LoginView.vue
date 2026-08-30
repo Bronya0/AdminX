@@ -87,6 +87,7 @@ const userStore = useUserStore()
 // 状态
 const loading = ref(false)
 const rememberMe = ref(false)
+const REMEMBER_KEY = 'adminx_remember_username' 
 const captchaEnabled = ref(false)
 const captchaSvg = ref('')
 const captchaId = ref('')
@@ -140,6 +141,11 @@ const handleSubmit = async () => {
     )
 
     await Promise.all([userStore.fetchUserInfo(), userStore.fetchSiteInfo()])
+    // 记住我：仅记住用户名（密码绝不落盘）
+    try {
+      if (rememberMe.value) localStorage.setItem(REMEMBER_KEY, formState.username)
+      else localStorage.removeItem(REMEMBER_KEY)
+    } catch { /* 隐私模式忽略 */ }
     message.success('登录成功')
     router.push(userStore.user?.home_page || '/')
   } catch {
@@ -169,14 +175,22 @@ const bgStyle = computed(() => {
 onMounted(async () => {
   // 清除残留的旧 token
   userStore.clearToken()
-  // 获取站点名称和背景图
+  // 回填记住的用户名
+  try {
+    const remembered = localStorage.getItem(REMEMBER_KEY)
+    if (remembered) {
+      rememberMe.value = true
+      formState.username = remembered
+    }
+  } catch { /* ignore */ }
+  // 站点名称/背景图以配置中心为唯一事实源（此前本地 localStorage 值会覆盖服务端配置）
   try {
     const res = await commonApi.getSiteInfo()
     siteName.value = res.site_name
     siteDesc.value = res.site_desc
-    loginBgImage.value = localStorage.getItem('login_bg_image') || res.login_bg_image
+    loginBgImage.value = res.login_bg_image || ''
   } catch (e) {
-    loginBgImage.value = localStorage.getItem('login_bg_image') || ''
+    // 使用默认值
   }
 })
 </script>

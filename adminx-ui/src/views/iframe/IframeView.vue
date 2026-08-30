@@ -5,12 +5,13 @@
     </div>
     <iframe
       v-if="iframeUrl"
+      ref="iframeRef"
       :src="iframeUrl"
       class="iframe-full"
       frameborder="0"
       allow="fullscreen"
     ></iframe>
-    <a-empty v-else description="未提供 URL" style="margin-top: 120px;" />
+    <a-empty v-else :description="emptyReason" style="margin-top: 120px;" />
   </div>
 </template>
 
@@ -49,14 +50,58 @@ const isSafeUrl = (url: string): boolean => {
 
 const safeUrl = computed(() => (isSafeUrl(externalUrl.value) ? externalUrl.value : ''))
 
-// token 通过 URL 传递会进入浏览器历史、Referer、服务器日志，存在泄漏风险。
-// 对内嵌可信业务系统是常见做法，但仍优先用 postMessage 方案；当前保留 URL 方式但
-// 仅对通过校验的 URL 注入 token，并使用 hash 避免 token 进入 query string 被日志记录。
-const iframeUrl = computed(() => {
-  if (!safeUrl.value) return ''
-  const sep = safeUrl.value.includes('#') ? '&' : '#'
-  return `${safeUrl.value}${sep}token=${encodeURIComponent(userStore.token || '')}`
+// 白名单校验：url 必须与当前用户菜单中 menu_type === 'iframe' 的菜单一致。
+// 防止通过构造 /iframe?url=https://evil.com 的链接，把登录者的 token 注入任意站点。
+const normalizeUrl = (url: string): string => {
+  try {
+    const u = new URL(url)
+    // 比较协议 + host + path，忽略末尾斜杠与查询参数差异
+    return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`
+  } catch {
+    return ''
+  }
+}
+
+const isWhitelistedUrl = (url: string): boolean => {
+  const target = normalizeUrl(url)
+  if (!target) return false
+  return userStore.menus.some(
+    (m) => m.menu_type === 'iframe' && m.path && normalizeUrl(m.path) === target
+  )
+}
+
+const emptyReason = computed(() => {
+  if (!externalUrl.value || !safeUrl.value) return '未提供 URL 或 URL 非法'
+  return '该地址不在可信任的业务系统列表中，未加载'
 })
+
+const iframeUrl = computed(() => (safeUrl.value && isWhitelistedUrl(safeUrl.value) ? safeUrl.value : ''))
+
+// ── token 下发：postMessage 单次下发，token 不再进 URL（hash/query 都会留痕）──
+// 业务页面加载后发送 { type: 'adminx:request-token' }，本页校验来源后回传 token。
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+
+const onMessage = (event: MessageEvent) => {
+  if (!safeUrl.value || !iframeUrl.value) return
+  let expectedOrigin = ''
+  try {
+    expectedOrigin = new URL(safeUrl.value).origin
+  } catch {
+    return
+  }
+  if (event.origin !== expectedOrigin) return
+  const source = event.source
+  if (!source || source !== iframeRef.value?.contentWindow) return
+  const data = event.data as { type?: string } | null
+  if (data?.type === 'adminx:request-token') {
+    source.postMessage(
+      { type: 'adminx:token', token: userStore.token || '' },
+      { targetOrigin: expectedOrigin }
+    )
+  }
+}
+
+window.addEventListener('message', onMessage)
 
 // prevTitle 必须在客户端环境(onMounted)中读取，避免 setup 顶层访问 document（SSR/测试会报错）
 const prevTitle = ref('')
@@ -70,6 +115,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.title = prevTitle.value
+  window.removeEventListener('message', onMessage)
 })
 </script>
 

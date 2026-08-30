@@ -19,12 +19,34 @@ const defaultTheme: ThemeConfig = {
   fontSize: 14,
 }
 
+// refresh token 会话级存储：不进 localStorage（XSS 无法长期续期），
+// 但进 sessionStorage —— F5/新标签后仍能正确调用服务端登出吊销会话，
+// 关闭标签页即失效。
+const REFRESH_KEY = 'adminx_refresh_token'
+
+const readSessionRefresh = (): string => {
+  try {
+    return sessionStorage.getItem(REFRESH_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+const writeSessionRefresh = (token: string) => {
+  try {
+    if (token) sessionStorage.setItem(REFRESH_KEY, token)
+    else sessionStorage.removeItem(REFRESH_KEY)
+  } catch {
+    /* 隐私模式等场景下静默降级为仅内存 */
+  }
+}
+
 export const useUserStore = defineStore(
   'user',
   () => {
     // State
     const token = ref<string>('')
-    const refreshToken = ref<string>('')
+    const refreshToken = ref<string>(readSessionRefresh())
     const user = ref<User | null>(null)
     const permissions = ref<string[]>([])
     const menus = ref<Menu[]>([])
@@ -50,6 +72,7 @@ export const useUserStore = defineStore(
     const setToken = (access: string, refresh: string) => {
       token.value = access
       refreshToken.value = refresh
+      writeSessionRefresh(refresh)
     }
 
     const setUserInfo = (data: UserInfo) => {
@@ -98,18 +121,15 @@ export const useUserStore = defineStore(
     }
 
     const logout = async () => {
+      // 服务端吊销 refresh token + last_logout 二次失效（仅凭 refresh 也可吊销）
       if (refreshToken.value) {
         try {
           await authApi.logout(refreshToken.value)
         } catch (e) {
-          // ignore
+          // ignore：服务端不可达也要完成本地清理
         }
       }
-      token.value = ''
-      refreshToken.value = ''
-      user.value = null
-      permissions.value = []
-      menus.value = []
+      clearToken()
     }
 
     const updateTheme = (config: Partial<ThemeConfig>) => {
@@ -128,6 +148,7 @@ export const useUserStore = defineStore(
     const clearToken = () => {
       token.value = ''
       refreshToken.value = ''
+      writeSessionRefresh('')
       user.value = null
       permissions.value = []
       menus.value = []

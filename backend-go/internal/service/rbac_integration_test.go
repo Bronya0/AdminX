@@ -22,7 +22,7 @@ func TestRBAC_AssignRoleToUser_ThenUserHasRole(t *testing.T) {
 	userRepo := repository.NewUserRepo(db)
 
 	role := seedRole(t, db, "管理员", false)
-	user := seedUser(t, db, "zhangsan", "pass123")
+	user := seedUser(t, db, "zhangsan", "Pass123!")
 
 	// 分配角色
 	userRepo.AssignRoles(user.ID, []string{role.ID})
@@ -82,7 +82,7 @@ func TestRBAC_AssignMultipleRoles_UserHasUnionOfMenus(t *testing.T) {
 	roleRepo.AssignMenus(roleB.ID, []int64{menuConfig.ID})
 
 	// 创建用户并赋予两个角色
-	user := seedUser(t, db, "lisi", "pass123")
+	user := seedUser(t, db, "lisi", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{roleA.ID, roleB.ID})
 
 	// 验证: 用户应能访问 /api/users/xxx
@@ -117,7 +117,7 @@ func TestRBAC_RemoveRole_UserLosesPermission(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "wangwu", "pass123")
+	user := seedUser(t, db, "wangwu", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	// 先确认有权限
@@ -147,7 +147,7 @@ func TestRBAC_DeactivateMenu_UserLosesPath(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "zhaoliu", "pass123")
+	user := seedUser(t, db, "zhaoliu", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	// 先确认有权限
@@ -178,7 +178,7 @@ func TestRBAC_RemoveMenuFromRole_UserLosesPermission(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "sunqi", "pass123")
+	user := seedUser(t, db, "sunqi", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	if !checkPermissionWithDB(db, user.ID, "GET", "/api/removable/data") {
@@ -206,7 +206,7 @@ func TestRBAC_DeactivateRole_UserLosesPermission(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "sunqi", "pass123")
+	user := seedUser(t, db, "sunqi", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	if !checkPermissionWithDB(db, user.ID, "GET", "/api/enabled/data") {
@@ -234,7 +234,7 @@ func TestRBAC_MethodSpecificPermission(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "readonly_user", "pass123")
+	user := seedUser(t, db, "readonly_user", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	// GET 应通过
@@ -264,7 +264,7 @@ func TestRBAC_MultipleMethodsSamePath(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "crud_user", "pass123")
+	user := seedUser(t, db, "crud_user", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	// 三条规则均应生效
@@ -313,7 +313,7 @@ func TestRBAC_SuperuserBypassAll(t *testing.T) {
 			t.Fatalf("JWT 认证未通过: %s", path)
 		}
 		// 再跑 RBAC
-		middleware.RBAC(db)(c)
+		middleware.RBAC(db, "")(c)
 		if c.IsAborted() {
 			t.Errorf("超级管理员应放行 %s，但被拒绝", path)
 		}
@@ -330,7 +330,7 @@ func TestRBAC_NoRole_UserHasNoPermission(t *testing.T) {
 	menu.AllowedPaths = mustJSONBytes(`["/api/secret/*"]`)
 	db.Save(menu)
 
-	user := seedUser(t, db, "norole_user", "pass123")
+	user := seedUser(t, db, "norole_user", "Pass123!")
 
 	gin.SetMode(gin.TestMode)
 	token, _ := jwtMgr.GenerateAccessToken(user.ID, user.Username)
@@ -343,7 +343,7 @@ func TestRBAC_NoRole_UserHasNoPermission(t *testing.T) {
 	if c.IsAborted() {
 		t.Fatal("JWT 认证未通过")
 	}
-	middleware.RBAC(db)(c)
+	middleware.RBAC(db, "")(c)
 	if !c.IsAborted() {
 		t.Error("无角色用户应被拒绝")
 	}
@@ -361,7 +361,7 @@ func TestRBAC_EmptyAllowedPaths_MenuAllowsNothing(t *testing.T) {
 	// 故意不设 allowed_paths（默认空数组）
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "empty_user", "pass123")
+	user := seedUser(t, db, "empty_user", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	if checkPermissionWithDB(db, user.ID, "GET", "/api/empty/data") {
@@ -396,7 +396,7 @@ func TestRBAC_FullFlow_CreateAssignVerify(t *testing.T) {
 	// Step 3: 创建用户，先只给 viewer 角色
 	user, _ := userSvc.Create(CreateInput{
 		Username: "integration_user",
-		Password: "test123",
+		Password: "Test123!",
 		Roles:    []string{rViewer.ID},
 	})
 
@@ -442,7 +442,7 @@ func TestRBAC_RoleNameChange_DoesNotAffectPermissions(t *testing.T) {
 	db.Save(menu)
 	roleRepo.AssignMenus(role.ID, []int64{menu.ID})
 
-	user := seedUser(t, db, "stable_user", "pass123")
+	user := seedUser(t, db, "stable_user", "Pass123!")
 	userRepo.AssignRoles(user.ID, []string{role.ID})
 
 	// 改名

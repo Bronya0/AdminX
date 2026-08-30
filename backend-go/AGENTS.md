@@ -99,14 +99,19 @@ response.Paginated(c, count, next, prev, results)  // 分页
 
 ## 测试
 
-当前无测试。建议优先补：
-- `internal/jwt/` 生成/解析/黑名单
-- `internal/middleware/rbac.go` glob 匹配
-- `internal/service/auth_service.go` 登录流程
+`go test ./...` 覆盖：jwt、middleware（RBAC/限流）、service（auth/user/role/menu/config/job/notification/rbac 集成）、model、captcha、crypto、errors。
+
+## 安全基线（改动时必须维持）
+
+- **Refresh 必须校验 last_logout**（与 JWTAuth 同标准），否则登出二次失效被绕过
+- **jobs 写操作 / run_once / set_upgrade / menu create+register / policy 写** 挂在 router 的 admin 组（JWT+RBAC+RequireSuperuser），新增高危端点一律进该组
+- **组件端点**（/cluster/components/*）依赖 `security.component_secret`（X-Component-Token，恒时比较）；生产必须配置
+- **登录**：`security.login_captcha_required` 开启后强制验证码（一次性、Redis 存储）；登录锁定常开（不随 mode）
+- **service 层禁止 map 直通 GORM Updates**（mass assignment），一律白名单 struct
+- **改密成功会更新 last_logout 吊销全部旧 token**；创建/重置密码走 `validatePasswordPolicy`
+- **LIKE 搜索词必须过 `repository.EscapeLike`**
 
 ## 已知技术债
 
-- `executeShell` 用 `strings.Fields` 切割命令，参数含空格/引号会出错（应引入 shlex）
-- shell 任务无沙箱（服务进程权限执行），生产需加固
-- 缺少结构化测试
-- 验证码只返回文本，前端需自行渲染图片
+- shell 任务无沙箱（服务进程权限执行），生产需加固或限超管使用
+- 调度器独立进程模式下依赖 scheduler_heartbeats.reload_pending 轮询（10s）感知任务变更

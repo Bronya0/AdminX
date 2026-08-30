@@ -1,11 +1,15 @@
 // Package main 是 init-data 命令：初始化超级用户、默认角色、默认菜单。
 //
 // 用法:
-//   go run ./cmd/init-data --username admin --password admin123
+//   go run ./cmd/init-data --username admin --password 'YourStr0ng!Pass'
 //
+// --password 未提供时自动生成随机密码并打印一次（不再提供 admin123 等默认弱口令）。
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -22,13 +26,31 @@ import (
 
 func main() {
 	username := flag.String("username", "admin", "超级管理员用户名")
-	password := flag.String("password", "admin123", "超级管理员密码")
+	password := flag.String("password", "", "超级管理员密码（不提供则随机生成并打印一次）")
 	configPath := flag.String("config", "", "配置文件路径")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "加载配置失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 未提供密码时生成随机密码（打印一次；不再内置 admin123 等弱口令）
+	if *password == "" {
+		b := make([]byte, 12)
+		if _, err := rand.Read(b); err != nil {
+			fmt.Fprintf(os.Stderr, "生成随机密码失败: %v\n", err)
+			os.Exit(1)
+		}
+		pw := "Ax" + base64.RawURLEncoding.EncodeToString(b) + "!9"
+		*password = pw
+		fmt.Printf("已生成随机超级管理员密码（仅显示这一次，请立即保存）:\n  %s\n\n", pw)
+	}
+
+	// 密码策略校验，弱口令直接拒绝初始化
+	if err := validatePasswordStrength(*password); err != nil {
+		fmt.Fprintf(os.Stderr, "密码不满足安全要求: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -169,4 +191,16 @@ func bindDefaultRoleMenus(db *gorm.DB) error {
 
 func mustJSONPath(pathPattern string) datatypes.JSON {
 	return datatypes.JSON([]byte(fmt.Sprintf(`["%s"]`, pathPattern)))
+}
+
+// validatePasswordStrength 超管密码最低强度要求（长度≥10 且含大小写/数字/特殊字符）。
+func validatePasswordStrength(password string) error {
+	if subtle.ConstantTimeCompare([]byte(password), []byte("admin123")) == 1 {
+		return fmt.Errorf("禁止使用默认弱口令 admin123")
+	}
+	if len(password) < 10 {
+		return fmt.Errorf("长度至少 10 位")
+	}
+	p := model.PasswordPolicy{MinLength: 10, RequireUpper: true, RequireLower: true, RequireDigit: true, RequireSpecial: true, IsActive: true}
+	return p.Validate(password)
 }

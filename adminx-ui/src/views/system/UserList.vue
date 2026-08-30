@@ -206,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -217,7 +217,7 @@ import {
   DeleteOutlined,
   KeyOutlined,
 } from '@ant-design/icons-vue'
-import { userApi, roleApi } from '@/api/auth'
+import { userApi, roleApi, authApi } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
 import type { Menu, User } from '@/types'
@@ -348,14 +348,44 @@ watch(() => formState.roles, (val) => {
   loadMenuOptions(val)
 })
 
-const formRules = {
+// 密码策略驱动的校验（后端 GET /policy/policy/），替换此前写死的 6 位下限
+const policyRules = ref<Array<{ pattern: RegExp; message: string }>>([])
+
+const applyPasswordPolicy = (p: {
+  min_length: number
+  require_upper: boolean
+  require_lower: boolean
+  require_digit: boolean
+  require_special: boolean
+  is_active: boolean
+}) => {
+  if (!p || !p.is_active) return
+  const rules: Array<{ pattern: RegExp; message: string }> = []
+  if (p.min_length > 0) {
+    rules.push({ pattern: new RegExp(`.{${p.min_length},}`), message: `密码长度不能少于${p.min_length}位` })
+  }
+  if (p.require_upper) rules.push({ pattern: /[A-Z]/, message: '密码必须包含大写字母' })
+  if (p.require_lower) rules.push({ pattern: /[a-z]/, message: '密码必须包含小写字母' })
+  if (p.require_digit) rules.push({ pattern: /\d/, message: '密码必须包含数字' })
+  if (p.require_special) rules.push({ pattern: /[^A-Za-z0-9]/, message: '密码必须包含特殊字符' })
+  policyRules.value = rules
+}
+
+const validatePassword = (pwd: string): string | null => {
+  for (const r of policyRules.value) {
+    if (!r.pattern.test(pwd)) return r.message
+  }
+  return null
+}
+
+const formRules = computed(() => ({
   username: [{ required: true, message: '请输入用户名' }],
   password: [
     { required: true, message: '请输入密码' },
-    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' },
+    ...policyRules.value.map((r) => ({ pattern: r.pattern, message: r.message, trigger: 'blur' })),
   ],
   email: [{ type: 'email', message: '请输入正确的邮箱' }],
-}
+}))
 
 // 密码重置弹窗
 const passwordModalVisible = ref(false)
@@ -504,8 +534,9 @@ const handleResetPassword = (record: User) => {
 }
 
 const handlePasswordOk = async () => {
-  if (!newPassword.value || newPassword.value.length < 6) {
-    message.error('密码长度不能少于6位')
+  const policyError = validatePassword(newPassword.value)
+  if (policyError) {
+    message.error(policyError)
     return
   }
   passwordModalLoading.value = true
@@ -525,6 +556,8 @@ onMounted(() => {
   loadData()
   loadRoles()
   loadFullMenuTree()
+  // 拉取密码策略驱动前端校验（失败时静默，由后端校验兜底）
+  authApi.getPasswordPolicy().then(applyPasswordPolicy).catch(() => {})
 })
 </script>
 

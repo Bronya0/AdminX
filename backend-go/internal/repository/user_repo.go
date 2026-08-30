@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"adminx/internal/model"
@@ -41,7 +42,7 @@ func (r *UserRepo) List(offset, limit int, search, role string, isActive *bool) 
 
 	q := r.db.Model(&model.User{}).Where("deleted_at IS NULL")
 	if search != "" {
-		like := "%" + search + "%"
+		like := "%" + EscapeLike(search) + "%"
 		q = q.Where("username LIKE ? OR email LIKE ? OR phone LIKE ? OR desc LIKE ?", like, like, like, like)
 	}
 	if isActive != nil {
@@ -76,19 +77,48 @@ func (r *UserRepo) UpdatePassword(id, hashedPassword string) error {
 }
 
 // AssignRoles 替换用户的角色关联。
-func (r *UserRepo) AssignRoles(userID string, roleIDs []string) error {
+// AssignRoles 设置用户的角色列表。
+// roleRefs 接受角色 ID（uuid）或角色名称混传（前端用户管理页提交的是名称）。
+func (r *UserRepo) AssignRoles(userID string, roleRefs []string) error {
 	var u model.User
 	if err := r.db.First(&u, "id = ?", userID).Error; err != nil {
 		return err
 	}
 	var roles []model.Role
-	if len(roleIDs) > 0 {
-		if err := r.db.Where("id IN ?", roleIDs).Find(&roles).Error; err != nil {
+	if len(roleRefs) > 0 {
+		ids, names := SplitRoleRefs(roleRefs)
+		q := r.db.Model(&model.Role{})
+		switch {
+		case len(ids) > 0 && len(names) > 0:
+			q = q.Where("id IN ? OR name IN ?", ids, names)
+		case len(ids) > 0:
+			q = q.Where("id IN ?", ids)
+		default:
+			q = q.Where("name IN ?", names)
+		}
+		if err := q.Find(&roles).Error; err != nil {
 			return err
 		}
 	}
 	// Association("Roles").Replace 会清除旧关联并写入新关联
 	return r.db.Model(&u).Association("Roles").Replace(roles)
+}
+
+// SplitRoleRefs 把角色引用列表拆分为 uuid ID 与名称两组（uuid 列不能与任意字符串比较）。
+func SplitRoleRefs(refs []string) (ids []string, names []string) {
+	ids = make([]string, 0, len(refs))
+	names = make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref == "" {
+			continue
+		}
+		if _, err := uuid.Parse(ref); err == nil {
+			ids = append(ids, ref)
+		} else {
+			names = append(names, ref)
+		}
+	}
+	return ids, names
 }
 
 // SoftDelete 软删除用户。

@@ -336,7 +336,7 @@ func TestRBAC_SuperuserBypass(t *testing.T) {
 	c.Set("is_superuser", true)
 	c.Request = httptest.NewRequest("GET", "/api/admin", nil)
 
-	RBAC(db)(c)
+	RBAC(db, "")(c)
 	if c.IsAborted() {
 		t.Error("超级管理员应绕过 RBAC")
 	}
@@ -349,7 +349,7 @@ func TestRBAC_Unauthenticated(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("GET", "/api/test", nil)
 
-	RBAC(db)(c)
+	RBAC(db, "")(c)
 	if !c.IsAborted() {
 		t.Error("未认证应 abort")
 	}
@@ -366,7 +366,7 @@ func TestRBAC_NoMenuPermission(t *testing.T) {
 	c.Set("user_id", "u1")
 	c.Request = httptest.NewRequest("GET", "/api/secret", nil)
 
-	RBAC(db)(c)
+	RBAC(db, "")(c)
 	if !c.IsAborted() {
 		t.Error("无菜单关联的用户应被拒绝")
 	}
@@ -387,7 +387,7 @@ func TestRBAC_WithMenuPermission(t *testing.T) {
 	c.Set("user_id", "u2")
 	c.Request = httptest.NewRequest("GET", "/api/users/list", nil)
 
-	RBAC(db)(c)
+	RBAC(db, "")(c)
 	if c.IsAborted() {
 		t.Error("有菜单权限的用户不应被 abort")
 	}

@@ -5,9 +5,7 @@ import type {
   User,
   UserInfo,
   Role,
-  Permission,
-  BusinessPermission,
-  BusinessCommand,
+  Menu,
   PaginatedResponse,
   LoginLog,
 } from '@/types'
@@ -27,6 +25,18 @@ export const authApi = {
 
   changePassword: (data: { old_password: string; new_password: string }): Promise<void> =>
     request.post('/policy/change-password/', data),
+
+  // 密码策略（登录后任意用户可读，供改密/建用户表单做前端校验）
+  getPasswordPolicy: (): Promise<{
+    min_length: number
+    require_upper: boolean
+    require_lower: boolean
+    require_digit: boolean
+    require_special: boolean
+    expire_days: number
+    history_count: number
+    is_active: boolean
+  }> => request.get('/policy/policy/'),
 
   updateMe: (data: Partial<User>): Promise<User> =>
     request.patch('/accounts/users/me/', data),
@@ -56,8 +66,9 @@ export const roleApi = {
   getRoles: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; desc?: string }): Promise<PaginatedResponse<Role>> =>
     request.get('/accounts/roles/', { params }),
 
-  getMenuTree: (): Promise<any[]> =>
+  getMenuTree: (): Promise<Menu[]> =>
     request.get('/accounts/roles/menu_tree/'),
+
 
   getRole: (id: string): Promise<Role> =>
     request.get(`/accounts/roles/${id}/`),
@@ -75,38 +86,6 @@ export const roleApi = {
     request.post('/accounts/roles/accessible_menus/', { roles }),
 }
 
-export const permissionApi = {
-  getPermissions: (params?: { search?: string }): Promise<Permission[]> =>
-    request.get('/accounts/permissions/', { params }),
-}
-
-export const businessPermissionApi = {
-  list: (params?: { search?: string; app_label?: string }): Promise<BusinessPermission[]> =>
-    request.get('/accounts/business-permissions/', { params }),
-
-  create: (data: Partial<BusinessPermission>): Promise<BusinessPermission> =>
-    request.post('/accounts/business-permissions/', data),
-
-  update: (id: string, data: Partial<BusinessPermission>): Promise<BusinessPermission> =>
-    request.patch(`/accounts/business-permissions/${id}/`, data),
-
-  delete: (id: string): Promise<void> =>
-    request.delete(`/accounts/business-permissions/${id}/`),
-}
-
-export const businessCommandApi = {
-  list: (params?: { search?: string; app_label?: string }): Promise<BusinessCommand[]> =>
-    request.get('/accounts/business-commands/', { params }),
-
-  create: (data: Partial<BusinessCommand>): Promise<BusinessCommand> =>
-    request.post('/accounts/business-commands/', data),
-
-  update: (id: string, data: Partial<BusinessCommand>): Promise<BusinessCommand> =>
-    request.patch(`/accounts/business-commands/${id}/`, data),
-
-  delete: (id: string): Promise<void> =>
-    request.delete(`/accounts/business-commands/${id}/`),
-}
 
 export const loginLogApi = {
   getLoginLogs: (params?: { page?: number; size?: number; search?: string; ip?: string; success?: boolean; created_at__gte?: string; created_at__lte?: string }): Promise<PaginatedResponse<LoginLog>> =>
@@ -120,6 +99,4 @@ export const captchaApi = {
       svg: res.svg,
     })),
 
-  verifyCaptcha: (data: { captcha_id: string; captcha_text: string }): Promise<{ verified: boolean }> =>
-    request.post('/captcha/captcha/verify/', data),
 }

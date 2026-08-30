@@ -75,6 +75,16 @@ func (h *MenuHandler) Create(c *gin.Context) {
 	response.Created(c, menu)
 }
 
+// Tree GET /accounts/roles/menu_tree/ — 角色授权用的完整菜单树（嵌套）。
+func (h *MenuHandler) Tree(c *gin.Context) {
+	tree, err := h.svc.Tree()
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, tree)
+}
+
 // Register POST /menu/register/ — 按 code 幂等注册（业务容器对接用）。
 func (h *MenuHandler) Register(c *gin.Context) {
 	var in service.MenuCreateInput
@@ -103,12 +113,14 @@ func (h *MenuHandler) Update(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	// 变更前快照（审计 old/new/diff；失败不影响主流程）
+	oldMenu, _ := h.svc.GetByID(id)
 	menu, err := h.svc.Update(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecord(c, h.audit, "update", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name)
+	auditRecordDiff(c, h.audit, "update", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name, oldMenu, menu)
 	response.OK(c, menu)
 }
 
@@ -119,10 +131,16 @@ func (h *MenuHandler) Delete(c *gin.Context) {
 		response.Fail(c, 400, "无效的菜单 ID")
 		return
 	}
+	// 删除前快照（审计留痕）
+	oldMenu, _ := h.svc.GetByID(id)
+	repr := strconv.FormatInt(id, 10)
+	if oldMenu != nil {
+		repr = oldMenu.Name
+	}
 	if err := h.svc.Delete(id); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecord(c, h.audit, "delete", "Menu", strconv.FormatInt(id, 10), strconv.FormatInt(id, 10))
+	auditRecordDiff(c, h.audit, "delete", "Menu", strconv.FormatInt(id, 10), repr, oldMenu, nil)
 	response.NoContent(c)
 }

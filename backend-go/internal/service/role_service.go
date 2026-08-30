@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	apperr "adminx/pkg/errors"
@@ -21,6 +22,48 @@ func NewRoleService(db *gorm.DB, roleRepo *repository.RoleRepo) *RoleService {
 
 func (s *RoleService) List(offset, limit int, search string) ([]model.Role, int64, error) {
 	return s.roleRepo.List(offset, limit, search)
+}
+
+// AccessibleMenus 查询一组角色（接受角色 ID 或名称混传）可访问的活跃菜单。
+// 供用户管理页的 home_page 过滤等场景使用。
+func (s *RoleService) AccessibleMenus(roleRefs []string) ([]model.Menu, error) {
+	if len(roleRefs) == 0 {
+		return []model.Menu{}, nil
+	}
+	// roles.id 是 uuid 列：把合法 UUID 与名称分开匹配，避免 PG 对 uuid 列的类型错误
+	ids, names := make([]string, 0, len(roleRefs)), make([]string, 0, len(roleRefs))
+	for _, r := range roleRefs {
+		if r == "" {
+			continue
+		}
+		if _, err := uuid.Parse(r); err == nil {
+			ids = append(ids, r)
+		} else {
+			names = append(names, r)
+		}
+	}
+	if len(ids) == 0 && len(names) == 0 {
+		return []model.Menu{}, nil
+	}
+
+	q := s.db.Distinct("menus.*").
+		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
+		Joins("JOIN roles ON roles.id = role_menus.role_id").
+		Where("menus.is_active = ?", true)
+	switch {
+	case len(ids) > 0 && len(names) > 0:
+		q = q.Where("roles.id IN ? OR roles.name IN ?", ids, names)
+	case len(ids) > 0:
+		q = q.Where("roles.id IN ?", ids)
+	default:
+		q = q.Where("roles.name IN ?", names)
+	}
+
+	var menus []model.Menu
+	if err := q.Order("menus.sort_order").Find(&menus).Error; err != nil {
+		return nil, err
+	}
+	return menus, nil
 }
 
 func (s *RoleService) All() ([]model.Role, error) {

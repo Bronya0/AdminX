@@ -37,12 +37,12 @@ func (h *ClusterHandler) ListNodes(c *gin.Context) {
 }
 
 func (h *ClusterHandler) CreateNode(c *gin.Context) {
-	var n model.ClusterNode
-	if err := c.ShouldBindJSON(&n); err != nil {
+	var in service.NodeCreateInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BindingError(c, err)
 		return
 	}
-	result, err := h.svc.CreateNode(&n)
+	result, err := h.svc.CreateNodeInput(in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
@@ -51,13 +51,13 @@ func (h *ClusterHandler) CreateNode(c *gin.Context) {
 }
 
 func (h *ClusterHandler) UpdateNode(c *gin.Context) {
-	var updates map[string]interface{}
-	if err := c.ShouldBindJSON(&updates); err != nil {
+	var in service.NodeUpdateInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BindingError(c, err)
 		return
 	}
 	id := c.Param("id")
-	result, err := h.svc.UpdateNode(id, updates)
+	result, err := h.svc.UpdateNode(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

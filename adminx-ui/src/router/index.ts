@@ -146,7 +146,11 @@ router.beforeEach(async (to, from) => {
         userStore.fetchSiteInfo(),
       ])
     } catch (e) {
-      message.error('获取用户信息失败')
+      // 认证失败已由 request 层提示并登出（"登录已过期"），这里不再重复提示
+      const isAuthError = e instanceof Error && e.message === '认证失败'
+      if (!isAuthError) {
+        message.error('获取用户信息失败')
+      }
       userStore.clearToken()
       return '/login'
     }

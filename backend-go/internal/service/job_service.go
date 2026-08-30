@@ -25,10 +25,24 @@ type JobService struct {
 	db   *gorm.DB
 	repo *repository.JobRepo
 	log  *slog.Logger
+
+	// onJobsChanged 任务增删改后的回调（main.go 注入）：
+	// 标记 reload_pending（跨进程通知调度器）+ 触发本进程内调度器立即重载。
+	onJobsChanged func()
 }
 
 func NewJobService(db *gorm.DB, repo *repository.JobRepo, logger *slog.Logger) *JobService {
 	return &JobService{db: db, repo: repo, log: logger}
+}
+
+// SetOnJobsChanged 注入任务变更回调（幂等，可重复调用覆盖）。
+func (s *JobService) SetOnJobsChanged(fn func()) { s.onJobsChanged = fn }
+
+// notifyJobsChanged 任务变更后通知调度器重载。
+func (s *JobService) notifyJobsChanged() {
+	if s.onJobsChanged != nil {
+		s.onJobsChanged()
+	}
 }
 
 func (s *JobService) List(offset, limit int, search string) ([]model.ScheduleJob, int64, error) {
@@ -94,6 +108,7 @@ func (s *JobService) Create(in JobCreateInput) (*model.ScheduleJob, error) {
 	if err := s.repo.Create(job); err != nil {
 		return nil, apperr.ErrInternal
 	}
+	s.notifyJobsChanged()
 	return job, nil
 }
 
@@ -140,6 +155,7 @@ func (s *JobService) Update(id string, in JobUpdateInput) (*model.ScheduleJob, e
 	if err := s.repo.Update(job); err != nil {
 		return nil, apperr.ErrInternal
 	}
+	s.notifyJobsChanged()
 	return job, nil
 }
 
@@ -147,6 +163,7 @@ func (s *JobService) Delete(id string) error {
 	if err := s.repo.Delete(id); err != nil {
 		return apperr.ErrInternal
 	}
+	s.notifyJobsChanged()
 	return nil
 }
 
@@ -247,8 +264,9 @@ func (s *JobService) executePython(ctx context.Context, job *model.ScheduleJob) 
 }
 
 // executeShell 执行 shell 命令。
-// 安全: 用最小化的 strings.Fields 分割（不支持 shell 元字符，避免注入），
-// 调用方应避免传入含 ; | & $ ` 等元字符的命令。
+// 安全: 不经 shell 解释（exec.CommandContext 直 exec），禁用拼接元字符；
+// 分词支持引号（shlex 语义的最小子集）：双/单引号包裹的参数可含空格，引号内
+// 的反斜杠仅在双引号中对 " \ 两个字符转义。
 // 超时: 使用执行 context（带 deadline，避免僵尸进程）。
 func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (string, error) {
 	if job.Command == "" {
@@ -261,7 +279,10 @@ func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (
 			return "", fmt.Errorf("shell 命令包含禁用字符 %q", string(ch))
 		}
 	}
-	parts := strings.Fields(cmdStr)
+	parts, err := splitCommand(cmdStr)
+	if err != nil {
+		return "", err
+	}
 	if len(parts) == 0 {
 		return "", fmt.Errorf("命令为空")
 	}
@@ -277,6 +298,48 @@ func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (
 		return string(out), fmt.Errorf("命令退出: %w", err)
 	}
 	return string(out), nil
+}
+
+// splitCommand 按空格分词，支持单/双引号包裹含空格的参数（shlex 最小子集）。
+// 引号必须成对，否则报错。
+func splitCommand(s string) ([]string, error) {
+	var parts []string
+	var cur strings.Builder
+	inWord := false
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case quote != 0:
+			if ch == quote {
+				quote = 0
+			} else if quote == '"' && ch == '\\' && i+1 < len(s) && (s[i+1] == '"' || s[i+1] == '\\') {
+				i++
+				cur.WriteByte(s[i])
+			} else {
+				cur.WriteByte(ch)
+			}
+		case ch == '"' || ch == '\'':
+			quote = ch
+			inWord = true
+		case ch == ' ' || ch == '\t':
+			if inWord {
+				parts = append(parts, cur.String())
+				cur.Reset()
+				inWord = false
+			}
+		default:
+			cur.WriteByte(ch)
+			inWord = true
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("命令存在未闭合的引号")
+	}
+	if inWord {
+		parts = append(parts, cur.String())
+	}
+	return parts, nil
 }
 
 func truncateStr(s string, max int) string {

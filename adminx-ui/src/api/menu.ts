@@ -7,9 +7,6 @@ export const menuApi = {
   getMenus: (params?: { search?: string }): Promise<Menu[]> =>
     request.get('/menu/', { params }),
 
-  // 获取菜单树
-  getMenuTree: (): Promise<Menu[]> =>
-    request.get('/menu/tree/'),
 
   // 获取菜单详情
   getMenu: (id: string): Promise<Menu> =>

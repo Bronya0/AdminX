@@ -34,7 +34,7 @@ func (r *RoleRepo) List(offset, limit int, search string) ([]model.Role, int64, 
 	var count int64
 	q := r.db.Model(&model.Role{})
 	if search != "" {
-		q = q.Where("name LIKE ? OR desc LIKE ?", "%"+search+"%", "%"+search+"%")
+		q = q.Where("name LIKE ? OR desc LIKE ?", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err

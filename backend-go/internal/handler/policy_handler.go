@@ -32,12 +32,12 @@ func (h *PolicyHandler) GetPolicy(c *gin.Context) {
 
 // UpdatePolicy PUT/PATCH /policy/policy/
 func (h *PolicyHandler) UpdatePolicy(c *gin.Context) {
-	var updates map[string]interface{}
-	if err := c.ShouldBindJSON(&updates); err != nil {
+	var in service.PolicyUpdateInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		response.BindingError(c, err)
 		return
 	}
-	result, err := h.svc.UpdatePolicy(updates)
+	result, err := h.svc.UpdatePolicy(in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

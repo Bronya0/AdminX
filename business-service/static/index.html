@@ -155,13 +155,11 @@ input[type="text"] { flex: 1; min-width: 200px; }
 </div>
 
 <script>
-// ── 从 URL 读取平台参数 ──
-// 兼容两种传参方式：query（旧）与 hash（平台新标签菜单现在用 hash 携带 token，避免进日志）
+// ── 从 URL 读取平台外观参数（token 不再经 URL 传递，见下方 postMessage 协议）──
 const params = new URLSearchParams(location.search);
 const hashParams = new URLSearchParams(location.hash.slice(1));
 const primary = params.get('primary') || hashParams.get('primary');
 const dark = params.get('dark') || hashParams.get('dark');
-const token = params.get('token') || hashParams.get('token');
 
 if (dark === '1') document.documentElement.classList.add('dark');
 if (primary) {
@@ -171,9 +169,29 @@ if (primary) {
   });
 }
 
-// ── API 调用 ──
+// ── token 获取：postMessage 协议 ──
+// 平台（iframe 父页面 / window.open 的 opener）监听 { type: 'adminx:request-token' }，
+// 校验来源后回传 { type: 'adminx:token', token }。
+// token 不再进 URL（query/hash 都会留痕：历史记录、Referer、代理日志）。
 const API_BASE = '';
-const TOKEN = token || localStorage.getItem('business_token');
+let TOKEN = localStorage.getItem('business_token') || '';
+
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (data && data.type === 'adminx:token' && typeof data.token === 'string' && data.token) {
+    TOKEN = data.token;
+    try { localStorage.setItem('business_token', TOKEN); } catch {}
+    loadPosts();  // 拿到 token 后重新加载
+  }
+});
+
+// 向平台请求 token（iframe 场景向 parent，新标签场景向 opener）
+(function requestToken() {
+  const target = window.parent !== window ? window.parent : window.opener;
+  if (target) {
+    try { target.postMessage({ type: 'adminx:request-token' }, '*'); } catch {}
+  }
+})();
 
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json' };
@@ -418,7 +436,6 @@ document.getElementById('nextBtn').addEventListener('click', () => {
 
 // ── 启动 ──
 loadPosts();
-if (token) localStorage.setItem('business_token', token);
 </script>
 </body>
 </html>

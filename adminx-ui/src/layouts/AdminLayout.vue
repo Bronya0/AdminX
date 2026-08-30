@@ -155,7 +155,6 @@ import { useUserStore } from '@/stores/user'
 import { message, Modal } from 'ant-design-vue'
 import IdleWatcher from '@/components/IdleWatcher.vue'
 import { notificationApi } from '@/api/notification'
-import { authApi } from '@/api/auth'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -276,15 +275,41 @@ const findSidebarItem = (key: string, items: SidebarItem[]): SidebarItem | undef
   return undefined
 }
 
+// ── 外链 token 下发：postMessage 单次下发，token 不进 URL（hash 会进浏览器历史且可被页面脚本读取）──
+// 打开的新标签页加载后发送 { type: 'adminx:request-token' }，本布局校验来源后回传。
+const pendingTokenWindows: Array<{ win: Window; origin: string }> = []
+
+const onTokenRequest = (event: MessageEvent) => {
+  const data = event.data as { type?: string } | null
+  if (data?.type !== 'adminx:request-token') return
+  const entry = pendingTokenWindows.find((e) => e.win === event.source)
+  if (!entry || entry.origin !== event.origin) return
+  entry.win.postMessage(
+    { type: 'adminx:token', token: userStore.token || '' },
+    { targetOrigin: entry.origin }
+  )
+}
+
+window.addEventListener('message', onTokenRequest)
+onUnmounted(() => window.removeEventListener('message', onTokenRequest))
+
 const openExternal = (item: SidebarItem) => {
   const targetUrl = item.url!
   if (item.menu_type === 'iframe') {
     router.push(`/iframe?url=${encodeURIComponent(targetUrl)}&title=${encodeURIComponent(item.title)}`)
   } else {
-    // 用 hash 携带 token（不落浏览器历史/服务器日志）
-    const sep = targetUrl.includes('#') ? '&' : '#'
-    const tokenParam = userStore.token ? `token=${encodeURIComponent(userStore.token)}` : ''
-    window.open(`${targetUrl}${sep}${tokenParam}`, '_blank')
+    // 不携带 token 打开；业务页加载后通过 postMessage 请求 token
+    let expectedOrigin = ''
+    try {
+      expectedOrigin = new URL(targetUrl).origin
+    } catch {
+      message.error('外部链接非法')
+      return
+    }
+    const win = window.open(targetUrl, '_blank')
+    if (win) {
+      pendingTokenWindows.push({ win, origin: expectedOrigin })
+    }
   }
 }
 
@@ -327,10 +352,8 @@ const handleLogout = () => {
     title: '确认退出',
     content: '确定要退出登录吗？',
     onOk: async () => {
-      if (userStore.refreshToken) {
-        try { await authApi.logout(userStore.refreshToken) } catch { /* ignore */ }
-      }
-      userStore.clearToken()
+      // 统一收口到 store.logout()（服务端吊销 + 清本地状态）
+      await userStore.logout()
       message.success('已退出登录')
       await router.replace('/login').catch(() => {})
     },

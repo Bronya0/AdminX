@@ -1,6 +1,8 @@
 package service
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 
 	"adminx/pkg/crypto"
@@ -31,8 +33,48 @@ func (s *PolicyService) GetPolicy() (*model.PasswordPolicy, error) {
 	return &p, result.Error
 }
 
-// UpdatePolicy 更新密码策略。
-func (s *PolicyService) UpdatePolicy(updates map[string]interface{}) (*model.PasswordPolicy, error) {
+// PolicyUpdateInput 策略更新入参（指针字段区分"未传"与"清零"，杜绝 map 直通 Updates 的任意列写入）。
+type PolicyUpdateInput struct {
+	MinLength     *int   `json:"min_length"`
+	RequireUpper  *bool  `json:"require_upper"`
+	RequireLower  *bool  `json:"require_lower"`
+	RequireDigit  *bool  `json:"require_digit"`
+	RequireSpecial *bool `json:"require_special"`
+	ExpireDays    *int   `json:"expire_days"`
+	HistoryCount  *int   `json:"history_count"`
+	IsActive      *bool  `json:"is_active"`
+}
+
+// UpdatePolicy 更新密码策略（白名单字段）。
+func (s *PolicyService) UpdatePolicy(in PolicyUpdateInput) (*model.PasswordPolicy, error) {
+	updates := map[string]interface{}{}
+	if in.MinLength != nil {
+		updates["min_length"] = *in.MinLength
+	}
+	if in.RequireUpper != nil {
+		updates["require_upper"] = *in.RequireUpper
+	}
+	if in.RequireLower != nil {
+		updates["require_lower"] = *in.RequireLower
+	}
+	if in.RequireDigit != nil {
+		updates["require_digit"] = *in.RequireDigit
+	}
+	if in.RequireSpecial != nil {
+		updates["require_special"] = *in.RequireSpecial
+	}
+	if in.ExpireDays != nil {
+		updates["expire_days"] = *in.ExpireDays
+	}
+	if in.HistoryCount != nil {
+		updates["history_count"] = *in.HistoryCount
+	}
+	if in.IsActive != nil {
+		updates["is_active"] = *in.IsActive
+	}
+	if len(updates) == 0 {
+		return s.GetPolicy()
+	}
 	if err := s.db.Model(&model.PasswordPolicy{}).Where("id = 1").Updates(updates).Error; err != nil {
 		return nil, apperr.ErrInternal
 	}
@@ -41,6 +83,31 @@ func (s *PolicyService) UpdatePolicy(updates map[string]interface{}) (*model.Pas
 		return nil, apperr.ErrNotFound
 	}
 	return &p, nil
+}
+
+// ValidatePassword 校验密码是否符合当前策略（供用户创建/重置等场景复用）。
+func (s *PolicyService) ValidatePassword(password string) error {
+	return validatePasswordPolicy(s.db, password)
+}
+
+// validatePasswordPolicy 包级辅助：查库取策略并校验（无策略记录时用 model 默认值）。
+func validatePasswordPolicy(db *gorm.DB, password string) error {
+	var p model.PasswordPolicy
+	if err := db.First(&p, 1).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			p = model.PasswordPolicy{
+				ID: 1, MinLength: 8, RequireUpper: true, RequireLower: true,
+				RequireDigit: true, RequireSpecial: true, ExpireDays: 90,
+				HistoryCount: 5, IsActive: true,
+			}
+		} else {
+			return apperr.Wrap(500, "获取密码策略失败", err)
+		}
+	}
+	if err := p.Validate(password); err != nil {
+		return apperr.New(400, err.Error())
+	}
+	return nil
 }
 
 // ChangePassword 用户修改自己的密码（含历史校验 + 策略校验）。
@@ -94,6 +161,12 @@ func (s *PolicyService) ChangePassword(userID, oldPassword, newPassword string) 
 			}
 		}
 		if err := tx.Model(&user).Update("password", hashed).Error; err != nil {
+			return err
+		}
+		// 改密成功即吊销该用户所有既有 token（last_logout 之后签发的 token 才有效），
+		// 防止"密码可能已泄露但旧会话仍存活"的窗口。
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).
+			Update("last_logout", time.Now()).Error; err != nil {
 			return err
 		}
 		if err := tx.Create(&model.PasswordHistory{

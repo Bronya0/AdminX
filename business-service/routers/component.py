@@ -26,11 +26,24 @@ from urllib.parse import urlparse
 
 import httpx
 
-from config import PLATFORM_URL, SERVICE_URL, APP_LABEL, APP_NAME, APP_VERSION as _INIT_VERSION
+from config import PLATFORM_API_BASE, SERVICE_URL, APP_LABEL, APP_NAME, APP_VERSION as _INIT_VERSION, COMPONENT_SECRET
 
 logger = logging.getLogger("business.component")
 
-PLATFORM_API = f"{PLATFORM_URL}/api/v1/cluster/components"
+PLATFORM_API = f"{PLATFORM_API_BASE}/cluster/components"
+
+if not COMPONENT_SECRET:
+    logger.warning(
+        "COMPONENT_SECRET 未配置：若平台配置了 security.component_secret，"
+        "组件注册/心跳将被拒绝。请通过环境变量设置与平台一致的共享密钥。"
+    )
+
+
+def _component_headers() -> dict:
+    """组件端点请求头：携带与平台 security.component_secret 一致的共享密钥"""
+    if COMPONENT_SECRET:
+        return {"X-Component-Token": COMPONENT_SECRET}
+    return {}
 
 # 运行时版本（升级后会更新）
 APP_VERSION = _INIT_VERSION
@@ -48,7 +61,7 @@ async def register() -> bool:
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(f"{PLATFORM_API}/register/", json=payload)
+            resp = await client.post(f"{PLATFORM_API}/register/", json=payload, headers=_component_headers())
             body = resp.json()
         if body.get("code") == 200:
             logger.info("组件注册成功: %s v%s", APP_LABEL, APP_VERSION)
@@ -63,7 +76,7 @@ async def register() -> bool:
 async def unregister() -> bool:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(f"{PLATFORM_API}/unregister/", json={"app_label": APP_LABEL})
+            resp = await client.post(f"{PLATFORM_API}/unregister/", json={"app_label": APP_LABEL}, headers=_component_headers())
             body = resp.json()
         logger.info("组件注销: %s", body.get("msg"))
         return body.get("code") == 200
@@ -81,7 +94,7 @@ async def heartbeat() -> dict | None:
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(f"{PLATFORM_API}/heartbeat/", json=payload)
+            resp = await client.post(f"{PLATFORM_API}/heartbeat/", json=payload, headers=_component_headers())
             body = resp.json()
         if body.get("code") == 200:
             return body.get("data", {})
@@ -104,17 +117,43 @@ def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
 
 
 def _validate_upgrade_url(url: str) -> None:
-    """校验升级包 URL，防止 SSRF"""
+    """校验升级包 URL，防止 SSRF。
+
+    两步校验：
+    1. 协议白名单（https/http）；
+    2. 解析主机名得到全部 IP，任一命中私网/回环/链路本地/保留段即拒绝。
+       通过 getaddrinfo 解析可同时覆盖 IPv6（::1）、十进制 IP（2130706433）
+       与"域名解析到内网"等此前黑名单无法防住的绕过方式。
+    注意：未做 DNS rebinding 防护（解析与下载两次解析可能不同），
+    生产环境建议配合出口网络隔离使用。
+    """
+    import ipaddress
+    import socket
+
     parsed = urlparse(url)
     if parsed.scheme not in ("https", "http"):
         raise ValueError(f"升级包 URL 协议不允许: {parsed.scheme}，仅支持 https/http")
+
     host = parsed.hostname or ""
-    forbidden = ("localhost", "127.0.0.1", "0.0.0.0")
-    if host in forbidden or host.startswith("192.168.") or host.startswith("10.") or host.startswith("169.254."):
-        raise ValueError(f"升级包 URL 不允许内网/云元数据地址: {host}")
-    # 172.16.0.0/12 范围: 172.16.x - 172.31.x
-    if re.match(r"^172\.(1[6-9]|2[0-9]|3[01])\.", host):
-        raise ValueError(f"升级包 URL 不允许内网地址: {host}")
+    if not host:
+        raise ValueError("升级包 URL 缺少主机名")
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError(f"升级包主机无法解析: {host} ({e})")
+
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValueError(f"升级包 URL 解析到内网/保留地址 {ip}，已拒绝")
 
 
 async def _download_and_verify(url: str, checksum: str) -> Path:

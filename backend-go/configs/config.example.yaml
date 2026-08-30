@@ -5,13 +5,14 @@
 server:
   host: "0.0.0.0"
   port: 8000
-  base_path: "/adminx"                  # URL 基础路径
+  base_path: "/adminx"                  # URL 基础路径（须与前端 vite.config.ts 的 base 及反向代理一致）
   mode: "debug"                         # debug / release / test
   timeout_sec: 120
 
 database:
   driver: "postgres"
-  dsn: "postgres://postgres:postgres@localhost:5432/adminx?sslmode=disable"
+  # 示例值（弱口令 + sslmode=disable）会被启动校验拒绝，必须改为你自己的 DSN
+  dsn: "postgres://postgres:<your-password>@localhost:5432/adminx?sslmode=disable"
   max_open_conns: 100
   max_idle_conns: 10
   conn_max_lifetime: "1h"
@@ -21,7 +22,8 @@ redis:
   url: "redis://localhost:6379/0"
 
 jwt:
-  secret: "dev-only-change-me-9f8e7d6c5b4a3210"  # 必须改（DJA_JWT_SECRET），默认值/空值会拒绝启动
+  # 空值/默认值/示例值会拒绝启动（任何模式）
+  secret: "dev-only-change-me-9f8e7d6c5b4a3210"
   access_expire: "30m"
   refresh_expire: "168h"
   issuer: "adminx"
@@ -41,6 +43,9 @@ security:
     - "http://localhost:5173"        # vite dev
     - "http://localhost:8080"
   trust_proxy_headers: false         # 生产反向代理后设 true
+  component_secret: ""               # 业务组件共享密钥（请求头 X-Component-Token）；空 = /cluster/components/* 无鉴权（仅限本地演示），生产必配
+  login_captcha_required: false      # 登录是否强制验证码（开启后未提交验证码的登录一律拒绝）
+  ws_allowed_origins: []             # WebSocket 额外允许的 Origin；空 = 仅同源
 
 scheduler:
   enabled: false                     # 是否默认启用内置调度器（也可用 --scheduler 标志）

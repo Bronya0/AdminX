@@ -13,7 +13,7 @@ func TestUserService_Create(t *testing.T) {
 
 	user, err := svc.Create(CreateInput{
 		Username: "newuser",
-		Password: "pass123",
+		Password: "Pass123!",
 		Email:    "new@test.com",
 		Roles:    []string{role.ID},
 	})
@@ -35,8 +35,8 @@ func TestUserService_Create_DuplicateUsername(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	svc.Create(CreateInput{Username: "dup", Password: "pass123"})
-	_, err := svc.Create(CreateInput{Username: "dup", Password: "pass456"})
+	svc.Create(CreateInput{Username: "dup", Password: "Pass123!"})
+	_, err := svc.Create(CreateInput{Username: "dup", Password: "Pass456!"})
 	if err == nil {
 		t.Fatal("重复用户名应返回 error")
 	}
@@ -46,7 +46,7 @@ func TestUserService_GetByID(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	created, _ := svc.Create(CreateInput{Username: "findme", Password: "pass123"})
+	created, _ := svc.Create(CreateInput{Username: "findme", Password: "Pass123!"})
 
 	got, err := svc.GetByID(created.ID)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestUserService_Update(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	created, _ := svc.Create(CreateInput{Username: "updateme", Password: "pass123"})
+	created, _ := svc.Create(CreateInput{Username: "updateme", Password: "Pass123!"})
 
 	newEmail := "updated@test.com"
 	updated, err := svc.Update(created.ID, UpdateInput{
@@ -89,10 +89,10 @@ func TestUserService_UpdatePassword(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	created, _ := svc.Create(CreateInput{Username: "pwuser", Password: "oldpass"})
+	created, _ := svc.Create(CreateInput{Username: "pwuser", Password: "OldPass1!"})
 
 	updated, err := svc.Update(created.ID, UpdateInput{
-		Password: "newpass456",
+		Password: "NewPass456!",
 	})
 	if err != nil {
 		t.Fatalf("Update password 失败: %v", err)
@@ -106,7 +106,7 @@ func TestUserService_Delete(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	created, _ := svc.Create(CreateInput{Username: "deleteme", Password: "pass123"})
+	created, _ := svc.Create(CreateInput{Username: "deleteme", Password: "Pass123!"})
 
 	if err := svc.Delete(created.ID); err != nil {
 		t.Fatalf("Delete 失败: %v", err)
@@ -123,8 +123,8 @@ func TestUserService_List(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	svc.Create(CreateInput{Username: "alice", Password: "pass123"})
-	svc.Create(CreateInput{Username: "bob", Password: "pass456"})
+	svc.Create(CreateInput{Username: "alice", Password: "Pass123!"})
+	svc.Create(CreateInput{Username: "bob", Password: "Pass456!"})
 
 	users, count, err := svc.List(0, 10, "", "", nil)
 	if err != nil {
@@ -142,8 +142,8 @@ func TestUserService_List_Search(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewUserService(db, repository.NewUserRepo(db))
 
-	svc.Create(CreateInput{Username: "alice", Password: "pass123", Email: "alice@test.com"})
-	svc.Create(CreateInput{Username: "bob", Password: "pass456", Email: "bob@test.com"})
+	svc.Create(CreateInput{Username: "alice", Password: "Pass123!", Email: "alice@test.com"})
+	svc.Create(CreateInput{Username: "bob", Password: "Pass456!", Email: "bob@test.com"})
 
 	_, count, err := svc.List(0, 10, "alice", "", nil)
 	if err != nil {

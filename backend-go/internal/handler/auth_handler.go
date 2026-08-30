@@ -9,26 +9,36 @@ import (
 	"adminx/pkg/pagination"
 	"adminx/pkg/response"
 
+	"adminx/internal/captcha"
 	"adminx/internal/model"
 	"adminx/internal/service"
 )
 
 // AuthHandler 认证相关 HTTP 处理器。
 type AuthHandler struct {
-	authSvc *service.AuthService
-	userSvc *service.UserService
-	menuSvc *service.MenuService
-	logger  *slog.Logger
+	authSvc              *service.AuthService
+	userSvc              *service.UserService
+	menuSvc              *service.MenuService
+	captcha              *captcha.Manager
+	loginCaptchaRequired bool
+	logger               *slog.Logger
 }
 
-func NewAuthHandler(authSvc *service.AuthService, userSvc *service.UserService, menuSvc *service.MenuService, logger *slog.Logger) *AuthHandler {
-	return &AuthHandler{authSvc: authSvc, userSvc: userSvc, menuSvc: menuSvc, logger: logger}
+func NewAuthHandler(authSvc *service.AuthService, userSvc *service.UserService, menuSvc *service.MenuService,
+	captchaMgr *captcha.Manager, loginCaptchaRequired bool, logger *slog.Logger) *AuthHandler {
+	return &AuthHandler{
+		authSvc: authSvc, userSvc: userSvc, menuSvc: menuSvc,
+		captcha: captchaMgr, loginCaptchaRequired: loginCaptchaRequired,
+		logger: logger,
+	}
 }
 
 // loginRequest 登录请求体。
 type loginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username    string `json:"username" binding:"required"`
+	Password    string `json:"password" binding:"required"`
+	CaptchaID   string `json:"captcha_id"`
+	CaptchaText string `json:"captcha_text"`
 }
 
 // Login POST /accounts/login/
@@ -37,6 +47,34 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BindingError(c, err)
 		return
+	}
+
+	// 验证码校验：传入则必须有效；login_captcha_required 开启时必须传入。
+	// 一次性消费（Verify 内部校验后删除），防止重放。
+	if req.CaptchaID != "" || req.CaptchaText != "" || h.loginCaptchaRequired {
+		if req.CaptchaID == "" || req.CaptchaText == "" {
+			response.Fail(c, 400, "请输入验证码")
+			return
+		}
+		if h.captcha == nil {
+			// 未配置 Redis 时无法校验验证码：必填模式下拒绝登录（fail-closed），
+			// 非必填模式下降级为不校验（与无 Redis 时整体降级策略一致）。
+			if h.loginCaptchaRequired {
+				response.Fail(c, 503, "验证码服务不可用，请配置 Redis")
+				return
+			}
+		} else {
+			ok, err := h.captcha.Verify(c.Request.Context(), req.CaptchaID, req.CaptchaText)
+			if err != nil {
+				h.logger.WarnContext(c.Request.Context(), "验证码校验失败", "error", err)
+				response.Fail(c, 503, "验证码服务不可用")
+				return
+			}
+			if !ok {
+				response.Fail(c, 400, "验证码错误或已过期")
+				return
+			}
+		}
 	}
 
 	ip := c.ClientIP()

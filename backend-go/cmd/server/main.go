@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -89,8 +90,9 @@ func main() {
 	clusterRepo := repository.NewClusterRepo(db)
 
 	// 8. Service 层
+	// 登录锁定常开（不随 mode 变化）：防爆破是认证基线，debug 模式更需要。
 	authSvc := service.NewAuthService(db, userRepo, lockRepo, logRepo, jwtMgr, log,
-		cfg.Server.Mode == "release", 5, 15*time.Minute)
+		true, 5, 15*time.Minute)
 	userSvc := service.NewUserService(db, userRepo)
 	roleSvc := service.NewRoleService(db, roleRepo)
 	menuSvc := service.NewMenuService(db, menuRepo)
@@ -103,8 +105,25 @@ func main() {
 	monitorSvc := service.NewMonitorService()
 	policySvc := service.NewPolicyService(db)
 
+	// 任务 CRUD → 调度器重载：标记 reload_pending（跨进程）+ 本进程内立即重载。
+	// 调度器可能在本进程之后才启动，用原子指针解耦时序。
+	var schedMgrPtr atomic.Pointer[scheduler.Manager]
+	jobSvc.SetOnJobsChanged(func() {
+		if err := jobRepo.SetReloadPending(); err != nil {
+			log.Warn("标记 reload_pending 失败", "error", err)
+		}
+		if m := schedMgrPtr.Load(); m != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := m.Reload(ctx); err != nil {
+				log.Error("调度器重载失败", "error", err)
+			}
+		}
+	})
+
 	// 9. Handler 层
-	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, log)
+	capMgr := captcha.NewManager(rdb)
+	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, capMgr, cfg.Security.LoginCaptchaRequired, log)
 	userH := handler.NewUserHandler(userSvc, auditSvc, log)
 	roleH := handler.NewRoleHandler(roleSvc, auditSvc, log)
 	menuH := handler.NewMenuHandler(menuSvc, auditSvc, log)
@@ -116,7 +135,6 @@ func main() {
 	fileH := handler.NewFileHandler(fileSvc, log)
 	monH := handler.NewCommonHandler(db, monitorSvc, log)
 	policyH := handler.NewPolicyHandler(policySvc, log)
-	capMgr := captcha.NewManager(rdb)
 	capH := handler.NewCaptchaHandler(capMgr, log)
 
 	// 10. WebSocket Hub
@@ -124,7 +142,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go hub.Run(ctx)
-	wsH := handler.NewWSHandler(hub, jwtMgr, log)
+	wsH := handler.NewWSHandler(hub, jwtMgr, cfg.Security.WSAllowedOrigins, log)
 
 	// 11. 调度器（可选，--scheduler 启用）
 	if *enableScheduler || cfg.Scheduler.Enabled {
@@ -135,9 +153,15 @@ func main() {
 			if err := schedMgr.Start(ctx); err != nil {
 				log.Error("调度器启动失败", "error", err)
 			}
+			schedMgrPtr.Store(schedMgr)
 			defer func() { _ = schedMgr.Stop() }()
 			log.Info("调度器已启用（内置模式）")
 		}
+	}
+
+	// 组件注册端点无共享密钥时的告警（生产必须配置 security.component_secret）
+	if cfg.Security.ComponentSecret == "" {
+		log.Warn("security.component_secret 未配置：/cluster/components/* 公开端点处于无鉴权模式，生产环境请配置共享密钥")
 	}
 
 	// 12. 路由

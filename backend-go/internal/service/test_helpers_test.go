@@ -304,3 +304,6 @@ func seedUser(t *testing.T, db *gorm.DB, username, password string, roleIDs ...s
 	}
 	return user
 }
+
+// boolPtr 测试辅助：bool 指针。
+func boolPtr(b bool) *bool { return &b }

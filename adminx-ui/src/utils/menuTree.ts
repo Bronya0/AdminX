@@ -78,6 +78,7 @@ export function menusToTreeData(
     value: menu.id,
     is_active: menu.is_active,
     code: menu.code,
+    icon: menu.icon,
     sort_order: menu.sort_order,
     path: menu.path,
     permission_code: menu.permission_code,
@@ -128,8 +129,8 @@ export function menusToSidebarItems(
       children = menusToSidebarItems(menu.children, hasPermission)
     }
 
-    // 优先使用默认图标映射，否则用数据库图标名，最后兜底
-    const iconName = defaultIcons[menu.name] || menu.icon || 'FileOutlined'
+    // 管理员在数据库配置的图标优先，未配置时用默认映射，最后兜底
+    const iconName = menu.icon || defaultIcons[menu.name] || 'FileOutlined'
 
     const isExternal = menu.path?.startsWith('http://') || menu.path?.startsWith('https://') || false
     const item: SidebarItem = {

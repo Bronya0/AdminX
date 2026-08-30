@@ -114,7 +114,7 @@ bash scripts/build.sh  # 构建二进制到 bin/
 
 ### 前端联调
 
-前端 `adminx-ui/` 的 vite dev proxy 默认指向 `:9999`。修改 `adminx-ui/vite.config.ts` 的 proxy target 为 `http://localhost:8000`，或把 Go 服务端口改为 9999。
+前端 `adminx-ui/` 的 vite dev proxy 默认指向 `http://localhost:8000`，并保留 `/adminx` 前缀直传（与后端 `server.base_path` 一致）。
 
 ## 架构设计
 

@@ -44,7 +44,7 @@ func (r *AuditRepo) List(offset, limit int, action, model_ string, start, end *t
 		q = q.Where("action = ?", action)
 	}
 	if model_ != "" {
-		q = q.Where("model_name LIKE ?", "%"+model_+"%")
+		q = q.Where("model_name LIKE ?", "%"+EscapeLike(model_)+"%")
 	}
 	if start != nil {
 		q = q.Where("created_at >= ?", *start)

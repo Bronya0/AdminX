@@ -30,7 +30,7 @@ func (r *ConfigRepo) List(offset, limit int, search, group string) ([]model.Conf
 	var count int64
 	q := r.db.Model(&model.Config{})
 	if search != "" {
-		q = q.Where("key LIKE ? OR desc LIKE ?", "%"+search+"%", "%"+search+"%")
+		q = q.Where("key LIKE ? OR desc LIKE ?", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
 	}
 	if group != "" {
 		q = q.Where("\"group\" = ?", group)

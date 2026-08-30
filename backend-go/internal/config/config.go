@@ -78,6 +78,15 @@ type SecurityConfig struct {
 
 	// 是否信任代理头（X-Forwarded-For 等）。
 	TrustProxyHeaders bool `mapstructure:"trust_proxy_headers"`
+
+	// 业务组件共享密钥（X-Component-Token）。为空时组件端点保持开放（仅限本地演示）。
+	ComponentSecret string `mapstructure:"component_secret"`
+
+	// 登录是否强制验证码。false 时验证码仍会被校验（若前端提交），但不强制。
+	LoginCaptchaRequired bool `mapstructure:"login_captcha_required"`
+
+	// WebSocket 允许的来源（Origin），逗号分隔。为空时仅允许同源连接。
+	WSAllowedOrigins []string `mapstructure:"ws_allowed_origins"`
 }
 
 // SchedulerConfig 调度器配置。
@@ -171,8 +180,9 @@ func (c *Config) validate() error {
 	if c.JWT.Secret == "" || c.JWT.Secret == "change-me-in-production" || c.JWT.Secret == "dev-only-change-me-9f8e7d6c5b4a3210" {
 		return fmt.Errorf("必须配置安全的 jwt.secret（不允许使用默认值/示例值，可通过 DJA_JWT_SECRET 环境变量或 config.yaml 设置）")
 	}
-	if c.Database.DSN == "" {
-		return fmt.Errorf("database.dsn 不能为空")
+	// 数据库 DSN 同样拒绝示例值（示例 DSN 为弱口令 + sslmode=disable，误上生产 = 裸奔）
+	if c.Database.DSN == "" || c.Database.DSN == "postgres://postgres:postgres@localhost:5432/adminx?sslmode=disable" {
+		return fmt.Errorf("必须配置安全的 database.dsn（不允许为空或使用示例值）")
 	}
 	// 解析 JWT 过期时间，确保格式正确
 	if _, err := time.ParseDuration(c.JWT.AccessExpire); err != nil {

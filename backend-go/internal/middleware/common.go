@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"adminx/pkg/response"
 )
 
 // RequestID 为每个请求注入唯一 request_id（写入 header + context）。
@@ -62,4 +64,35 @@ func RequestLog() gin.HandlerFunc {
 			logger.Info("request completed", attrs...)
 		}
 	}
+}
+
+// ComponentSecret 业务组件共享密钥校验。
+// secret 为空时放行（本地演示兼容），否则要求请求头 X-Component-Token 恒时匹配。
+// 用途: 保护 /cluster/components/register|heartbeat|unregister 这类无用户上下文的公开端点。
+func ComponentSecret(secret string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if secret == "" {
+			c.Next()
+			return
+		}
+		token := c.GetHeader("X-Component-Token")
+		if token == "" || !constantTimeEqual(token, secret) {
+			response.Fail(c, 401, "组件密钥缺失或不正确")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// constantTimeEqual 恒时字符串比较，防时序侧信道。
+func constantTimeEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	var v byte
+	for i := 0; i < len(a); i++ {
+		v |= a[i] ^ b[i]
+	}
+	return v == 0
 }

@@ -24,7 +24,6 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { commonApi } from '@/api/common'
-import { authApi } from '@/api/auth'
 import { message } from 'ant-design-vue'
 
 const userStore = useUserStore()
@@ -94,11 +93,8 @@ const doLogout = async () => {
   await router.replace('/login').catch(() => {})
   message.warning('会话已超时，请重新登录')
 
-  // 后置清理：通知服务端销毁 refresh token，同步清空本地状态
-  if (userStore.refreshToken) {
-    try { await authApi.logout(userStore.refreshToken) } catch { /* ignore */ }
-  }
-  userStore.clearToken()
+  // 后置清理：统一收口到 store.logout()（服务端吊销 + 清本地状态）
+  await userStore.logout()
 }
 
 // 监听用户活动事件

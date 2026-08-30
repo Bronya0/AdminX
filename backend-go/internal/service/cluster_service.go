@@ -33,9 +33,84 @@ func (s *ClusterService) CreateNode(n *model.ClusterNode) (*model.ClusterNode, e
 	return n, nil
 }
 
-func (s *ClusterService) UpdateNode(id string, updates map[string]interface{}) (*model.ClusterNode, error) {
-	if err := s.db.Model(&model.ClusterNode{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+// NodeCreateInput 节点创建入参（白名单：不允许客户端指定 id/心跳/时间戳等系统字段）。
+type NodeCreateInput struct {
+	Name     string `json:"name" binding:"required"`
+	Host     string `json:"host" binding:"required"`
+	Port     int    `json:"port"`
+	Role     string `json:"role"`
+	Status   string `json:"status"`
+	Version  string `json:"version"`
+	IsActive *bool  `json:"is_active"`
+}
+
+func (s *ClusterService) CreateNodeInput(in NodeCreateInput) (*model.ClusterNode, error) {
+	n := &model.ClusterNode{
+		Name:    in.Name,
+		Host:    in.Host,
+		Port:    in.Port,
+		Role:    in.Role,
+		Status:  in.Status,
+		Version: in.Version,
+	}
+	if n.Port == 0 {
+		n.Port = 8000
+	}
+	if n.Role == "" {
+		n.Role = "slave"
+	}
+	if n.Status == "" {
+		n.Status = "offline"
+	}
+	if in.IsActive != nil {
+		n.IsActive = *in.IsActive
+	} else {
+		n.IsActive = true
+	}
+	if err := s.repo.CreateNode(n); err != nil {
 		return nil, apperr.ErrInternal
+	}
+	return n, nil
+}
+
+// NodeUpdateInput 节点更新入参（白名单字段，杜绝 map 直通 Updates 的任意列写入）。
+type NodeUpdateInput struct {
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Port     *int   `json:"port"`
+	Role     string `json:"role"`
+	Status   string `json:"status"`
+	Version  *string `json:"version"`
+	IsActive *bool  `json:"is_active"`
+}
+
+func (s *ClusterService) UpdateNode(id string, in NodeUpdateInput) (*model.ClusterNode, error) {
+	updates := map[string]interface{}{}
+	if in.Name != "" {
+		updates["name"] = in.Name
+	}
+	if in.Host != "" {
+		updates["host"] = in.Host
+	}
+	if in.Port != nil {
+		updates["port"] = *in.Port
+	}
+	if in.Role != "" {
+		updates["role"] = in.Role
+	}
+	if in.Status != "" {
+		updates["status"] = in.Status
+	}
+	if in.Version != nil {
+		updates["version"] = *in.Version
+	}
+	if in.IsActive != nil {
+		updates["is_active"] = *in.IsActive
+	}
+	if len(updates) > 0 {
+		if err := s.db.Model(&model.ClusterNode{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return nil, apperr.ErrInternal
+		}
 	}
 	var n model.ClusterNode
 	if err := s.db.First(&n, "id = ?", id).Error; err != nil {

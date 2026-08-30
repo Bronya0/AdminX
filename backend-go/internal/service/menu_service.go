@@ -20,6 +20,40 @@ func NewMenuService(db *gorm.DB, menuRepo *repository.MenuRepo) *MenuService {
 }
 
 // All 查询所有菜单（扁平列表，前端按 path 前缀构建树）。
+// Tree 返回嵌套菜单树（按 ParentID 组装，供角色授权树等管理界面使用）。
+func (s *MenuService) Tree() ([]model.Menu, error) {
+	menus, err := s.All()
+	if err != nil {
+		return nil, err
+	}
+	return buildMenuTree(menus), nil
+}
+
+// buildMenuTree 平铺菜单按 ParentID 组装为嵌套树（孤儿节点视为顶级）。
+func buildMenuTree(all []model.Menu) []model.Menu {
+	childrenOf := make(map[int64][]model.Menu, len(all))
+	roots := make([]model.Menu, 0)
+	for _, m := range all {
+		if m.ParentID == nil {
+			roots = append(roots, m)
+		} else {
+			childrenOf[*m.ParentID] = append(childrenOf[*m.ParentID], m)
+		}
+	}
+	var attach func(items []model.Menu) []model.Menu
+	attach = func(items []model.Menu) []model.Menu {
+		out := make([]model.Menu, 0, len(items))
+		for _, m := range items {
+			if kids := attach(childrenOf[m.ID]); len(kids) > 0 {
+				m.Children = kids
+			}
+			out = append(out, m)
+		}
+		return out
+	}
+	return attach(roots)
+}
+
 func (s *MenuService) All() ([]model.Menu, error) {
 	return s.menuRepo.All()
 }

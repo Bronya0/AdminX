@@ -52,7 +52,11 @@ func (c *Client) closeSend() {
 // readPump 从连接读消息（客户端通常不发送，这里只消费/检测断开）。
 func (c *Client) readPump() {
 	defer func() {
-		c.hub.unregister <- c
+		// hub 退出后 unregister channel 不再有消费者，select 防止 goroutine 永久阻塞
+		select {
+		case c.hub.unregister <- c:
+		case <-c.hub.done:
+		}
 		_ = c.conn.Close()
 	}()
 	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -72,9 +76,12 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
+		if r := recover(); r != nil {
+			// 写并发 panic 不应无声吞掉：记日志便于定位（正常关闭路径不会走到这里）
+			c.hub.logger.Warn("writePump panic", "panic", r)
+		}
 		ticker.Stop()
 		_ = c.conn.Close()
-		recover()
 	}()
 	for {
 		select {
@@ -102,6 +109,7 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	broadcast  chan Message
+	done       chan struct{} // Run 退出时关闭，unblock 注册/注销等待者
 	mu         sync.RWMutex
 	rdb        *redis.Client
 	logger     *slog.Logger
@@ -112,8 +120,9 @@ func NewHub(rdb *redis.Client, logger *slog.Logger) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		unregister: make(chan *Client, 64),
 		broadcast:  make(chan Message, 256),
+		done:       make(chan struct{}),
 		rdb:        rdb,
 		logger:     logger,
 	}
@@ -122,6 +131,7 @@ func NewHub(rdb *redis.Client, logger *slog.Logger) *Hub {
 // Run 启动 Hub 主循环（应在单独 goroutine 中运行）。
 // 同时订阅 Redis channel 实现跨实例广播。
 func (h *Hub) Run(ctx context.Context) {
+	defer close(h.done)
 	// Redis 订阅（集群跨实例广播）
 	if h.rdb != nil {
 		go h.subscribeRedis(ctx)
@@ -155,6 +165,14 @@ func (h *Hub) Run(ctx context.Context) {
 			}
 			h.mu.Unlock()
 		case <-ctx.Done():
+			// 关闭所有连接，让 readPump/writePump 尽快退出（配合 srv.Shutdown 不悬挂）
+			h.mu.Lock()
+			for client := range h.clients {
+				_ = client.conn.Close()
+				client.closeSend()
+				delete(h.clients, client)
+			}
+			h.mu.Unlock()
 			return
 		}
 	}
@@ -163,7 +181,13 @@ func (h *Hub) Run(ctx context.Context) {
 // HandleConn 处理新 WebSocket 连接（由 gin handler 调用）。
 func (h *Hub) HandleConn(conn *websocket.Conn) {
 	client := newClient(h, conn)
-	h.register <- client
+	// hub 已退出时不再注册（否则 register 永久阻塞，优雅关闭悬挂）
+	select {
+	case h.register <- client:
+	case <-h.done:
+		_ = conn.Close()
+		return
+	}
 
 	go client.writePump()
 	client.readPump() // 阻塞直到连接关闭

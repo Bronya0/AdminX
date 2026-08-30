@@ -58,6 +58,11 @@ func (s *UserService) Create(in CreateInput) (*model.User, error) {
 		return nil, apperr.New(409, "用户名已存在")
 	}
 
+	// 密码策略校验（管理员创建用户同样受策略约束）
+	if err := validatePasswordPolicy(s.db, in.Password); err != nil {
+		return nil, err
+	}
+
 	// 密码哈希
 	hashed, err := crypto.HashPassword(in.Password)
 	if err != nil {
@@ -141,8 +146,11 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 		user.IsSuperuser = *in.IsSuperuser
 	}
 
-	// 密码更新
+	// 密码更新（重置密码同样受策略约束）
 	if in.Password != "" {
+		if err := validatePasswordPolicy(s.db, in.Password); err != nil {
+			return nil, err
+		}
 		hashed, err := crypto.HashPassword(in.Password)
 		if err != nil {
 			return nil, apperr.ErrInternal
@@ -162,6 +170,47 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 	}
 
 	return s.userRepo.FindByID(user.ID)
+}
+
+// superAdminRoleName 拥有全量权限的系统角色名；对其授予/撤销仅限超级管理员。
+// 这是权限体系的提权闸门：否则"用户管理"权限持有者可给自己授 super_admin 完成提权。
+const superAdminRoleName = "super_admin"
+
+// CheckRoleAssignment 校验角色赋权边界（Create/Update 保存前调用）：
+//   - 调用方为超级管理员：放行；
+//   - 请求的角色列表包含 super_admin：拒绝；
+//   - 目标用户当前持有 super_admin（任何角色变更都可能撤掉它）：拒绝。
+func (s *UserService) CheckRoleAssignment(roleRefs []string, targetUserID string, callerIsSuperuser bool) error {
+	if callerIsSuperuser {
+		return nil
+	}
+	if len(roleRefs) > 0 {
+		ids, _ := repository.SplitRoleRefs(roleRefs)
+		q := s.db.Model(&model.Role{}).Where("name = ?", superAdminRoleName)
+		if len(ids) > 0 {
+			q = q.Or("id IN ? AND name = ?", ids, superAdminRoleName)
+		}
+		var n int64
+		if err := q.Count(&n).Error; err != nil {
+			return apperr.ErrInternal
+		}
+		if n > 0 {
+			return apperr.New(403, "super_admin 角色的授予仅限超级管理员操作")
+		}
+	}
+	if targetUserID != "" {
+		var held int64
+		if err := s.db.Table("user_roles").
+			Joins("JOIN roles ON roles.id = user_roles.role_id").
+			Where("user_roles.user_id = ? AND roles.name = ?", targetUserID, superAdminRoleName).
+			Count(&held).Error; err != nil {
+			return apperr.ErrInternal
+		}
+		if held > 0 {
+			return apperr.New(403, "super_admin 用户的角色变更仅限超级管理员操作")
+		}
+	}
+	return nil
 }
 
 // Delete 软删除用户。

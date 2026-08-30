@@ -5,12 +5,11 @@ import logging
 from fastapi import APIRouter, HTTPException
 import httpx
 
-from config import PLATFORM_URL, PLATFORM_ADMIN_USER, PLATFORM_ADMIN_PASS, SERVICE_URL
+from config import PLATFORM_API_BASE, PLATFORM_ADMIN_USER, PLATFORM_ADMIN_PASS, SERVICE_URL, COMPONENT_SECRET
 
 logger = logging.getLogger("business.register")
 router = APIRouter(prefix="/api/v1", tags=["注册"])
 
-PLATFORM_API_BASE = f"{PLATFORM_URL}/api/v1"
 
 # 注册两个菜单：一个新标签页跳转，一个内嵌 iframe
 MENUS = [
@@ -64,15 +63,23 @@ def _build_menu_data(menu: dict) -> dict:
     }
 
 
+def _component_headers(token: str | None) -> dict[str, str]:
+    """平台请求头：管理员 token + 组件共享密钥（平台要求时必须携带）"""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    if COMPONENT_SECRET:
+        headers["X-Component-Token"] = COMPONENT_SECRET
+    return headers
+
+
 async def register_menu() -> dict:
-    """幂等注册所有菜单：使用平台 /api/v1/menu/register/ 端点（按 code upsert）"""
+    """幂等注册所有菜单：使用平台 /menu/register/ 端点（按 code upsert）"""
     try:
         token = await _get_admin_token()
     except RuntimeError as e:
         logger.error("注册失败: %s", e)
         return {"code": 502, "msg": f"登录平台失败: {e}"}
 
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = _component_headers(token)
     results = []
 
     async with httpx.AsyncClient(timeout=10) as client:
@@ -100,7 +107,7 @@ async def unregister_menu() -> dict:
     except RuntimeError as e:
         return {"code": 502, "msg": f"登录平台失败: {e}"}
 
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = _component_headers(token)
     deleted = 0
 
     async with httpx.AsyncClient(timeout=10) as client:

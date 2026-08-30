@@ -111,6 +111,17 @@ func (m *Manager) startHeartbeat() {
 				if err := m.jobRepo.WriteHeartbeat(); err != nil {
 					m.logger.Warn("写调度器心跳失败", "error", err)
 				}
+				// 消费跨进程 reload 通知（web 进程任务 CRUD 置位）→ 重载全部任务
+				if pending, err := m.jobRepo.ConsumeReloadPending(); err != nil {
+					m.logger.Warn("读取 reload_pending 失败", "error", err)
+				} else if pending {
+					m.logger.Info("收到 reload_pending，重载调度任务")
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					if err := m.Reload(ctx); err != nil {
+						m.logger.Error("调度器重载失败", "error", err)
+					}
+					cancel()
+				}
 			case <-ctx.Done():
 				return
 			}

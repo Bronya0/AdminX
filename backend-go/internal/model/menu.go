@@ -29,6 +29,8 @@ type Menu struct {
 	AllowedPaths   datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'::jsonb" json:"allowed_paths"`
 	// Depth 树深度（1=根），用于前端按层级渲染。
 	Depth          int            `gorm:"not null;default:1" json:"depth"`
+	// Children 嵌套子菜单（gorm:"-"：不入库，仅菜单树接口按 ParentID 组装后返回）。
+	Children       []Menu         `gorm:"-" json:"children,omitempty"`
 	CreatedAt      time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt      time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 }

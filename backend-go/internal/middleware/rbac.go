@@ -23,7 +23,9 @@ import (
 
 // RBAC 权限校验中间件。
 // 必须在 JWTAuth 之后使用（依赖 context 中的 user_id/is_superuser）。
-func RBAC(db *gorm.DB) gin.HandlerFunc {
+// basePath 为部署前缀（如 /adminx）：种子规则按 API 路径（/api/v1/...）书写，
+// 匹配前先剥掉部署前缀，避免换 base_path 部署时权限全量失配。
+func RBAC(db *gorm.DB, basePath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 超级管理员放行
 		if isSuper, exists := c.Get("is_superuser"); exists {
@@ -40,7 +42,8 @@ func RBAC(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := checkPermission(db, userID.(string), c.Request.Method, c.Request.URL.Path)
+		requestPath := strings.TrimPrefix(c.Request.URL.Path, basePath)
+		allowed, err := checkPermission(db, userID.(string), c.Request.Method, requestPath)
 		if err != nil {
 			response.Fail(c, 500, "权限校验失败")
 			c.Abort()

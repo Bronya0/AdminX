@@ -24,7 +24,7 @@ func (r *LoginLogRepo) List(offset, limit int, username, ip string, success *boo
 	var count int64
 	q := r.db.Model(&model.UserLoginLog{})
 	if username != "" {
-		q = q.Where("username LIKE ?", "%"+username+"%")
+		q = q.Where("username LIKE ?", "%"+EscapeLike(username)+"%")
 	}
 	if ip != "" {
 		q = q.Where("ip = ?", ip)

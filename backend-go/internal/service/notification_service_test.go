@@ -141,7 +141,7 @@ func TestNotificationService_WebhookCRUD(t *testing.T) {
 	svc := NewNotificationService(db, repository.NewNotificationRepo(db), slog.Default())
 
 	w, err := svc.CreateWebhook(
-		map[string]interface{}{"name": "test-webhook", "url": "http://example.com/hook", "is_active": true},
+		WebhookInput{Name: "test-webhook", URL: "http://example.com/hook", IsActive: boolPtr(true)},
 	)
 	if err != nil {
 		t.Fatalf("CreateWebhook 失败: %v", err)

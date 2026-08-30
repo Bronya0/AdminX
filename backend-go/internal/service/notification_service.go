@@ -108,24 +108,31 @@ func (s *NotificationService) ListWebhooks(offset, limit int) ([]model.WebhookCo
 	return s.repo.ListWebhooks(offset, limit)
 }
 
-func (s *NotificationService) CreateWebhook(updates map[string]interface{}) (*model.WebhookConfig, error) {
-	name, _ := updates["name"].(string)
-	url, _ := updates["url"].(string)
-	if !validWebhookURL(url) {
+// WebhookInput webhook 创建/更新入参（白名单字段，杜绝 map 直通 Updates 的任意列写入）。
+type WebhookInput struct {
+	Name     string `json:"name" binding:"required"`
+	URL      string `json:"url" binding:"required"`
+	Secret   string `json:"secret"`
+	Events   string `json:"events"`
+	IsActive *bool  `json:"is_active"`
+}
+
+func (s *NotificationService) CreateWebhook(in WebhookInput) (*model.WebhookConfig, error) {
+	if !validWebhookURL(in.URL) {
 		return nil, apperr.New(400, "webhook URL 非法")
 	}
-	secret, _ := updates["secret"].(string)
-	events, _ := updates["events"].(string)
+	events := in.Events
+	if events == "" {
+		events = "info,success,warning,error"
+	}
 	isActive := true
-	if v, ok := updates["is_active"]; ok {
-		if b, ok := v.(bool); ok {
-			isActive = b
-		}
+	if in.IsActive != nil {
+		isActive = *in.IsActive
 	}
 	w := &model.WebhookConfig{
-		Name:     name,
-		URL:      url,
-		Secret:   secret,
+		Name:     in.Name,
+		URL:      in.URL,
+		Secret:   in.Secret,
 		Events:   events,
 		IsActive: isActive,
 	}
@@ -135,12 +142,30 @@ func (s *NotificationService) CreateWebhook(updates map[string]interface{}) (*mo
 	return w, nil
 }
 
-func (s *NotificationService) UpdateWebhook(id string, updates map[string]interface{}) (*model.WebhookConfig, error) {
-	if u, ok := updates["url"].(string); ok && !validWebhookURL(u) {
+func (s *NotificationService) UpdateWebhook(id string, in WebhookInput) (*model.WebhookConfig, error) {
+	if in.URL != "" && !validWebhookURL(in.URL) {
 		return nil, apperr.New(400, "webhook URL 非法")
 	}
-	if err := s.db.Model(&model.WebhookConfig{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		return nil, apperr.ErrInternal
+	updates := map[string]interface{}{}
+	if in.Name != "" {
+		updates["name"] = in.Name
+	}
+	if in.URL != "" {
+		updates["url"] = in.URL
+	}
+	if in.Secret != "" {
+		updates["secret"] = in.Secret
+	}
+	if in.Events != "" {
+		updates["events"] = in.Events
+	}
+	if in.IsActive != nil {
+		updates["is_active"] = *in.IsActive
+	}
+	if len(updates) > 0 {
+		if err := s.db.Model(&model.WebhookConfig{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return nil, apperr.ErrInternal
+		}
 	}
 	var w model.WebhookConfig
 	if err := s.db.First(&w, "id = ?", id).Error; err != nil {
