@@ -31,6 +31,15 @@ media/
 .env
 !.env.example
 
+# 本地开发配置（含 JWT 密钥 / AES key，禁止入库）
+backend-go/configs/config.yaml
+
+# 临时文件（本地 SQLite 库、脚本、构建产物）
+.tmp/
+
+# 浏览器自动化工具产物（playwright-cli 快照/截图）
+.playwright-cli/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -51,6 +60,5 @@ adminx-ui/*.timestamp-*-*.mjs
 # Go
 backend-go/bin/
 backend-go/vendor/
-*.exe
 *.test
 *.out

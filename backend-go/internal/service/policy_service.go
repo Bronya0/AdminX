@@ -23,12 +23,9 @@ func (s *PolicyService) GetPolicy() (*model.PasswordPolicy, error) {
 	var p model.PasswordPolicy
 	result := s.db.First(&p, 1)
 	if result.Error == gorm.ErrRecordNotFound {
-		// 不存在则返回默认策略
-		return &model.PasswordPolicy{
-			ID: 1, MinLength: 8, RequireUpper: true, RequireLower: true,
-			RequireDigit: true, RequireSpecial: true, ExpireDays: 90,
-			HistoryCount: 5, IsActive: true,
-		}, nil
+		// 不存在则返回默认策略（不落库，首次保存策略时才写入单例行）
+		def := model.DefaultPasswordPolicy()
+		return &def, nil
 	}
 	return &p, result.Error
 }
@@ -95,11 +92,7 @@ func validatePasswordPolicy(db *gorm.DB, password string) error {
 	var p model.PasswordPolicy
 	if err := db.First(&p, 1).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			p = model.PasswordPolicy{
-				ID: 1, MinLength: 8, RequireUpper: true, RequireLower: true,
-				RequireDigit: true, RequireSpecial: true, ExpireDays: 90,
-				HistoryCount: 5, IsActive: true,
-			}
+			p = model.DefaultPasswordPolicy()
 		} else {
 			return apperr.Wrap(500, "获取密码策略失败", err)
 		}

@@ -36,7 +36,7 @@ func (h *MenuHandler) List(c *gin.Context) {
 func (h *MenuHandler) UserTree(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	uid, _ := userID.(string)
-	menus, err := h.svc.MenusByUser(uid)
+	menus, err := h.svc.MenusByUser(uid, isSuperuser(c))
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

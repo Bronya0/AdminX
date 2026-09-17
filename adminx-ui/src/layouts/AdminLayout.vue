@@ -254,6 +254,20 @@ watch(
   { immediate: true }
 )
 
+// 首次拿到菜单时默认展开所有含子菜单的一级菜单：
+// 否则子项全部藏在折叠的子菜单里，看上去就像“菜单没了”（仅在首次初始化时设置，
+// 之后完全交给用户手动展开/收起）。
+const openKeysInitialized = ref(false)
+watch(
+  sidebarMenus,
+  (menus) => {
+    if (openKeysInitialized.value || menus.length === 0) return
+    openKeys.value = menus.filter((m) => m.children?.length).map((m) => m.key)
+    openKeysInitialized.value = true
+  },
+  { immediate: true }
+)
+
 const toggleCollapsed = () => userStore.toggleCollapsed()
 
 const toggleFullscreen = () => {

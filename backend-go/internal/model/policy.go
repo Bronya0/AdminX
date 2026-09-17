@@ -31,6 +31,17 @@ func (p *PasswordPolicy) BeforeSave(tx *gorm.DB) error {
 	return nil
 }
 
+// DefaultPasswordPolicy 默认密码策略（单例 ID=1）。
+// 库里还没有策略行时，读取与校验都回落到这份默认值；init-data 也用同一份定义播种，
+// 避免默认值在多处各写一遍而漂移。
+func DefaultPasswordPolicy() PasswordPolicy {
+	return PasswordPolicy{
+		ID: 1, MinLength: 8, RequireUpper: true, RequireLower: true,
+		RequireDigit: true, RequireSpecial: true, ExpireDays: 90,
+		HistoryCount: 5, IsActive: true,
+	}
+}
+
 // Validate 校验密码是否符合策略。返回 nil 表示通过。
 func (p *PasswordPolicy) Validate(password string) error {
 	if p == nil || !p.IsActive {

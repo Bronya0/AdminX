@@ -21,9 +21,53 @@ func NewClusterService(db *gorm.DB, repo *repository.ClusterRepo) *ClusterServic
 	return &ClusterService{db: db, repo: repo}
 }
 
-// ListNodes 节点列表。
-func (s *ClusterService) ListNodes(offset, limit int) ([]model.ClusterNode, int64, error) {
-	return s.repo.ListNodes(offset, limit)
+// ListNodes 节点列表（支持 search/status 过滤）。
+func (s *ClusterService) ListNodes(offset, limit int, search, status string) ([]model.ClusterNode, int64, error) {
+	return s.repo.ListNodes(offset, limit, search, status)
+}
+
+// GetNode 按 ID 查询节点。
+func (s *ClusterService) GetNode(id string) (*model.ClusterNode, error) {
+	n, err := s.repo.FindNodeByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+	return n, nil
+}
+
+// NodesOverview 节点概览（对齐前端 types 的 ClusterOverview）。
+type NodesOverview struct {
+	Total       int64               `json:"total"`
+	Online      int64               `json:"online"`
+	Offline     int64               `json:"offline"`
+	Maintenance int64               `json:"maintenance"`
+	Nodes       []model.ClusterNode `json:"nodes"`
+}
+
+// NodesOverview 统计节点总数/在线/离线 + 节点列表（节点管理页顶部卡片）。
+func (s *ClusterService) NodesOverview() (*NodesOverview, error) {
+	counts, err := s.repo.CountNodesByStatus()
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	nodes, err := s.repo.ListAllNodes()
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	var total int64
+	for _, c := range counts {
+		total += c
+	}
+	return &NodesOverview{
+		Total:       total,
+		Online:      counts["online"],
+		Offline:     counts["offline"],
+		Maintenance: counts["maintenance"],
+		Nodes:       nodes,
+	}, nil
 }
 
 func (s *ClusterService) CreateNode(n *model.ClusterNode) (*model.ClusterNode, error) {
@@ -127,6 +171,35 @@ func (s *ClusterService) DeleteNode(id string) error {
 
 func (s *ClusterService) ListComponents(offset, limit int) ([]model.ServiceComponent, int64, error) {
 	return s.repo.ListComponents(offset, limit)
+}
+
+// GetComponent 按 ID 查询业务组件。
+func (s *ClusterService) GetComponent(id string) (*model.ServiceComponent, error) {
+	c, err := s.repo.FindComponentByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+	return c, nil
+}
+
+// DeleteComponent 删除业务组件注册记录（先确认存在，避免无效删除静默成功）。
+func (s *ClusterService) DeleteComponent(id string) error {
+	if _, err := s.GetComponent(id); err != nil {
+		return err
+	}
+	if err := s.repo.DeleteComponent(id); err != nil {
+		return apperr.ErrInternal
+	}
+	return nil
+}
+
+// ConfirmUpgrade 确认升级已完成：清空升级指令（升级指令已被业务侧消费）。
+// 与 CancelUpgrade 同义（都是清除待执行指令），分开命名是为了接口语义清晰。
+func (s *ClusterService) ConfirmUpgrade(id string) error {
+	return s.CancelUpgrade(id)
 }
 
 // RegisterInput 业务组件注册入参。

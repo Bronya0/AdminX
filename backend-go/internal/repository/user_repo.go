@@ -2,6 +2,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
@@ -127,19 +129,21 @@ func (r *UserRepo) SoftDelete(id string) error {
 }
 
 // UpdateActivity 更新最后活动时间。
+// 时间由 Go 侧传入而非 SQL NOW()：postgres / sqlite 通用，且与 JWT 签发时钟同源
+// （JWTAuth 用 last_logout 与 token 的 iat 比较，同源可避免库与应用的时钟偏差）。
 func (r *UserRepo) UpdateActivity(id string) error {
 	return r.db.Model(&model.User{}).Where("id = ?", id).
-		Update("last_activity", gorm.Expr("NOW()")).Error
+		Update("last_activity", time.Now()).Error
 }
 
 // UpdateLogout 更新登出时间。
 func (r *UserRepo) UpdateLogout(id string) error {
 	return r.db.Model(&model.User{}).Where("id = ?", id).
-		Update("last_logout", gorm.Expr("NOW()")).Error
+		Update("last_logout", time.Now()).Error
 }
 
 // UpdateLogin 更新最后登录时间。
 func (r *UserRepo) UpdateLogin(id string) error {
 	return r.db.Model(&model.User{}).Where("id = ?", id).
-		Update("last_login", gorm.Expr("NOW()")).Error
+		Update("last_login", time.Now()).Error
 }

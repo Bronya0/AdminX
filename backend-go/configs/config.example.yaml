@@ -10,9 +10,13 @@ server:
   timeout_sec: 120
 
 database:
-  driver: "postgres"
+  driver: "postgres"                     # postgres（默认/生产）/ sqlite（本地开发，无需安装 PG）
   # 示例值（弱口令 + sslmode=disable）会被启动校验拒绝，必须改为你自己的 DSN
   dsn: "postgres://postgres:<your-password>@localhost:5432/adminx?sslmode=disable"
+  # 本地用 SQLite 时改成（dsn 为数据库文件路径，相对 backend-go/ 工作目录；
+  # 建表走 internal/database/sqlite.go 的显式 DDL，连接池固定为 1）：
+  #   driver: "sqlite"
+  #   dsn: "../.tmp/adminx-dev.db"
   max_open_conns: 100
   max_idle_conns: 10
   conn_max_lifetime: "1h"

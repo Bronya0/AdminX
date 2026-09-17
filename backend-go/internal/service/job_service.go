@@ -45,6 +45,12 @@ func (s *JobService) notifyJobsChanged() {
 	}
 }
 
+// Reload 手动触发调度器重载（POST /jobs/reload/）。
+// 与任务 CRUD 走同一条路径：标记 reload_pending（供独立调度器进程轮询消费）+ 本进程内立即重载。
+func (s *JobService) Reload() {
+	s.notifyJobsChanged()
+}
+
 func (s *JobService) List(offset, limit int, search string) ([]model.ScheduleJob, int64, error) {
 	return s.repo.List(offset, limit, search)
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
@@ -14,15 +15,14 @@ import (
 	"adminx/internal/model"
 )
 
+// sqliteMaxConns SQLite 连接数上限（单写入者：只允许一条连接，避免写锁冲突）。
+const sqliteMaxConns = 1
+
 // Init 初始化 GORM 连接并返回 *gorm.DB。
 func Init(cfg *config.Config, logger *slog.Logger) (*gorm.DB, error) {
-	logLevel := parseLogLevel(cfg.Database.LogLevel)
-
-	db, err := gorm.Open(postgres.Open(cfg.Database.DSN), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(logLevel),
-	})
+	db, err := open(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("连接数据库失败: %w", err)
+		return nil, err
 	}
 
 	sqlDB, err := db.DB()
@@ -30,9 +30,15 @@ func Init(cfg *config.Config, logger *slog.Logger) (*gorm.DB, error) {
 		return nil, fmt.Errorf("获取底层 sql.DB 失败: %w", err)
 	}
 
-	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetimeDuration())
+	// SQLite 是单写入者模型：连接池固定为 1，避免并发写报 "database is locked"
+	maxOpen, maxIdle := cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns
+	if cfg.Database.Driver == config.DriverSQLite {
+		maxOpen, maxIdle = sqliteMaxConns, sqliteMaxConns
+	} else {
+		sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetimeDuration())
+	}
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxIdle)
 
 	// 验证连接
 	if err := sqlDB.Ping(); err != nil {
@@ -40,17 +46,45 @@ func Init(cfg *config.Config, logger *slog.Logger) (*gorm.DB, error) {
 	}
 
 	logger.Info("数据库连接成功",
-		"max_open", cfg.Database.MaxOpenConns,
-		"max_idle", cfg.Database.MaxIdleConns,
+		"driver", cfg.Database.Driver,
+		"max_open", maxOpen,
+		"max_idle", maxIdle,
 	)
 
-	// AutoMigrate（生产环境也可用，GORM 的 migrate 是幂等的，只增不删）
-	if err := autoMigrate(db); err != nil {
+	if err := migrate(cfg.Database.Driver, db); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
-	logger.Info("数据库迁移完成")
+	logger.Info("数据库迁移完成", "driver", cfg.Database.Driver)
 
 	return db, nil
+}
+
+// open 按 database.driver 选择 GORM 方言（driver 取值已由 config.validate 校验）。
+func open(cfg *config.Config) (*gorm.DB, error) {
+	opts := &gorm.Config{Logger: gormlogger.Default.LogMode(parseLogLevel(cfg.Database.LogLevel))}
+
+	var dialector gorm.Dialector
+	if cfg.Database.Driver == config.DriverSQLite {
+		// 对齐 postgres 的错误语义（唯一索引冲突 → gorm.ErrDuplicatedKey）
+		opts.TranslateError = true
+		dialector = sqlite.Open(cfg.Database.DSN)
+	} else {
+		dialector = postgres.Open(cfg.Database.DSN)
+	}
+
+	db, err := gorm.Open(dialector, opts)
+	if err != nil {
+		return nil, fmt.Errorf("连接数据库失败: %w", err)
+	}
+	return db, nil
+}
+
+// migrate 建表：postgres 走 AutoMigrate，sqlite 走显式 DDL（见 sqlite.go）。
+func migrate(driver string, db *gorm.DB) error {
+	if driver == config.DriverSQLite {
+		return migrateSQLite(db)
+	}
+	return autoMigrate(db)
 }
 
 // Close 关闭数据库连接。
@@ -77,9 +111,9 @@ func parseLogLevel(level string) gormlogger.LogLevel {
 	}
 }
 
-// autoMigrate 自动建表（GORM 只增列、加索引，不删列）。
-func autoMigrate(db *gorm.DB) error {
-	models := []interface{}{
+// Models 返回需要建表的全部模型（AutoMigrate 与 SQLite DDL 守卫测试共用，新增模型只改这里）。
+func Models() []interface{} {
+	return []interface{}{
 		// accounts
 		&model.User{},
 		&model.Role{},
@@ -106,6 +140,12 @@ func autoMigrate(db *gorm.DB) error {
 		// policy
 		&model.PasswordPolicy{},
 		&model.PasswordHistory{},
+		// monitor
+		&model.MonitorSample{},
 	}
-	return db.AutoMigrate(models...)
+}
+
+// autoMigrate 自动建表（GORM 只增列、加索引，不删列）。
+func autoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(Models()...)
 }

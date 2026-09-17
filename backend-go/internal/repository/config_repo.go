@@ -25,6 +25,14 @@ func (r *ConfigRepo) FindByKey(key string) (*model.Config, error) {
 	return &c, err
 }
 
+// FindAnyByKey 按 key 查询（含 is_active=false 的记录）。写入场景用：
+// 只看启用记录会导致已停用的 key 被当成不存在，进而撞上唯一索引。
+func (r *ConfigRepo) FindAnyByKey(key string) (*model.Config, error) {
+	var c model.Config
+	err := r.db.Where("key = ?", key).First(&c).Error
+	return &c, err
+}
+
 func (r *ConfigRepo) List(offset, limit int, search, group string) ([]model.Config, int64, error) {
 	var cfgs []model.Config
 	var count int64

@@ -37,9 +37,17 @@ type ServerConfig struct {
 	TimeoutSec int    `mapstructure:"timeout_sec"`
 }
 
+// 支持的 database.driver 取值。
+const (
+	// DriverPostgres 默认/生产库：AutoMigrate 建表，使用 jsonb、gen_random_uuid() 等 PG 特性。
+	DriverPostgres = "postgres"
+	// DriverSQLite 本地开发库：无需安装 PostgreSQL，建表走 internal/database 的显式 DDL。
+	DriverSQLite = "sqlite"
+)
+
 // DBConfig 数据库配置。
 type DBConfig struct {
-	Driver          string `mapstructure:"driver"` // postgres (当前仅支持 postgres)
+	Driver          string `mapstructure:"driver"` // postgres（默认）/ sqlite（本地开发）
 	DSN             string `mapstructure:"dsn"`
 	MaxOpenConns    int    `mapstructure:"max_open_conns"`
 	MaxIdleConns    int    `mapstructure:"max_idle_conns"`
@@ -180,9 +188,19 @@ func (c *Config) validate() error {
 	if c.JWT.Secret == "" || c.JWT.Secret == "change-me-in-production" || c.JWT.Secret == "dev-only-change-me-9f8e7d6c5b4a3210" {
 		return fmt.Errorf("必须配置安全的 jwt.secret（不允许使用默认值/示例值，可通过 DJA_JWT_SECRET 环境变量或 config.yaml 设置）")
 	}
-	// 数据库 DSN 同样拒绝示例值（示例 DSN 为弱口令 + sslmode=disable，误上生产 = 裸奔）
-	if c.Database.DSN == "" || c.Database.DSN == "postgres://postgres:postgres@localhost:5432/adminx?sslmode=disable" {
-		return fmt.Errorf("必须配置安全的 database.dsn（不允许为空或使用示例值）")
+	// 数据库 DSN：postgres 拒绝示例值（弱口令 + sslmode=disable，误上生产 = 裸奔）；
+	// sqlite 时 dsn 是本地文件路径，只校验非空。
+	switch c.Database.Driver {
+	case DriverSQLite:
+		if c.Database.DSN == "" {
+			return fmt.Errorf("必须配置 database.dsn（sqlite 时为数据库文件路径，如 ./.tmp/adminx-dev.db）")
+		}
+	case DriverPostgres:
+		if c.Database.DSN == "" || c.Database.DSN == "postgres://postgres:postgres@localhost:5432/adminx?sslmode=disable" {
+			return fmt.Errorf("必须配置安全的 database.dsn（不允许为空或使用示例值）")
+		}
+	default:
+		return fmt.Errorf("不支持的 database.driver %q（可选 %s / %s）", c.Database.Driver, DriverPostgres, DriverSQLite)
 	}
 	// 解析 JWT 过期时间，确保格式正确
 	if _, err := time.ParseDuration(c.JWT.AccessExpire); err != nil {

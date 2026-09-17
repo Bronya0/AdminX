@@ -225,6 +225,52 @@ func (s *ConfigService) Delete(id int64) error {
 	return nil
 }
 
+// SetValue 按固定 key 写入明文配置（不存在则创建，存在则覆盖值/类型/描述）。
+// 用于站点信息这类"按约定 key 键值化"的场景；加密配置只能走 Create/Update，
+// 避免误把密文当明文覆盖。
+func (s *ConfigService) SetValue(key, value, valueType, desc, group string) error {
+	if valueType == "" {
+		valueType = "string"
+	}
+	if group == "" {
+		group = "default"
+	}
+
+	cfg, err := s.repo.FindAnyByKey(key)
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return apperr.ErrInternal
+		}
+		created := &model.Config{
+			Key: key, Value: value, ValueType: valueType,
+			Desc: desc, Group: group, IsActive: true,
+		}
+		if err := s.repo.Create(created); err != nil {
+			return apperr.ErrInternal
+		}
+		s.invalidateCache(created.Key, created.Group)
+		return nil
+	}
+	if cfg.IsEncrypted {
+		return apperr.New(400, "加密配置不支持按键覆盖写入")
+	}
+
+	oldGroup := cfg.Group
+	cfg.Value = value
+	cfg.ValueType = valueType
+	cfg.Desc = desc
+	cfg.Group = group
+	cfg.IsActive = true
+	if err := s.repo.Update(cfg); err != nil {
+		return apperr.ErrInternal
+	}
+	s.invalidateCache(cfg.Key, cfg.Group)
+	if oldGroup != cfg.Group {
+		s.invalidateCache(cfg.Key, oldGroup)
+	}
+	return nil
+}
+
 // GetValue 按 key 读取配置值（带缓存 + 解密 + 类型解析）。
 func (s *ConfigService) GetValue(ctx context.Context, key string, defaultVal interface{}) (interface{}, error) {
 	cacheKey := configCachePrefix + key

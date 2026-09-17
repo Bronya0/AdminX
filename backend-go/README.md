@@ -64,14 +64,14 @@ backend-go/
 | **用户/角色/菜单** | `/accounts/users/` `/accounts/roles/` `/menu/` | 完整 CRUD + RBAC |
 | **配置中心** | `/config/` + `by_group/` `get_value/` `groups/` | 5 种值类型 + AES-GCM 加密 + Redis 缓存 |
 | **审计日志** | `/audit/` | create/update/delete 记录 |
-| **定时任务** | `/jobs/` + `run_once/` `status/` `logs/` | gocron + Redis 任务级锁 HA |
+| **定时任务** | `/jobs/` + `run_once/` `status/` `logs/` `reload/` | gocron + Redis 任务级锁 HA |
 | **通知中心** | `/notification/messages/` `webhooks/` | webhook HMAC-SHA256 签名外发 |
-| **集群管理** | `/cluster/nodes/` `components/` | 节点 CRUD + 业务组件注册/心跳 |
+| **集群管理** | `/cluster/nodes/`（`overview/`）`components/` | 节点 CRUD + 概览 + 业务组件注册/心跳 |
 | **文件中心** | `/files/upload/` `records/` | 本地存储 |
-| **系统监控** | `/monitor/resources/` `netstat/` | CPU/内存/磁盘/网络（gopsutil） |
+| **系统监控** | `/monitor/resources/`（`history/`）`netstat/` | CPU/内存/磁盘/网络（gopsutil）+ 1 分钟采样趋势 |
 | **密码策略** | `/policy/policy/` `change-password/` | 策略校验 + 历史防重用 |
 | **验证码** | `/captcha/captcha/` `verify/` | Redis 存储 |
-| **通用** | `/common/health/` `dashboard/stats/` | 健康检查 + 仪表盘 |
+| **通用** | `/common/health/` `dashboard/stats/` `site-info/` `components/` | 健康检查 + 仪表盘 + 站点信息（配置中心 `group=site`）+ 内置组件状态 |
 | **WebSocket** | `/ws/log/` | Hub + Redis pub/sub 跨实例广播 |
 
 ## 快速开始
@@ -79,15 +79,25 @@ backend-go/
 ### 前置依赖
 
 - Go 1.22+
-- PostgreSQL 14+
-- Redis 6+
+- PostgreSQL 14+（或用 SQLite，见下）
+- Redis 6+（可选：未配置时后端降级为无缓存模式，验证码/黑名单/配置缓存/调度器锁等依赖 Redis 的能力不可用）
 
 ### 配置
 
 ```bash
 cp configs/config.example.yaml configs/config.yaml
 # 编辑 config.yaml，填入数据库 DSN、Redis URL、JWT secret、AES key
+# （config.yaml 已被 .gitignore 忽略，不要提交）
 ```
+
+### 不装 PostgreSQL：用 SQLite 跑本地
+
+`database.driver` 设为 `sqlite`、`dsn` 设为文件路径（如 `../.tmp/adminx-dev.db`）即可。
+PG 专有类型（`gen_random_uuid()`、`jsonb`）无法在 SQLite 上 AutoMigrate，因此 SQLite 走
+`internal/database/sqlite.go` 的显式 DDL；新增模型/字段要同步更新那份 DDL，
+`internal/database` 的守卫测试会校验覆盖完整性。生产环境仍用 `driver: postgres`。
+
+本地原始 SQL 必须两种方言都能跑：时间用 Go 侧传参（不用 `NOW()` / `INTERVAL` / `RETURNING`）。
 
 ### 初始化数据
 

@@ -103,6 +103,20 @@ func (h *JobHandler) Status(c *gin.Context) {
 	})
 }
 
+// Reload POST /jobs/reload/ — 手动触发调度器重载。
+func (h *JobHandler) Reload(c *gin.Context) {
+	h.svc.Reload()
+	alive, err := h.repo.IsSchedulerAlive()
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"scheduler_alive": alive,
+		"message":         "已提交重载",
+	})
+}
+
 // Logs GET /jobs/logs/
 func (h *JobHandler) Logs(c *gin.Context) {
 	p := pagination.Parse(c)

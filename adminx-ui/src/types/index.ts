@@ -378,7 +378,7 @@ export interface SystemComponentItem {
 
 export interface SystemComponentsData {
   platform: {
-    python_version: string
+    runtime_version: string
     os: string
   }
   components: SystemComponentItem[]

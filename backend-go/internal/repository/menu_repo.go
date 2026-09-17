@@ -40,6 +40,13 @@ func (r *MenuRepo) ActiveByPaths(paths []string) ([]model.Menu, error) {
 	return menus, err
 }
 
+// AllActive 查询所有启用菜单（超级管理员按 RBAC“全放行”约定取菜单时用）。
+func (r *MenuRepo) AllActive() ([]model.Menu, error) {
+	var menus []model.Menu
+	err := r.db.Where("is_active = ?", true).Order("sort_order ASC, id ASC").Find(&menus).Error
+	return menus, err
+}
+
 // MenusByUser 通过 user_id 查关联的活跃菜单（用户角色 → 菜单）。
 func (r *MenuRepo) MenusByUser(userID string) ([]model.Menu, error) {
 	var menus []model.Menu

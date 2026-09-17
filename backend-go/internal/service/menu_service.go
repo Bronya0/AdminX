@@ -58,8 +58,13 @@ func (s *MenuService) All() ([]model.Menu, error) {
 	return s.menuRepo.All()
 }
 
-// MenusByUser 查询用户关联的菜单（RBAC 用）。
-func (s *MenuService) MenusByUser(userID string) ([]model.Menu, error) {
+// MenusByUser 查询用户在侧边栏可见的菜单。
+// 超级管理员与 RBAC 同一条“全放行”约定：不依赖角色绑定，直接返回全部启用菜单
+// （否则无角色的超管会出现“接口全能调、菜单却是空”的割裂）。
+func (s *MenuService) MenusByUser(userID string, isSuperuser bool) ([]model.Menu, error) {
+	if isSuperuser {
+		return s.menuRepo.AllActive()
+	}
 	return s.menuRepo.MenusByUser(userID)
 }
 
@@ -119,8 +124,14 @@ func (s *MenuService) Create(in MenuCreateInput) (*model.Menu, error) {
 		SortOrder:      in.SortOrder,
 		ParentID:       in.ParentID,
 		AllowedPaths:   allowedPaths,
-		Depth:          1, // 默认根节点，后续可调整
 	}
+
+	// 深度由父级派生（根=1，子=父+1）
+	depth, err := s.depthForParent(in.ParentID, 0)
+	if err != nil {
+		return nil, err
+	}
+	menu.Depth = depth
 
 	if err := s.menuRepo.Create(menu); err != nil {
 		return nil, apperr.ErrInternal
@@ -187,8 +198,9 @@ type MenuUpdateInput struct {
 	IsActive       *bool    `json:"is_active"`
 	IsVisible      *bool    `json:"is_visible"`
 	SortOrder      int      `json:"sort_order"`
-	ParentID       *int64   `json:"parent_id"`
-	AllowedPaths   []string `json:"allowed_paths"`
+	// ParentID nil = 不改动父子关系；传父菜单 ID 时按其深度重算 depth。
+	ParentID     *int64   `json:"parent_id"`
+	AllowedPaths []string `json:"allowed_paths"`
 }
 
 func (s *MenuService) Update(id int64, in MenuUpdateInput) (*model.Menu, error) {
@@ -228,7 +240,15 @@ func (s *MenuService) Update(id int64, in MenuUpdateInput) (*model.Menu, error) 
 		menu.IsVisible = *in.IsVisible
 	}
 	menu.SortOrder = in.SortOrder
-	menu.ParentID = in.ParentID
+	// 传了 parent_id 才调整层级，并按父级重算 depth（nil = 保持原父子关系）
+	if in.ParentID != nil {
+		depth, err := s.depthForParent(in.ParentID, menu.ID)
+		if err != nil {
+			return nil, err
+		}
+		menu.ParentID = in.ParentID
+		menu.Depth = depth
+	}
 	if in.AllowedPaths != nil {
 		menu.AllowedPaths = mustJSON(in.AllowedPaths)
 	}
@@ -244,4 +264,58 @@ func (s *MenuService) Delete(id int64) error {
 		return apperr.ErrInternal
 	}
 	return nil
+}
+
+// depthForParent 由父级派生菜单深度：根节点为 1，子节点为父深度 +1。
+// selfID 非 0（更新场景）时拒绝把菜单挂到自己或自己的后代下，避免形成环。
+func (s *MenuService) depthForParent(parentID *int64, selfID int64) (int, error) {
+	if parentID == nil {
+		return 1, nil
+	}
+	if *parentID <= 0 {
+		return 0, apperr.New(400, "无效的父菜单 ID")
+	}
+	parent, err := s.menuRepo.FindByID(*parentID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return 0, apperr.New(404, "父菜单不存在")
+		}
+		return 0, apperr.ErrInternal
+	}
+	if selfID != 0 {
+		cyclic, err := s.wouldCycle(selfID, parent.ID)
+		if err != nil {
+			return 0, apperr.ErrInternal
+		}
+		if cyclic {
+			return 0, apperr.New(400, "不能把菜单挂到它自己或它的子菜单下")
+		}
+	}
+	return parent.Depth + 1, nil
+}
+
+// wouldCycle 判断把 menuID 挂到 newParentID 下是否会成环：
+// 沿 parent_id 向上回溯 newParentID 的祖先链，遇到 menuID 即成环（seen 兼顾已存在的环）。
+func (s *MenuService) wouldCycle(menuID, newParentID int64) (bool, error) {
+	menus, err := s.menuRepo.All()
+	if err != nil {
+		return false, err
+	}
+	parentOf := make(map[int64]*int64, len(menus))
+	for i := range menus {
+		parentOf[menus[i].ID] = menus[i].ParentID
+	}
+	seen := make(map[int64]bool, len(menus))
+	for id := newParentID; !seen[id]; {
+		if id == menuID {
+			return true, nil
+		}
+		seen[id] = true
+		parent := parentOf[id]
+		if parent == nil {
+			return false, nil
+		}
+		id = *parent
+	}
+	return false, nil
 }

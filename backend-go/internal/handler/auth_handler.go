@@ -168,8 +168,8 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 
-	// 查用户菜单（含 allowed_paths）
-	menus, err := h.menuSvc.MenusByUser(uid)
+	// 查用户菜单（含 allowed_paths；超管按“全放行”约定返回全部启用菜单）
+	menus, err := h.menuSvc.MenusByUser(uid, isSuperuser(c))
 	if err != nil {
 		h.logger.WarnContext(c.Request.Context(), "查询用户菜单失败", "error", err)
 		menus = []model.Menu{}

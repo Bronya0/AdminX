@@ -97,12 +97,15 @@ func main() {
 	roleSvc := service.NewRoleService(db, roleRepo)
 	menuSvc := service.NewMenuService(db, menuRepo)
 	configSvc := service.NewConfigService(db, configRepo, rdb, aesGCM)
+	siteInfoSvc := service.NewSiteInfoService(configSvc)
 	auditSvc := service.NewAuditService(auditRepo)
 	jobSvc := service.NewJobService(db, jobRepo, log)
 	notifSvc := service.NewNotificationService(db, notifRepo, log)
 	clusterSvc := service.NewClusterService(db, clusterRepo)
 	fileSvc := service.NewFileService(db, cfg)
-	monitorSvc := service.NewMonitorService()
+	monitorRepo := repository.NewMonitorRepo(db)
+	monitorSvc := service.NewMonitorService(monitorRepo, log)
+	systemComponentSvc := service.NewSystemComponentService(db, rdb, jobRepo)
 	policySvc := service.NewPolicyService(db)
 
 	// 任务 CRUD → 调度器重载：标记 reload_pending（跨进程）+ 本进程内立即重载。
@@ -133,7 +136,7 @@ func main() {
 	notifH := handler.NewNotificationHandler(notifSvc, log)
 	clsH := handler.NewClusterHandler(clusterSvc, log)
 	fileH := handler.NewFileHandler(fileSvc, log)
-	monH := handler.NewCommonHandler(db, monitorSvc, log)
+	monH := handler.NewCommonHandler(db, monitorSvc, siteInfoSvc, systemComponentSvc, log)
 	policyH := handler.NewPolicyHandler(policySvc, log)
 	capH := handler.NewCaptchaHandler(capMgr, log)
 

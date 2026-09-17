@@ -26,7 +26,7 @@ func NewClusterHandler(svc *service.ClusterService, logger *slog.Logger) *Cluste
 
 func (h *ClusterHandler) ListNodes(c *gin.Context) {
 	p := pagination.Parse(c)
-	nodes, count, err := h.svc.ListNodes(p.Offset(), p.Size)
+	nodes, count, err := h.svc.ListNodes(p.Offset(), p.Size, c.Query("search"), c.Query("status"))
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
@@ -34,6 +34,26 @@ func (h *ClusterHandler) ListNodes(c *gin.Context) {
 	next := pagination.NextURL(c, p.Page, p.Size, count)
 	prev := pagination.PreviousURL(c, p.Page, p.Size)
 	response.Paginated(c, count, next, prev, nodes)
+}
+
+// GetNode GET /cluster/nodes/:id/
+func (h *ClusterHandler) GetNode(c *gin.Context) {
+	node, err := h.svc.GetNode(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, node)
+}
+
+// NodesOverview GET /cluster/nodes/overview/
+func (h *ClusterHandler) NodesOverview(c *gin.Context) {
+	overview, err := h.svc.NodesOverview()
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, overview)
 }
 
 func (h *ClusterHandler) CreateNode(c *gin.Context) {
@@ -90,6 +110,35 @@ func (h *ClusterHandler) ListComponents(c *gin.Context) {
 	next := pagination.NextURL(c, p.Page, p.Size, count)
 	prev := pagination.PreviousURL(c, p.Page, p.Size)
 	response.Paginated(c, count, next, prev, dtos)
+}
+
+// GetComponent GET /cluster/components/:id/
+func (h *ClusterHandler) GetComponent(c *gin.Context) {
+	component, err := h.svc.GetComponent(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, model.ToServiceComponentDTO(component))
+}
+
+// DeleteComponent DELETE /cluster/components/:id/
+func (h *ClusterHandler) DeleteComponent(c *gin.Context) {
+	if err := h.svc.DeleteComponent(c.Param("id")); err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.NoContent(c)
+}
+
+// ConfirmUpgrade POST /cluster/components/:id/confirm_upgrade/
+// 确认升级指令已被业务侧执行完毕（清除待执行指令）。
+func (h *ClusterHandler) ConfirmUpgrade(c *gin.Context) {
+	if err := h.svc.ConfirmUpgrade(c.Param("id")); err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, nil)
 }
 
 // Register POST /cluster/components/register/ (AllowAny)

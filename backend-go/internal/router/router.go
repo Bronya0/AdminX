@@ -79,6 +79,8 @@ func New(deps *Deps) *gin.Engine {
 		public.GET("/common/ping/", func(c *gin.Context) {
 			response.OK(c, gin.H{"message": "pong"})
 		})
+		// 站点信息：登录页需要，无鉴权（仅站点名/描述/Logo/空闲超时等非敏感展示项）
+		public.GET("/common/site-info/", deps.MonH.SiteInfo)
 		// captcha（无鉴权）
 		public.GET("/captcha/captcha/", deps.CapH.Generate)
 		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
@@ -191,6 +193,9 @@ func New(deps *Deps) *gin.Engine {
 		rbac.PATCH("/config/:id/", deps.CfgH.Update)
 		rbac.DELETE("/config/:id/", deps.CfgH.Delete)
 		rbac.GET("/config/groups/", deps.CfgH.Groups)
+		// 站点信息写入：与配置中心同级别（由菜单 allowed_paths 控制），
+		// 默认绑定在 system-config 菜单上（见 init-data 种子）
+		rbac.POST("/common/site-info/", deps.MonH.UpdateSiteInfo)
 
 		// 审计
 		rbac.GET("/audit/", deps.AuditH.List)
@@ -201,7 +206,6 @@ func New(deps *Deps) *gin.Engine {
 		rbac.GET("/jobs/:id/", deps.JobH.Get)
 		rbac.GET("/jobs/status/", deps.JobH.Status)
 		rbac.GET("/jobs/logs/", deps.JobH.Logs)
-
 		// 通知 webhook 管理
 		rbac.GET("/notification/webhooks/", deps.NotifH.ListWebhooks)
 		rbac.POST("/notification/webhooks/", deps.NotifH.CreateWebhook)
@@ -211,11 +215,15 @@ func New(deps *Deps) *gin.Engine {
 		rbac.GET("/notification/webhook-logs/", deps.NotifH.WebhookLogs)
 
 		// 集群节点管理（节点 CRUD 归 RBAC；组件升级指令归超管）
+		rbac.GET("/cluster/nodes/", deps.ClsH.ListNodes)
+		rbac.GET("/cluster/nodes/overview/", deps.ClsH.NodesOverview)
+		rbac.GET("/cluster/nodes/:id/", deps.ClsH.GetNode)
 		rbac.POST("/cluster/nodes/", deps.ClsH.CreateNode)
 		rbac.PUT("/cluster/nodes/:id/", deps.ClsH.UpdateNode)
 		rbac.PATCH("/cluster/nodes/:id/", deps.ClsH.UpdateNode)
 		rbac.DELETE("/cluster/nodes/:id/", deps.ClsH.DeleteNode)
 		rbac.GET("/cluster/components/", deps.ClsH.ListComponents)
+		rbac.GET("/cluster/components/:id/", deps.ClsH.GetComponent)
 
 		// 文件中心
 		rbac.POST("/files/upload/", deps.FileH.Upload)
@@ -224,7 +232,11 @@ func New(deps *Deps) *gin.Engine {
 
 		// 系统监控
 		rbac.GET("/monitor/resources/", deps.MonH.Monitor)
+		rbac.GET("/monitor/resources/history/", deps.MonH.ResourceHistory)
 		rbac.GET("/monitor/netstat/", deps.MonH.NetStat)
+
+		// 系统内置组件（数据库/Redis/调度器）状态
+		rbac.GET("/common/components/", deps.MonH.SystemComponents)
 
 		// 仪表盘
 		rbac.GET("/common/dashboard/stats/", deps.MonH.Dashboard)
@@ -251,11 +263,15 @@ func New(deps *Deps) *gin.Engine {
 		admin.PATCH("/jobs/:id/", deps.JobH.Update)
 		admin.DELETE("/jobs/:id/", deps.JobH.Delete)
 		admin.POST("/jobs/:id/run_once/", deps.JobH.RunOnce)
+		admin.POST("/jobs/reload/", deps.JobH.Reload)
 
 		admin.POST("/cluster/components/:id/set_upgrade/", deps.ClsH.SetUpgrade)
 		admin.POST("/cluster/components/:id/cancel_upgrade/", deps.ClsH.CancelUpgrade)
+		admin.POST("/cluster/components/:id/confirm_upgrade/", deps.ClsH.ConfirmUpgrade)
 		admin.POST("/cluster/components/:id/set_uninstall/", deps.ClsH.SetUninstall)
 		admin.POST("/cluster/components/:id/cancel_uninstall/", deps.ClsH.CancelUninstall)
+		// 删除组件注册记录（与升级/卸载指令同级别，避免“有菜单权限即可下线业务组件”）
+		admin.DELETE("/cluster/components/:id/", deps.ClsH.DeleteComponent)
 
 		admin.PUT("/policy/policy/", deps.PolicyH.UpdatePolicy)
 		admin.PATCH("/policy/policy/", deps.PolicyH.UpdatePolicy)

@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 
 	"adminx/internal/model"
@@ -81,36 +83,48 @@ func (r *JobRepo) ListLogs(offset, limit int, jobID, status string) ([]model.Job
 
 // ── SchedulerHeartbeat ──
 
-// WriteHeartbeat 写调度器心跳（固定单例 ID）。
+// heartbeatID 调度器心跳单例行 ID（与 model.SchedulerHeartbeat 的固定 ID 约定一致）。
+const heartbeatID = "00000000-0000-0000-0000-000000000001"
+
+// heartbeatTTL 心跳存活窗口（超过视为调度器未运行）。
+const heartbeatTTL = 30 * time.Second
+
+// WriteHeartbeat 写调度器心跳（固定单例 ID，幂等 upsert）。
+// 时间由 Go 侧传入而非 SQL NOW()，postgres / sqlite 通用。
 func (r *JobRepo) WriteHeartbeat() error {
 	return r.db.Exec(`INSERT INTO scheduler_heartbeats (id, last_heartbeat, reload_pending)
-		VALUES ('00000000-0000-0000-0000-000000000001', NOW(), false)
-		ON CONFLICT (id) DO UPDATE SET last_heartbeat = NOW()`).Error
+		VALUES (?, ?, false)
+		ON CONFLICT (id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`,
+		heartbeatID, time.Now()).Error
 }
 
-// IsSchedulerAlive 检查调度器是否存活（30s 内有心跳）。
+// IsSchedulerAlive 检查调度器是否存活（heartbeatTTL 内有心跳）。
 func (r *JobRepo) IsSchedulerAlive() (bool, error) {
 	var count int64
 	err := r.db.Raw(`SELECT COUNT(*) FROM scheduler_heartbeats
-		WHERE id = '00000000-0000-0000-0000-000000000001'
-		AND last_heartbeat > NOW() - INTERVAL '30 seconds'`).Scan(&count).Error
+		WHERE id = ? AND last_heartbeat > ?`,
+		heartbeatID, time.Now().Add(-heartbeatTTL)).Scan(&count).Error
 	return count > 0, err
 }
 
 // SetReloadPending 标记调度器需要重载（跨进程通知：web 进程写，调度器进程消费）。
+// 插入分支不写 last_heartbeat：心跳只能由调度器进程自己写，否则 web 进程一旦调 reload，
+// 心跳活性判定就会把“根本没启动的调度器”误报成在线。
 func (r *JobRepo) SetReloadPending() error {
 	return r.db.Exec(`INSERT INTO scheduler_heartbeats (id, last_heartbeat, reload_pending)
-		VALUES ('00000000-0000-0000-0000-000000000001', NOW(), true)
-		ON CONFLICT (id) DO UPDATE SET reload_pending = true`).Error
+		VALUES (?, NULL, true)
+		ON CONFLICT (id) DO UPDATE SET reload_pending = true`,
+		heartbeatID).Error
 }
 
 // ConsumeReloadPending 原子读取并清除 reload_pending，返回是否被置位。
+// 单条 UPDATE + WHERE reload_pending = true：多消费者并发时只有一个能拿到 true（不改原子性）。
+// 不用 CTE + RETURNING，因为 SQLite 的 WITH 不支持数据修改语句。
 func (r *JobRepo) ConsumeReloadPending() (bool, error) {
-	var count int64
-	err := r.db.Raw(`WITH updated AS (
-			UPDATE scheduler_heartbeats SET reload_pending = false
-			WHERE id = '00000000-0000-0000-0000-000000000001' AND reload_pending = true
-			RETURNING 1)
-		SELECT COUNT(*) FROM updated`).Scan(&count).Error
-	return count > 0, err
+	res := r.db.Exec(`UPDATE scheduler_heartbeats SET reload_pending = false
+		WHERE id = ? AND reload_pending = true`, heartbeatID)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
 }
