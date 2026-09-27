@@ -294,6 +294,24 @@ const onCronPreset = (val: string) => {
   if (val) formState.value.trigger_config = val
 }
 
+// 触发配置的线上契约（与后端 internal/trigger 包一致，改一处就得同步另一处）：
+//   cron     {"expr":"*/5 * * * *"}（6 段则带秒）
+//   interval {"minutes":5}
+//   date     {"datetime":"2026-01-02 15:04:05"}（本地时间）
+// 读取时兼容旧数据：cron 可能直接存裸表达式，date 可能用 run_date。
+const cronExprOf = (raw: string): string => {
+  try {
+    const c = JSON.parse(raw)
+    return c.expr || c.cron || raw
+  } catch { return raw }
+}
+const dateOf = (raw: string): string => {
+  try {
+    const c = JSON.parse(raw)
+    return c.datetime || c.run_date || ''
+  } catch { return '' }
+}
+
 // 间隔字段 → JSON
 const intervalToConfig = () => JSON.stringify({
   ...(formInterval.days ? { days: formInterval.days } : {}),
@@ -376,11 +394,12 @@ const handleEdit = (job: ScheduleJob) => {
   if (job.trigger_type === 'interval') {
     configToInterval(job.trigger_config)
   }
+  if (job.trigger_type === 'cron') {
+    // 存储格式是 {"expr":"..."}，输入框里要展示裸表达式
+    formState.value.trigger_config = cronExprOf(job.trigger_config)
+  }
   if (job.trigger_type === 'date') {
-    try {
-      const c = JSON.parse(job.trigger_config)
-      formDate.value = c.run_date || ''
-    } catch { formDate.value = '' }
+    formDate.value = dateOf(job.trigger_config)
   }
   modalVisible.value = true
   // 清除上次校验残留
@@ -404,10 +423,14 @@ const handleModalOk = async () => {
         message.error('请选择执行时间')
         return
       }
-      data.trigger_config = JSON.stringify({ run_date: formDate.value })
+      data.trigger_config = JSON.stringify({ datetime: formDate.value })
     } else if (!data.trigger_config.trim()) {
       message.error('请输入 Cron 表达式')
       return
+    } else {
+      // cron：后端契约是 {"expr":"..."}；提交裸表达式会被拒
+      // （此前提交裸串能存下、但调度器解析失败，任务永不执行）
+      data.trigger_config = JSON.stringify({ expr: data.trigger_config.trim() })
     }
     if (editingId.value) {
       await scheduleJobApi.update(editingId.value, data)
@@ -476,12 +499,9 @@ const formatTrigger = (job: ScheduleJob) => {
       return `每 ${p.join(' ')}`
     } catch { return job.trigger_config }
   }
-  if (job.trigger_type === 'cron') return job.trigger_config
+  if (job.trigger_type === 'cron') return cronExprOf(job.trigger_config)
   if (job.trigger_type === 'date') {
-    try {
-      const c = JSON.parse(job.trigger_config)
-      return c.run_date || job.trigger_config
-    } catch { return job.trigger_config }
+    return dateOf(job.trigger_config) || job.trigger_config
   }
   return job.trigger_config
 }

@@ -149,8 +149,13 @@ func SQLiteStatements() []string {
 			title TEXT NOT NULL,
 			content TEXT NOT NULL DEFAULT '',
 			notification_type TEXT NOT NULL DEFAULT 'info',
-			is_read INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS notification_reads (
+			notification_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (notification_id, user_id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS webhook_configs (
 			id TEXT PRIMARY KEY,

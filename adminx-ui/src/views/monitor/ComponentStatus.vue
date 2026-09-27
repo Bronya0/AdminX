@@ -164,10 +164,10 @@
             placeholder="http://... 或文件中心地址"
           />
         </a-form-item>
-        <a-form-item label="SHA-256 校验值（可选）">
+        <a-form-item label="SHA-256 校验值" required>
           <a-input
             v-model:value="upgradeForm.upgrade_checksum"
-            placeholder="留空则跳过完整性校验"
+            placeholder="64 位十六进制（必填，业务侧据此校验升级包）"
           />
         </a-form-item>
         <a-alert
@@ -280,9 +280,17 @@ const openUpgradeModal = (record: ServiceComponent) => {
   upgradeModalOpen.value = true
 }
 
+// SHA-256 十六进制摘要：后端 SetUpgrade 强制要求，缺了会被拒
+// （业务组件侧也会拒执行无校验的升级包）
+const SHA256_RE = /^[0-9a-fA-F]{64}$/
+
 const submitUpgrade = async () => {
   if (!upgradeForm.upgrade_version || !upgradeForm.upgrade_url) {
     message.warning('目标版本和下载地址不能为空')
+    return
+  }
+  if (!SHA256_RE.test(upgradeForm.upgrade_checksum)) {
+    message.warning('SHA-256 校验值必填（64 位十六进制）')
     return
   }
   upgradeLoading.value = true

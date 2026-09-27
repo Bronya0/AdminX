@@ -57,6 +57,35 @@ func TestClusterService_NodesOverview(t *testing.T) {
 	}
 }
 
+// TestClusterService_SetUpgrade_RequiresChecksum 升级指令必须带 url + SHA-256 checksum。
+// 缺任一项时业务侧只会静默丢弃指令，平台却显示"已下发"，因此在平台侧就拒绝。
+func TestClusterService_SetUpgrade_RequiresChecksum(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewClusterService(db, repository.NewClusterRepo(db))
+
+	component, err := svc.Register(RegisterInput{AppLabel: "demo-app-checksum", Name: "演示业务", Version: "1.0.0"})
+	if err != nil {
+		t.Fatalf("注册组件失败: %v", err)
+	}
+
+	const valid = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if err := svc.SetUpgrade(component.ID, "1.1.0", "http://example.com/pkg.zip", ""); err == nil {
+		t.Error("缺 checksum 的升级指令应被拒绝")
+	}
+	if err := svc.SetUpgrade(component.ID, "1.1.0", "", valid); err == nil {
+		t.Error("缺 url 的升级指令应被拒绝")
+	}
+	if err := svc.SetUpgrade(component.ID, "", "http://example.com/pkg.zip", valid); err == nil {
+		t.Error("缺版本号的升级指令应被拒绝")
+	}
+	if err := svc.SetUpgrade(component.ID, "1.1.0", "http://example.com/pkg.zip", "not-a-sha256"); err == nil {
+		t.Error("非 64 位十六进制的 checksum 应被拒绝")
+	}
+	if err := svc.SetUpgrade(component.ID, "1.1.0", "http://example.com/pkg.zip", valid); err != nil {
+		t.Errorf("合法升级指令不应被拒绝: %v", err)
+	}
+}
+
 // TestClusterService_ComponentLifecycle 组件查询/删除/确认升级。
 func TestClusterService_ComponentLifecycle(t *testing.T) {
 	db := setupTestDB(t)
@@ -76,7 +105,9 @@ func TestClusterService_ComponentLifecycle(t *testing.T) {
 	}
 
 	// 下发升级指令 → 确认升级后清空
-	if err := svc.SetUpgrade(component.ID, "1.1.0", "http://example.com/pkg.zip", "sha256:abc"); err != nil {
+	// checksum 必须是 64 位十六进制 SHA-256：业务组件据此校验升级包，缺了会被其丢弃
+	const checksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if err := svc.SetUpgrade(component.ID, "1.1.0", "http://example.com/pkg.zip", checksum); err != nil {
 		t.Fatalf("SetUpgrade 失败: %v", err)
 	}
 	if err := svc.ConfirmUpgrade(component.ID); err != nil {

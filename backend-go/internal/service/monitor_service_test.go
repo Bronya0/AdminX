@@ -71,16 +71,31 @@ func TestMonitorService_History(t *testing.T) {
 	if h.Interval != "1m" {
 		t.Errorf("1h 窗口缺省 interval = %s, want 1m", h.Interval)
 	}
-	if len(h.Points) != 5 {
-		t.Fatalf("每个 1 分钟桶一个点，期望 5 个，实际 %d", len(h.Points))
+	// 1h/1m：按固定步长补齐全部桶（含无采样的空桶），轴长度与窗口一致；
+	// 只输出"有数据的桶"会让前端把空档压缩成 1 个间隔，时间轴失真。
+	wantBuckets := int64(time.Hour/time.Minute) + 1
+	if int64(len(h.Points)) != wantBuckets {
+		t.Fatalf("1h/1m 应补出 %d 个桶，实际 %d", wantBuckets, len(h.Points))
 	}
+	stepSec := int64(time.Minute / time.Second)
 	for i := 1; i < len(h.Points); i++ {
-		if h.Points[i].Timestamp < h.Points[i-1].Timestamp {
-			t.Error("历史点未按时间升序")
+		if h.Points[i].Timestamp-h.Points[i-1].Timestamp != stepSec {
+			t.Fatalf("历史点未按 %ds 等间隔递增: %d → %d", stepSec, h.Points[i-1].Timestamp, h.Points[i].Timestamp)
 		}
 	}
-	if h.Points[0].DiskReadMBps != 1.5 || h.Points[0].MemoryPercent != 50 {
-		t.Errorf("聚合值不对: %+v", h.Points[0])
+	withValue := 0
+	for _, p := range h.Points {
+		if p.CPUPercent != nil {
+			withValue++
+		}
+	}
+	if withValue != 5 {
+		t.Errorf("有值的桶期望 5 个，实际 %d", withValue)
+	}
+	// 最新一条采样落在当前分钟桶（数组末尾），其余为空桶（null）
+	last := h.Points[len(h.Points)-1]
+	if last.DiskReadMBps == nil || *last.DiskReadMBps != 1.5 || last.MemoryPercent == nil || *last.MemoryPercent != 50 {
+		t.Errorf("聚合值不对: %+v", last)
 	}
 
 	// 7 天窗口缺省按 1h 聚合

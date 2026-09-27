@@ -293,9 +293,19 @@ const findSidebarItem = (key: string, items: SidebarItem[]): SidebarItem | undef
 // 打开的新标签页加载后发送 { type: 'adminx:request-token' }，本布局校验来源后回传。
 const pendingTokenWindows: Array<{ win: Window; origin: string }> = []
 
+// 清掉已关闭窗口的句柄：用户反复打开外链会不断累积（窗口关闭后引用不释放）。
+// 保留仍打开的窗口，使业务页刷新后能重新请求 token。
+const pruneClosedTokenWindows = () => {
+  for (let i = pendingTokenWindows.length - 1; i >= 0; i--) {
+    const entry = pendingTokenWindows[i]
+    if (!entry || entry.win.closed) pendingTokenWindows.splice(i, 1)
+  }
+}
+
 const onTokenRequest = (event: MessageEvent) => {
   const data = event.data as { type?: string } | null
   if (data?.type !== 'adminx:request-token') return
+  pruneClosedTokenWindows()
   const entry = pendingTokenWindows.find((e) => e.win === event.source)
   if (!entry || entry.origin !== event.origin) return
   entry.win.postMessage(
@@ -322,6 +332,7 @@ const openExternal = (item: SidebarItem) => {
     }
     const win = window.open(targetUrl, '_blank')
     if (win) {
+      pruneClosedTokenWindows()
       pendingTokenWindows.push({ win, origin: expectedOrigin })
     }
   }

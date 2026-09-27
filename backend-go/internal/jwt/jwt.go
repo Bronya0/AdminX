@@ -175,3 +175,16 @@ func (m *Manager) IsBlacklisted(ctx context.Context, tokenString string) (bool, 
 
 // TokenType 返回 token 类型（独立字段，不再复用 Subject）。
 func (c *Claims) GetTokenType() string { return c.TokenType }
+
+// RevokedByLogout 判断 token 是否因登出/改密而失效（JWTAuth、Refresh、Introspect、WS 共用）。
+//
+// iat 精度是秒（NumericDate 序列化时按 TimePrecision=time.Second 截断），
+// 而 last_logout 是纳秒/微秒精度。直接比较 (iat < last_logout) 会把"同一秒内登出后又
+// 重新登录"签发的新 token 判为已失效，用户被迫反复重登。因此把 last_logout 截断到秒：
+// 同一秒内签发的 token 视为有效，代价是登出那一秒前签发的旧 token 最多再存活 1 秒。
+func RevokedByLogout(iat *jwt.NumericDate, lastLogout *time.Time) bool {
+	if iat == nil || lastLogout == nil {
+		return false
+	}
+	return iat.Time.Before(lastLogout.Truncate(time.Second))
+}

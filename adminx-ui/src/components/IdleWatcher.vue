@@ -89,49 +89,66 @@ const doLogout = async () => {
   if (countdownTimer) clearInterval(countdownTimer)
   showWarning.value = false
 
-  // 先跳转登录页（此时 token 尚未清空，路由守卫会正常放行 /login）
-  await router.replace('/login').catch(() => {})
-  message.warning('会话已超时，请重新登录')
-
-  // 后置清理：统一收口到 store.logout()（服务端吊销 + 清本地状态）
+  // 必须先调服务端登出（此时 refresh token 还在内存里），再跳登录页。
+  // 顺序反了会静默失效：LoginView.onMounted 会 clearToken()，
+  // refresh 被清空后 logout() 直接跳过服务端吊销，旧 refresh 7 天内仍可用。
   await userStore.logout()
+  message.warning('会话已超时，请重新登录')
+  await router.replace('/login').catch(() => {})
 }
 
 // 监听用户活动事件
 const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
 
+let listening = false
+
 const startListening = () => {
+  if (listening) return
+  listening = true
   activityEvents.forEach(event => {
     window.addEventListener(event, resetIdleTimer, { passive: true })
   })
+  // 每分钟轮询配置中心的超时设置，使配置修改即时生效
+  if (!configRefreshTimer) {
+    configRefreshTimer = setInterval(refreshTimeoutConfig, 60 * 1000)
+  }
   resetIdleTimer()
 }
 
 const stopListening = () => {
+  if (!listening) return
+  listening = false
   activityEvents.forEach(event => {
     window.removeEventListener(event, resetIdleTimer)
   })
-  if (idleTimer) clearTimeout(idleTimer)
-  if (countdownTimer) clearInterval(countdownTimer)
-  if (configRefreshTimer) clearInterval(configRefreshTimer)
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+  if (configRefreshTimer) {
+    clearInterval(configRefreshTimer)
+    configRefreshTimer = null
+  }
 }
 
 // 当超时配置变化时重设
 watch(() => userStore.idleTimeout, (val) => {
-  const prevMs = idleTimeoutMs.value
   idleTimeoutMs.value = val > 0 ? val * 60 * 1000 : 0
-  // 从"启用超时"切到"关闭超时"(val=0)：必须清除已挂载的旧 timer，
-  // 否则旧 timer 仍会触发超时警告（resetIdleTimer 在 idleTimeoutMs===0 时不会清旧 timer）
-  if (prevMs > 0 && idleTimeoutMs.value === 0) {
-    if (idleTimer) {
-      clearTimeout(idleTimer)
-      idleTimer = null
-    }
+  // 关闭超时（val=0）：必须停掉已挂载的 timer 与活动监听，
+  // 否则旧 timer 仍会弹超时警告
+  if (idleTimeoutMs.value === 0) {
+    stopListening()
     return
   }
-  if (val > 0 && userStore.isLoggedIn) {
-    resetIdleTimer()
-  }
+  if (!userStore.isLoggedIn) return
+  // 从"挂载时超时=0、从未挂监听"切到启用：必须补挂活动监听，
+  // 否则用户一直在操作也收不到活动事件，到点照样被登出
+  if (!listening) startListening()
+  else resetIdleTimer()
 })
 
 onMounted(() => {
@@ -139,8 +156,6 @@ onMounted(() => {
   idleTimeoutMs.value = timeout > 0 ? timeout * 60 * 1000 : 0
   if (idleTimeoutMs.value > 0 && userStore.isLoggedIn) {
     startListening()
-    // 每分钟轮询配置中心的超时设置，使配置修改即时生效
-    configRefreshTimer = setInterval(refreshTimeoutConfig, 60 * 1000)
   }
 })
 

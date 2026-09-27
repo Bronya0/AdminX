@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -268,7 +269,19 @@ func (s *ClusterService) Heartbeat(appLabel string) (*model.ServiceComponent, er
 	return c, nil
 }
 
+// SetUpgrade 下发升级指令。
+// url + SHA-256 checksum 必填：业务侧据此下载并校验升级包，缺任一项就只会在业务侧
+// 被当成非法指令丢弃（成功设置、永不生效），因此在平台侧就拒绝。
 func (s *ClusterService) SetUpgrade(id, version, url, checksum string) error {
+	version = strings.TrimSpace(version)
+	url = strings.TrimSpace(url)
+	checksum = strings.TrimSpace(checksum)
+	if version == "" || url == "" {
+		return apperr.New(400, "升级指令必须包含版本号与下载地址")
+	}
+	if !isSHA256Hex(checksum) {
+		return apperr.New(400, "升级指令必须包含 SHA-256 校验和（64 位十六进制）")
+	}
 	var c model.ServiceComponent
 	if err := s.db.First(&c, "id = ?", id).Error; err != nil {
 		return apperr.ErrNotFound
@@ -277,6 +290,21 @@ func (s *ClusterService) SetUpgrade(id, version, url, checksum string) error {
 	c.UpgradeURL = url
 	c.UpgradeChecksum = checksum
 	return s.repo.UpdateComponent(&c)
+}
+
+// isSHA256Hex 校验 64 位十六进制 SHA-256 摘要。
+func isSHA256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		switch ch := s[i]; {
+		case ch >= '0' && ch <= '9', ch >= 'a' && ch <= 'f', ch >= 'A' && ch <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (s *ClusterService) CancelUpgrade(id string) error {

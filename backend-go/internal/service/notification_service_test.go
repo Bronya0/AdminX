@@ -136,6 +136,76 @@ func TestNotificationService_MarkAllRead(t *testing.T) {
 	}
 }
 
+// 广播通知（user_id IS NULL）的已读状态必须按用户隔离。
+// 回归背景：已读曾存在通知行的单列 is_read 上，任意一个用户标记已读
+// 会把所有人的未读数一起清零。
+func TestNotificationService_BroadcastReadIsPerUser(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewNotificationService(db, repository.NewNotificationRepo(db), slog.Default())
+
+	a := seedUser(t, db, "broadcast-a", "pass123")
+	b := seedUser(t, db, "broadcast-b", "pass456")
+
+	n, err := svc.Create(context.Background(), NotificationCreateInput{Title: "广播"})
+	if err != nil {
+		t.Fatalf("Create 失败: %v", err)
+	}
+
+	if err := svc.MarkRead(n.ID, a.ID); err != nil {
+		t.Fatalf("MarkRead 失败: %v", err)
+	}
+
+	unreadA, err := svc.UnreadCount(a.ID)
+	if err != nil {
+		t.Fatalf("UnreadCount 失败: %v", err)
+	}
+	unreadB, err := svc.UnreadCount(b.ID)
+	if err != nil {
+		t.Fatalf("UnreadCount 失败: %v", err)
+	}
+	if unreadA != 0 {
+		t.Errorf("A 已读后未读数应为 0，实际 %d", unreadA)
+	}
+	if unreadB != 1 {
+		t.Errorf("B 的未读数被 A 的已读操作影响，期望 1，实际 %d", unreadB)
+	}
+
+	list, _, err := svc.ListByUser(0, 10, a.ID, false)
+	if err != nil {
+		t.Fatalf("ListByUser 失败: %v", err)
+	}
+	if len(list) != 1 || !list[0].IsRead {
+		t.Errorf("A 的列表应显示该广播已读: %+v", list)
+	}
+}
+
+func TestValidWebhookURL(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"http://example.com/hook", true},
+		{"https://example.com/hook", true},
+		{"", false},
+		{"ftp://example.com/hook", false},
+		{"http://", false},
+		// 本机/内网字面量地址：服务端外发时等于 SSRF 跳板
+		{"http://169.254.169.254/latest/meta-data/", false},
+		{"http://127.0.0.1:8000/adminx/api/v1/", false},
+		{"http://[::1]/hook", false},
+		{"http://localhost/hook", false},
+		{"http://foo.localhost/hook", false},
+		{"http://10.0.0.5/hook", false},
+		{"http://172.16.3.4/hook", false},
+		{"http://192.168.1.10/hook", false},
+	}
+	for _, c := range cases {
+		if got := validWebhookURL(c.url); got != c.want {
+			t.Errorf("validWebhookURL(%q) = %v, want %v", c.url, got, c.want)
+		}
+	}
+}
+
 func TestNotificationService_WebhookCRUD(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewNotificationService(db, repository.NewNotificationRepo(db), slog.Default())

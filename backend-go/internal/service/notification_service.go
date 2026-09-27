@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -88,7 +89,7 @@ func (s *NotificationService) MarkRead(id, userID string) error {
 	if err != nil {
 		return apperr.ErrNotFound
 	}
-	if err := s.repo.MarkRead(id); err != nil {
+	if err := s.repo.MarkRead(id, userID); err != nil {
 		return apperr.ErrInternal
 	}
 	return nil
@@ -264,7 +265,11 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 	s.log.Info("webhook 已发送", "name", cfg.Name, "status", resp.StatusCode)
 }
 
-// validWebhookURL 校验 webhook URL（必须 http/https 且能解析出 host，scheme 大小写不敏感）。
+// validWebhookURL 校验 webhook URL（必须 http/https 且能解析出 host，scheme 大小写不敏感），
+// 并拒绝指向本机/内网的字面量地址：外发请求由服务端发起，允许内网地址等于给
+// "有通知菜单权限"的用户一个 SSRF 跳板（典型目标是云元数据 169.254.169.254）。
+// 注意：这里只查字面量 IP 与 localhost，不做 DNS 解析，
+// 因此"域名解析到内网"仍能绕过，生产建议配合出口网络隔离。
 func validWebhookURL(raw string) bool {
 	if raw == "" {
 		return false
@@ -274,7 +279,20 @@ func validWebhookURL(raw string) bool {
 		return false
 	}
 	scheme := strings.ToLower(u.Scheme)
-	return (scheme == "http" || scheme == "https") && u.Host != ""
+	if (scheme != "http" && scheme != "https") || u.Host == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+			return false
+		}
+	}
+	return true
 }
 
 // matchEvent 检查事件类型是否在 webhook 关注列表中。

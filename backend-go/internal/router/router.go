@@ -60,8 +60,13 @@ func New(deps *Deps) *gin.Engine {
 	}
 
 	r := gin.New()
+	// gin 默认信任全部代理（0.0.0.0/0），意味着 X-Forwarded-For 可任意伪造：
+	// 限流按 ClientIP 分桶（换一个假 IP 就是新窗口），登录日志的 IP 也不可信。
+	// 未开启 trust_proxy_headers 时显式声明"不信任任何代理"（ClientIP 取 RemoteAddr）。
 	if deps.Config.Security.TrustProxyHeaders {
 		_ = r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
+	} else {
+		_ = r.SetTrustedProxies(nil)
 	}
 
 	r.Use(gin.Recovery())
@@ -179,11 +184,10 @@ func New(deps *Deps) *gin.Engine {
 		rbac.DELETE("/accounts/roles/:id/", deps.RoleH.Delete)
 
 		// 菜单
+		// 写操作（POST/PUT/PATCH/DELETE）全部收在 admin 组：菜单的 allowed_paths 就是
+		// RBAC 规则本身，能改菜单就等于能给自己加任意接口权限（提权链）。
 		rbac.GET("/menu/", deps.MenuH.List)
 		rbac.GET("/menu/:id/", deps.MenuH.Get)
-		rbac.PUT("/menu/:id/", deps.MenuH.Update)
-		rbac.PATCH("/menu/:id/", deps.MenuH.Update)
-		rbac.DELETE("/menu/:id/", deps.MenuH.Delete)
 
 		// 配置中心
 		rbac.GET("/config/", deps.CfgH.List)
@@ -226,8 +230,11 @@ func New(deps *Deps) *gin.Engine {
 		rbac.GET("/cluster/components/:id/", deps.ClsH.GetComponent)
 
 		// 文件中心
+		// 上传/下载/删除都按 uploaded_by 做归属隔离（非超管只能动自己的文件），
+		// 权限由 system:file 菜单的 /api/v1/files/* 控制
 		rbac.POST("/files/upload/", deps.FileH.Upload)
 		rbac.GET("/files/records/", deps.FileH.Records)
+		rbac.GET("/files/records/:id/download/", deps.FileH.Download)
 		rbac.DELETE("/files/records/:id/", deps.FileH.Delete)
 
 		// 系统监控
@@ -257,6 +264,9 @@ func New(deps *Deps) *gin.Engine {
 		// 但以下端点必须收口：
 		admin.POST("/menu/", deps.MenuH.Create)
 		admin.POST("/menu/register/", deps.MenuH.Register)
+		admin.PUT("/menu/:id/", deps.MenuH.Update)
+		admin.PATCH("/menu/:id/", deps.MenuH.Update)
+		admin.DELETE("/menu/:id/", deps.MenuH.Delete)
 
 		admin.POST("/jobs/", deps.JobH.Create)
 		admin.PUT("/jobs/:id/", deps.JobH.Update)

@@ -53,9 +53,10 @@ type CreateInput struct {
 
 // Create 创建用户（含密码哈希 + 角色关联）。
 func (s *UserService) Create(in CreateInput) (*model.User, error) {
-	// 检查用户名唯一
-	if _, err := s.userRepo.FindByUsername(in.Username); err == nil {
-		return nil, apperr.New(409, "用户名已存在")
+	// 检查用户名唯一（含软删除账号：username 唯一索引不区分软删除，
+	// 只查未删除记录会在 INSERT 时撞索引、接口报 500）
+	if _, err := s.userRepo.FindAnyByUsername(in.Username); err == nil {
+		return nil, apperr.New(409, "用户名已存在（可能属于已删除账号，请先恢复或更换用户名）")
 	}
 
 	// 密码策略校验（管理员创建用户同样受策略约束）
@@ -147,6 +148,7 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 	}
 
 	// 密码更新（重置密码同样受策略约束）
+	passwordChanged := false
 	if in.Password != "" {
 		if err := validatePasswordPolicy(s.db, in.Password); err != nil {
 			return nil, err
@@ -156,9 +158,12 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 			return nil, apperr.ErrInternal
 		}
 		user.Password = hashed
+		passwordChanged = true
 	}
 
-	if err := s.userRepo.Update(user); err != nil {
+	// 重置密码即吊销该用户全部旧 token（与 policy 改密同标准）：
+	// 否则被盗 token 在管理员重置密码后仍可继续使用。
+	if err := s.userRepo.SaveAndMaybeRevoke(user, passwordChanged); err != nil {
 		return nil, apperr.ErrInternal
 	}
 
@@ -185,10 +190,18 @@ func (s *UserService) CheckRoleAssignment(roleRefs []string, targetUserID string
 		return nil
 	}
 	if len(roleRefs) > 0 {
-		ids, _ := repository.SplitRoleRefs(roleRefs)
+		// 只在"请求的角色里确实包含 super_admin"时拒绝。
+		// 注意不能只写 Where(name = super_admin)：那样统计的是库里叫 super_admin 的角色条数
+		// （恒为 1），任何非超管提交 roles 都会被 403，连普通角色也授不了。
+		ids, names := repository.SplitRoleRefs(roleRefs)
 		q := s.db.Model(&model.Role{}).Where("name = ?", superAdminRoleName)
-		if len(ids) > 0 {
-			q = q.Or("id IN ? AND name = ?", ids, superAdminRoleName)
+		switch {
+		case len(ids) > 0 && len(names) > 0:
+			q = q.Where("id IN ? OR name IN ?", ids, names)
+		case len(ids) > 0:
+			q = q.Where("id IN ?", ids)
+		default:
+			q = q.Where("name IN ?", names)
 		}
 		var n int64
 		if err := q.Count(&n).Error; err != nil {

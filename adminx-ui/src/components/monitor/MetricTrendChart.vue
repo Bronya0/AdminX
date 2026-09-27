@@ -45,10 +45,10 @@
           class="grid-line grid-line-vertical"
         />
         <polyline
-          v-for="item in series"
-          :key="item.name"
-          :points="buildPoints(item.values)"
-          :stroke="item.color"
+          v-for="segment in lineSegments"
+          :key="segment.key"
+          :points="segment.points"
+          :stroke="segment.color"
           class="trend-line"
         />
         <line
@@ -110,7 +110,8 @@ import { computed, ref } from 'vue'
 interface ChartSeries {
   name: string
   color: string
-  values: number[]
+  // null = 该时间点没有采样（后端空桶），画图时断开
+  values: (number | null)[]
 }
 
 const props = withDefaults(defineProps<{
@@ -139,14 +140,17 @@ const chartWidth = computed(() => svgWidth - padding.left - padding.right)
 const chartHeight = computed(() => props.height - padding.top - padding.bottom)
 const hoverIndex = ref<number | null>(null)
 
-const allValues = computed(() => props.series.flatMap(item => item.values).filter(value => Number.isFinite(value) && value >= 0))
+const allValues = computed(() => props.series
+  .flatMap(item => item.values)
+  .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0))
 const resolvedMaxValue = computed(() => {
   if (typeof props.maxValue === 'number' && props.maxValue > 0) return props.maxValue
   const max = Math.max(...allValues.value, 0)
   return max > 0 ? Math.ceil(max * 1.1) : 1
 })
 
-const hasData = computed(() => props.labels.length > 0 && props.series.some(item => item.values.length > 0))
+const hasData = computed(() => props.labels.length > 0
+  && props.series.some(item => item.values.some(value => typeof value === 'number')))
 
 const yTicks = computed(() => {
   const step = resolvedMaxValue.value / 4
@@ -172,11 +176,14 @@ const xTicks = computed(() => {
 
 const seriesStats = computed(() => {
   return props.series.map(item => {
-    const latestValue = item.values[item.values.length - 1] || 0
+    // 取最后一个"有值"的点（末尾可能是空桶）
+    const latest = [...item.values]
+      .reverse()
+      .find((value): value is number => typeof value === 'number' && Number.isFinite(value))
     return {
       name: item.name,
       color: item.color,
-      latest: formatValue(latestValue),
+      latest: typeof latest === 'number' ? formatValue(latest) : '—',
     }
   })
 })
@@ -188,11 +195,14 @@ const hoverDetails = computed(() => {
 
   return {
     label: props.labels[hoverIndex.value!],
-    items: props.series.map(item => ({
-      name: item.name,
-      color: item.color,
-      value: formatValue(item.values[hoverIndex.value!] || 0),
-    })),
+    items: props.series.map(item => {
+      const value = item.values[hoverIndex.value!]
+      return {
+        name: item.name,
+        color: item.color,
+        value: typeof value === 'number' && Number.isFinite(value) ? formatValue(value) : '—',
+      }
+    }),
   }
 })
 
@@ -216,9 +226,31 @@ const toY = (value: number) => {
   return padding.top + chartHeight.value * (1 - value / resolvedMaxValue.value)
 }
 
-const buildPoints = (values: number[]) => {
-  return values.map((value, index) => `${toX(index)},${toY(value || 0)}`).join(' ')
+// 每个系列拆成多段折线：空桶（null）处断开。
+// 后端已按固定步长补齐所有桶，索引间距就等于时间间距，
+// 所以断开后横轴刻度与真实时间一致（不再把空档压缩成 1 个间隔）。
+const buildSegments = (values: (number | null)[]): string[] => {
+  const segments: string[] = []
+  let current: string[] = []
+  values.forEach((value, index) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      if (current.length >= 2) segments.push(current.join(' '))
+      current = []
+      return
+    }
+    current.push(`${toX(index)},${toY(value)}`)
+  })
+  if (current.length >= 2) segments.push(current.join(' '))
+  return segments
 }
+
+const lineSegments = computed(() => props.series.flatMap(item =>
+  buildSegments(item.values).map((points, index) => ({
+    key: `${item.name}-${index}`,
+    color: item.color,
+    points,
+  }))
+))
 
 const formatValue = (value: number) => `${value.toFixed(props.precision)}${props.unit}`
 

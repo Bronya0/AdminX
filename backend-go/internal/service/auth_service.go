@@ -155,6 +155,14 @@ func (s *AuthService) Logout(ctx context.Context, userID, refreshToken string) e
 		}
 	}
 	if refreshToken != "" {
+		// 防重放踢人：已被消费/拉黑过的 refresh token 不得再次触发 last_logout，
+		// 否则任何拿到过该用户旧 refresh 的人都能反复作废其全部会话（DoS）。
+		if parsed != nil && parsed.GetTokenType() == jwt.TokenTypeRefresh {
+			if blacklisted, err := s.jwtMgr.IsBlacklisted(ctx, refreshToken); err == nil && blacklisted {
+				s.logger.WarnContext(ctx, "logout 忽略已失效的 refresh token（防重放踢人）")
+				return nil
+			}
+		}
 		// token 解析失败（无效/过期）也允许 logout 成功，只是不拉黑
 		if _, err := s.jwtMgr.ConsumeRefreshToken(ctx, refreshToken); err != nil {
 			s.logger.WarnContext(ctx, "拉黑 refresh token 失败", "error", err)
@@ -201,7 +209,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 
 	// 校验 last_logout：登出后所有旧 refresh token 一并失效（与 JWTAuth 同标准），
 	// 否则未随登出提交的其他 refresh token 可在登出后继续轮换新 token，绕过二次失效。
-	if user.LastLogout != nil && claims.IssuedAt != nil && claims.IssuedAt.Time.Before(*user.LastLogout) {
+	if jwt.RevokedByLogout(claims.IssuedAt, user.LastLogout) {
 		return nil, apperr.New(401, "refresh token 已失效，请重新登录")
 	}
 
@@ -269,12 +277,10 @@ func (s *AuthService) Introspect(ctx context.Context, tokenString string) (*Intr
 		return result, nil
 	}
 
-	// last_logout 二次失效检查
-	if user.LastLogout != nil && claims.IssuedAt != nil {
-		if claims.IssuedAt.Time.Before(*user.LastLogout) {
-			result.Valid = false
-			return result, nil
-		}
+	// last_logout 二次失效检查（与 JWTAuth/Refresh 共用同一判定）
+	if jwt.RevokedByLogout(claims.IssuedAt, user.LastLogout) {
+		result.Valid = false
+		return result, nil
 	}
 
 	// 组装角色名

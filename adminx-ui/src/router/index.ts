@@ -78,6 +78,12 @@ const router = createRouter({
               meta: { title: '定时任务', icon: 'ClockCircleOutlined', permission: 'webservice:schedulejob:list' },
             },
             {
+              path: 'files',
+              name: 'system-files',
+              component: () => import('@/views/system/FileCenter.vue'),
+              meta: { title: '文件中心', icon: 'FolderOutlined', permission: 'file_center:file:list' },
+            },
+            {
               path: 'notification',
               name: 'system-notification',
               component: () => import('@/views/notification/NotificationCenter.vue'),
@@ -146,13 +152,16 @@ router.beforeEach(async (to, from) => {
         userStore.fetchSiteInfo(),
       ])
     } catch (e) {
-      // 认证失败已由 request 层提示并登出（"登录已过期"），这里不再重复提示
+      // 只在真正的认证失败时清会话：网络抖动/后端重启/5xx 时清 token
+      // 会把用户无谓地踢下线（必须重新输密码）。
       const isAuthError = e instanceof Error && e.message === '认证失败'
-      if (!isAuthError) {
-        message.error('获取用户信息失败')
+      if (isAuthError) {
+        // request 层已提示"登录已过期"，这里不再重复提示
+        userStore.clearToken()
+        return '/login'
       }
-      userStore.clearToken()
-      return '/login'
+      message.error('获取用户信息失败，请稍后重试')
+      return true
     }
   }
 

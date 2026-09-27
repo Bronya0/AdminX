@@ -179,13 +179,15 @@ func (s *MonitorService) GetNetStat() *NetStat {
 }
 
 // HistoryPoint 历史趋势点（timestamp 为 Unix 秒，前端按秒渲染）。
+// 指标用指针：空桶（该时段没有采样）返回 null 而不是 0 ——
+// 把"没采样"画成 0 会伪造出一条掉到 0 的曲线。
 type HistoryPoint struct {
-	Timestamp     int64   `json:"timestamp"`
-	CPUPercent    float64 `json:"cpu_percent"`
-	MemoryPercent float64 `json:"memory_percent"`
-	DiskPercent   float64 `json:"disk_percent"`
-	DiskReadMBps  float64 `json:"disk_read_mbps"`
-	DiskWriteMBps float64 `json:"disk_write_mbps"`
+	Timestamp     int64    `json:"timestamp"`
+	CPUPercent    *float64 `json:"cpu_percent"`
+	MemoryPercent *float64 `json:"memory_percent"`
+	DiskPercent   *float64 `json:"disk_percent"`
+	DiskReadMBps  *float64 `json:"disk_read_mbps"`
+	DiskWriteMBps *float64 `json:"disk_write_mbps"`
 }
 
 // History 资源历史趋势（按区间聚合为等间隔桶，桶内取均值）。
@@ -244,22 +246,28 @@ func (s *MonitorService) History(rangeStr, intervalStr string) (*History, error)
 		b.count++
 	}
 
-	points := make([]HistoryPoint, 0, len(buckets))
-	for ts, b := range buckets {
-		if b.count == 0 {
-			continue
-		}
-		n := float64(b.count)
-		points = append(points, HistoryPoint{
-			Timestamp:     ts,
-			CPUPercent:    round2(b.cpu / n),
-			MemoryPercent: round2(b.mem / n),
-			DiskPercent:   round2(b.disk / n),
-			DiskReadMBps:  round2(b.read / n),
-			DiskWriteMBps: round2(b.write / n),
-		})
+	// 桶内取均值后按固定步长输出全部桶（含空桶）。
+	// 不能只输出"有数据的桶"：前端按索引等距画点，缺采样的时段会被压缩，
+	// 时间轴与真实时间就不再对应（20 分钟空档看起来和 1 个采样间隔一样宽）。
+	startKey := from.Unix() / stepSec * stepSec
+	endKey := now.Unix() / stepSec * stepSec
+	capacity := (endKey-startKey)/stepSec + 1
+	if capacity < 1 {
+		capacity = 1
 	}
-	sort.Slice(points, func(i, j int) bool { return points[i].Timestamp < points[j].Timestamp })
+	points := make([]HistoryPoint, 0, capacity)
+	for ts := startKey; ts <= endKey; ts += stepSec {
+		point := HistoryPoint{Timestamp: ts}
+		if b := buckets[ts]; b != nil && b.count > 0 {
+			n := float64(b.count)
+			point.CPUPercent = f64Ptr(round2(b.cpu / n))
+			point.MemoryPercent = f64Ptr(round2(b.mem / n))
+			point.DiskPercent = f64Ptr(round2(b.disk / n))
+			point.DiskReadMBps = f64Ptr(round2(b.read / n))
+			point.DiskWriteMBps = f64Ptr(round2(b.write / n))
+		}
+		points = append(points, point)
+	}
 
 	return &History{
 		Range:    rangeStr,
@@ -439,6 +447,9 @@ func counterRateMBps(prev, cur uint64, elapsedSec float64) float64 {
 	}
 	return round2(float64(cur-prev) / elapsedSec / 1024 / 1024)
 }
+
+// f64Ptr 取指针（历史点用 null 表示"该桶没有采样"）。
+func f64Ptr(v float64) *float64 { return &v }
 
 func round2(v float64) float64 {
 	return math.Round(v*100) / 100

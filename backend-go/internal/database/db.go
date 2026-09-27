@@ -130,6 +130,7 @@ func Models() []interface{} {
 		&model.JobLog{},
 		// notification
 		&model.Notification{},
+		&model.NotificationRead{},
 		&model.WebhookConfig{},
 		&model.WebhookLog{},
 		// cluster

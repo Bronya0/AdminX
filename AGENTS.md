@@ -44,9 +44,9 @@ pip install -r requirements.txt && python main.py   # :8001
 
 ### 认证与安全（详见 backend-go/AGENTS.md 安全基线）
 - JWT HS256：access 30m / refresh 7d；refresh 原子消费（SETNX）轮换防重放
-- `last_logout` 二次失效：JWTAuth、Introspect、**Refresh 三处都必须校验**
+- `last_logout` 二次失效：JWTAuth、Introspect、**Refresh、WS 四处都必须校验**（判定统一走 `jwt.RevokedByLogout`）
 - RBAC：superuser 全放行；普通用户按 user→role→menu→allowed_paths glob 匹配
-- 高危端点（jobs 写/run_once、set_upgrade、menu create/register、policy 写）在 router 的 admin 组：JWT+RBAC+RequireSuperuser
+- 高危端点（jobs 写/run_once、set_upgrade、**menu 写（create/update/delete/register）**、policy 写）在 router 的 admin 组：JWT+RBAC+RequireSuperuser（改菜单等于改 RBAC 规则本身）
 - **super_admin 角色的授予/撤销仅限超级管理员**（`UserService.CheckRoleAssignment`，Create/Update 前必须调用）；`AssignRoles` 接受角色 ID 或名称混传
 - 组件注册/心跳端点用 `security.component_secret`（X-Component-Token 头）保护
 - 密码：bcrypt cost 12；策略（长度/复杂度/历史）在创建、重置、改密时统一执行；改密更新 last_logout 吊销旧 token
@@ -62,7 +62,7 @@ pip install -r requirements.txt && python main.py   # :8001
 1. 启动时以平台管理员账号调 `/menu/register/` 注册菜单（按 code upsert）
 2. 组件生命周期：`/cluster/components/register|heartbeat|unregister`（需 X-Component-Token）
 3. 业务 API 用平台 `POST .../accounts/introspect/` 校验用户 JWT
-4. 心跳响应可携带 `upgrade` 指令（url+SHA-256 checksum 必填），业务服务自校验后自行升级
+4. 心跳响应携带 `upgrade` 指令（url+SHA-256 checksum 必填，缺任一项平台侧直接拒绝下发），业务服务自校验后自行升级；同一响应还带 `uninstall`（bool）与平铺的组件字段
 
 ## 测试
 - Go：`cd backend-go && go test ./...`（jwt/middleware/service/model/captcha/crypto/errors）
@@ -70,5 +70,7 @@ pip install -r requirements.txt && python main.py   # :8001
 - business-service：`python3 -m py_compile *.py routers/*.py`
 
 ## note
+- 定时任务触发配置（`trigger_type` + `trigger_config`）的格式由 `backend-go/internal/trigger` 唯一决定（后端写入前校验、调度器共用）；前端 `ScheduleJobList.vue` 按同一契约序列化
+- 文件中心有自己的菜单 `system:file`（`/api/v1/files/*`），下载走 `GET /files/records/:id/download/`（需 JWT，非超管只能下自己的）
 - 禁止修改虚拟环境源码
 - 根 README.md 为项目门面；本文件为 AI/开发者工作指南，两者冲突时以代码为准

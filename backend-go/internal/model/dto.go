@@ -84,6 +84,37 @@ type ServiceComponentDTO struct {
 	UpdatedAt        time.Time              `json:"updated_at"`
 }
 
+// UpgradeInstruction 升级指令（心跳响应 data.upgrade）。
+// url + checksum 必填：业务组件据此下载并做 SHA-256 校验后才执行升级。
+type UpgradeInstruction struct {
+	Version  string `json:"version"`
+	URL      string `json:"url"`
+	Checksum string `json:"checksum"`
+}
+
+// HeartbeatDTO 心跳响应：组件平铺字段（组件管理页展示用）+ 业务组件消费的指令字段。
+// 平铺字段不能单独当指令用（业务侧读的是 data.upgrade），两边必须一致。
+type HeartbeatDTO struct {
+	ServiceComponentDTO
+	Upgrade   *UpgradeInstruction `json:"upgrade"`
+	Uninstall bool                `json:"uninstall"`
+}
+
+// ToHeartbeatDTO 组装心跳响应。升级指令不完整（缺 version/url/checksum 任一）时不下发，
+// 避免业务侧拿到残缺指令后下载无校验的包。
+func ToHeartbeatDTO(s *ServiceComponent) HeartbeatDTO {
+	dto := HeartbeatDTO{ServiceComponentDTO: ToServiceComponentDTO(s)}
+	if s.UpgradeVersion != "" && s.UpgradeURL != "" && s.UpgradeChecksum != "" {
+		dto.Upgrade = &UpgradeInstruction{
+			Version:  s.UpgradeVersion,
+			URL:      s.UpgradeURL,
+			Checksum: s.UpgradeChecksum,
+		}
+	}
+	dto.Uninstall = s.UninstallPending
+	return dto
+}
+
 // ToServiceComponentDTO 转换 ServiceComponent 为 DTO（含计算 status）。
 func ToServiceComponentDTO(s *ServiceComponent) ServiceComponentDTO {
 	extra := map[string]interface{}{}

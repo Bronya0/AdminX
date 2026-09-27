@@ -1,9 +1,11 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
+	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,103 +20,122 @@ import (
 	"adminx/internal/model"
 )
 
+// maxUploadSize 单文件大小上限（按实际写入字节流式计数，不信任请求里声明的长度）。
+const maxUploadSize = 100 * 1024 * 1024
+
+// errTooLarge 超过大小上限的哨兵错误（用于区分 413 与 500）。
+var errTooLarge = errors.New("上传文件超过大小上限")
+
+// uploadRootPath 本地存储根目录（相对进程工作目录）。
+var uploadRootPath = filepath.Join("media", "uploads")
+
 // FileService 文件中心。
 type FileService struct {
-	db  *gorm.DB
-	cfg *config.Config
+	db     *gorm.DB
+	cfg    *config.Config
+	logger *slog.Logger
 }
 
-func NewFileService(db *gorm.DB, cfg *config.Config) *FileService {
-	return &FileService{db: db, cfg: cfg}
+func NewFileService(db *gorm.DB, cfg *config.Config, logger *slog.Logger) *FileService {
+	return &FileService{db: db, cfg: cfg, logger: logger}
 }
 
-// Upload 上传文件到本地存储。
-// 安全: 用 io.CopyN 流式限制实际写入字节数（multipart 头里的 Size 可被伪造，
-// 不能仅依赖 file.Size 做大小校验）。
-func (s *FileService) Upload(file *multipart.FileHeader, uploadedBy string) (*model.FileRecord, error) {
-	// 限制 100MB（基于实际写入的流式计数）
-	const maxSize = 100 * 1024 * 1024
-
-	// 扩展名白名单（防上传可执行/危险类型；svg 可内嵌脚本，排除防存储型 XSS）
-	ext := strings.ToLower(filepath.Ext(file.Filename))
+// Upload 上传文件到本地存储（流式）。
+//
+// 不用 handler 的 c.FormFile：它会把整个请求体先落到系统临时目录（gin 默认 32MB
+// 内存、超出部分写盘），于是"100MB 上限"挡不住先把 /tmp 写满。这里直接消费
+// multipart part，超限立刻中断，不在临时盘留副本。
+func (s *FileService) Upload(filename string, src io.Reader, uploadedBy string) (*model.FileRecord, error) {
+	originalName := sanitizeFilename(filename)
+	// 扩展名白名单（不含 svg：可内嵌脚本，防存储型 XSS）
+	ext := strings.ToLower(filepath.Ext(originalName))
 	if !allowedUploadExt(ext) {
 		return nil, apperr.New(400, "不支持的文件类型: "+ext)
 	}
 
-	// 生成唯一文件名 + 按日期分目录
-	uniqueName := uuid.New().String() + ext
+	uniqueName := uuid.NewString() + ext
 	subDir := time.Now().Format("2006/01/02")
-
-	baseDir := filepath.Join("media", "uploads")
-	saveDir := filepath.Join(baseDir, subDir)
-	if err := os.MkdirAll(saveDir, 0755); err != nil {
+	saveDir := filepath.Join(uploadRootPath, subDir)
+	if err := os.MkdirAll(saveDir, 0o755); err != nil {
 		return nil, apperr.Wrap(500, "创建目录失败", err)
 	}
 
 	storagePath := filepath.ToSlash(filepath.Join(subDir, uniqueName))
-	fullPath := filepath.Join(baseDir, storagePath)
-
-	// 写文件（流式计数限制，超限即失败并清理）
-	src, err := file.Open()
-	if err != nil {
-		return nil, apperr.Wrap(500, "打开上传文件失败", err)
-	}
-	defer src.Close()
+	fullPath := filepath.Join(saveDir, uniqueName)
 
 	dst, err := os.Create(fullPath)
 	if err != nil {
 		return nil, apperr.Wrap(500, "创建目标文件失败", err)
 	}
 
-	// io.CopyN → Sync → Close 三步都必须成功，任一失败都清理已写文件
-	var written int64
-	copyErr := func() error {
-		var err error
-		written, err = io.CopyN(dst, src, maxSize+1)
-		if err != nil && err != io.EOF {
-			return apperr.Wrap(500, "写入文件失败", err)
-		}
-		if written > maxSize {
-			return apperr.New(413, "文件过大，最大允许 100MB")
-		}
-		// 刷盘，防止系统崩溃时文件内容缺失
-		if err := dst.Sync(); err != nil {
-			return apperr.Wrap(500, "刷盘失败", err)
-		}
-		return nil
-	}()
-	// 关闭错误独立检查（NFS 等网络文件系统只在 Close 时上报写错误）
-	if err := dst.Close(); err != nil {
+	// 前 512 字节用于嗅探真实类型：客户端的 Content-Type 完全可伪造
+	head := make([]byte, 512)
+	n, headErr := io.ReadFull(src, head)
+	if headErr != nil && headErr != io.EOF && headErr != io.ErrUnexpectedEOF {
+		_ = dst.Close()
 		_ = os.Remove(fullPath)
-		return nil, apperr.Wrap(500, "关闭文件失败", err)
+		return nil, apperr.Wrap(500, "读取上传文件失败", headErr)
 	}
-	if copyErr != nil {
-		_ = os.Remove(fullPath)
-		return nil, copyErr
+	head = head[:n]
+	mimeType := "application/octet-stream"
+	if len(head) > 0 {
+		mimeType = http.DetectContentType(head)
 	}
 
-	// MIME 类型
-	contentType := file.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
+	written, copyErr := writeLimited(dst, head, src, maxUploadSize)
+	syncErr := dst.Sync()
+	closeErr := dst.Close()
+	if copyErr != nil || syncErr != nil || closeErr != nil {
+		_ = os.Remove(fullPath)
+		switch {
+		case errors.Is(copyErr, errTooLarge):
+			return nil, apperr.New(413, fmt.Sprintf("文件过大，最大允许 %dMB", maxUploadSize/1024/1024))
+		case copyErr != nil:
+			return nil, apperr.Wrap(500, "写入文件失败", copyErr)
+		case syncErr != nil:
+			return nil, apperr.Wrap(500, "刷盘失败", syncErr)
+		default:
+			return nil, apperr.Wrap(500, "关闭文件失败", closeErr)
+		}
 	}
 
-	url := fmt.Sprintf("/media/uploads/%s", storagePath)
+	id := uuid.NewString()
 	record := &model.FileRecord{
-		OriginalName:   file.Filename,
-		Size:           written, // 存实际写入字节数（multipart 头声明的 Size 可伪造）
-		MimeType:       contentType,
+		ID:             id,
+		OriginalName:   originalName,
+		Size:           written,
+		MimeType:       mimeType,
 		StorageBackend: "local",
 		StoragePath:    storagePath,
-		URL:            url,
-		UploadedBy:     uploadedBy,
+		// 下载走鉴权接口：既不再是"后端没有路由"的死链，
+		// 也避免把上传目录直接挂成匿名可读的静态目录。
+		URL:        "/api/v1/files/records/" + id + "/download/",
+		UploadedBy: uploadedBy,
 	}
 	if err := s.db.Create(record).Error; err != nil {
-		// 清理已写文件
 		_ = os.Remove(fullPath)
 		return nil, apperr.ErrInternal
 	}
 	return record, nil
+}
+
+// writeLimited 先写 head，再从 rest 流式拷贝，总写入量超过 max 时返回 errTooLarge。
+func writeLimited(dst io.Writer, head []byte, rest io.Reader, max int64) (int64, error) {
+	if int64(len(head)) > max {
+		return int64(len(head)), errTooLarge
+	}
+	if _, err := dst.Write(head); err != nil {
+		return int64(len(head)), err
+	}
+	written, err := io.CopyN(dst, rest, max-int64(len(head))+1)
+	total := int64(len(head)) + written
+	if total > max {
+		return total, errTooLarge
+	}
+	if err != nil && err != io.EOF {
+		return total, err
+	}
+	return total, nil
 }
 
 // allowedUploadExt 允许上传的扩展名白名单（不含 svg：可内嵌脚本，防存储型 XSS）。
@@ -128,11 +149,31 @@ func allowedUploadExt(ext string) bool {
 	return false
 }
 
-// List 文件记录列表。
-func (s *FileService) List(offset, limit int) ([]model.FileRecord, int64, error) {
+// sanitizeFilename 清理客户端文件名：去掉目录部分与控制字符并限长。
+// 它会被回显到列表和下载响应头里，控制字符/引号会破坏响应头。
+func sanitizeFilename(name string) string {
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = filepath.Base(name)
+	name = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, name)
+	if name == "" || name == "." || name == "/" {
+		return "unnamed"
+	}
+	return truncateStr(name, 255)
+}
+
+// List 文件记录列表。all=false（非超管）时只返回自己上传的记录，避免横向列举他人文件。
+func (s *FileService) List(offset, limit int, uploadedBy string, all bool) ([]model.FileRecord, int64, error) {
 	var items []model.FileRecord
 	var count int64
 	q := s.db.Model(&model.FileRecord{})
+	if !all {
+		q = q.Where("uploaded_by = ?", uploadedBy)
+	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err
 	}
@@ -140,14 +181,45 @@ func (s *FileService) List(offset, limit int) ([]model.FileRecord, int64, error)
 	return items, count, err
 }
 
-// Delete 删除文件记录 + 物理文件。
-func (s *FileService) Delete(id string) error {
+// FindForUser 取一条文件记录并校验归属。
+// all=false 时他人文件按"不存在"处理（不区分 403/404，避免暴露文件是否存在）。
+func (s *FileService) FindForUser(id, uploadedBy string, all bool) (*model.FileRecord, error) {
 	var record model.FileRecord
 	if err := s.db.First(&record, "id = ?", id).Error; err != nil {
-		return apperr.ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
-	// 删物理文件
-	fullPath := filepath.Join("media", "uploads", record.StoragePath)
-	_ = os.Remove(fullPath)
-	return s.db.Delete(&record).Error
+	if !all && record.UploadedBy != uploadedBy {
+		return nil, apperr.ErrNotFound
+	}
+	return &record, nil
+}
+
+// DownloadPath 返回下载用的物理路径与原始文件名（已校验归属）。
+func (s *FileService) DownloadPath(id, uploadedBy string, all bool) (string, string, error) {
+	record, err := s.FindForUser(id, uploadedBy, all)
+	if err != nil {
+		return "", "", err
+	}
+	fullPath := filepath.Join(uploadRootPath, filepath.FromSlash(record.StoragePath))
+	if _, err := os.Stat(fullPath); err != nil {
+		return "", "", apperr.ErrNotFound
+	}
+	return fullPath, record.OriginalName, nil
+}
+
+// Delete 删除文件记录 + 物理文件（已校验归属）。
+// 先删记录再删盘：反过来的话，"删盘成功、删行失败"会留下谁也清不掉的孤儿文件。
+func (s *FileService) Delete(id, uploadedBy string, all bool) error {
+	record, err := s.FindForUser(id, uploadedBy, all)
+	if err != nil {
+		return err
+	}
+	if err := s.db.Delete(&model.FileRecord{}, "id = ?", record.ID).Error; err != nil {
+		return apperr.ErrInternal
+	}
+	fullPath := filepath.Join(uploadRootPath, filepath.FromSlash(record.StoragePath))
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		s.logger.Warn("删除物理文件失败（记录已删除，需人工清理）", "path", fullPath, "error", err)
+	}
+	return nil
 }

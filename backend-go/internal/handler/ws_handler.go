@@ -8,8 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	gorillaws "github.com/gorilla/websocket"
+	"gorm.io/gorm"
 
 	"adminx/internal/jwt"
+	"adminx/internal/model"
 	wsport "adminx/internal/websocket"
 	"adminx/pkg/response"
 )
@@ -18,6 +20,7 @@ import (
 type WSHandler struct {
 	hub            *wsport.Hub
 	jwtMgr         *jwt.Manager
+	db             *gorm.DB
 	allowedOrigins []string // 额外允许的 Origin；空 = 仅同源
 	logger         *slog.Logger
 }
@@ -47,8 +50,24 @@ func newUpgrader(allowedOrigins []string) gorillaws.Upgrader {
 	}
 }
 
-func NewWSHandler(hub *wsport.Hub, jwtMgr *jwt.Manager, allowedOrigins []string, logger *slog.Logger) *WSHandler {
-	return &WSHandler{hub: hub, jwtMgr: jwtMgr, allowedOrigins: allowedOrigins, logger: logger}
+func NewWSHandler(hub *wsport.Hub, jwtMgr *jwt.Manager, db *gorm.DB, allowedOrigins []string, logger *slog.Logger) *WSHandler {
+	return &WSHandler{hub: hub, jwtMgr: jwtMgr, db: db, allowedOrigins: allowedOrigins, logger: logger}
+}
+
+// authorize 校验 token 归属用户仍存在、未禁用，且 token 在 last_logout 之后签发。
+// WS 不走 JWTAuth 中间件，缺了这一步则登出/禁用后旧 access token 仍能连上实时日志流。
+func (h *WSHandler) authorize(claims *jwt.Claims) bool {
+	if h.db == nil {
+		return true // 未注入 DB（无库模式）时维持原行为
+	}
+	var user model.User
+	if err := h.db.First(&user, "id = ? AND deleted_at IS NULL", claims.UserID).Error; err != nil {
+		return false
+	}
+	if !user.IsActive {
+		return false
+	}
+	return !jwt.RevokedByLogout(claims.IssuedAt, user.LastLogout)
 }
 
 // Log GET /ws/log/ — 实时日志 WebSocket。
@@ -73,6 +92,11 @@ func (h *WSHandler) Log(c *gin.Context) {
 	// 仅允许 access token
 	if claims.GetTokenType() != jwt.TokenTypeAccess {
 		response.Fail(c, 401, "令牌类型错误")
+		return
+	}
+	// 与 REST 同标准校验用户状态（存在/启用/last_logout）
+	if !h.authorize(claims) {
+		response.Fail(c, 401, "认证令牌已失效，请重新登录")
 		return
 	}
 

@@ -37,6 +37,17 @@ func (r *UserRepo) FindByID(id string) (*model.User, error) {
 	return &u, nil
 }
 
+// FindAnyByUsername 按用户名查询（含软删除记录）。
+// 写入场景用：只看未删除记录会把"已删除但用户名仍被占"的账号当成不存在，
+// 进而在 INSERT 时撞上唯一索引（username 唯一索引不区分软删除）报 500。
+func (r *UserRepo) FindAnyByUsername(username string) (*model.User, error) {
+	var u model.User
+	if err := r.db.Unscoped().Where("username = ?", username).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 // List 分页查询用户。
 func (r *UserRepo) List(offset, limit int, search, role string, isActive *bool) ([]model.User, int64, error) {
 	var users []model.User
@@ -45,7 +56,9 @@ func (r *UserRepo) List(offset, limit int, search, role string, isActive *bool) 
 	q := r.db.Model(&model.User{}).Where("deleted_at IS NULL")
 	if search != "" {
 		like := "%" + EscapeLike(search) + "%"
-		q = q.Where("username LIKE ? OR email LIKE ? OR phone LIKE ? OR desc LIKE ?", like, like, like, like)
+		// "desc" 必须加引号：desc 是 PostgreSQL 保留字，裸写会让 PG 报 42601
+		// （sqlite 容忍，所以本地开发看不出来）
+		q = q.Where("username LIKE ? OR email LIKE ? OR phone LIKE ? OR \"desc\" LIKE ?", like, like, like, like)
 	}
 	if isActive != nil {
 		q = q.Where("is_active = ?", *isActive)
@@ -71,6 +84,22 @@ func (r *UserRepo) Create(u *model.User) error {
 // Update 更新用户（全字段）。
 func (r *UserRepo) Update(u *model.User) error {
 	return r.db.Save(u).Error
+}
+
+// SaveAndMaybeRevoke 保存用户；revokeTokens 为真时在同一事务内更新 last_logout。
+// 管理员重置密码必须吊销该用户既有 token，且必须与密码写入同事务，避免只改一半
+// （先写密码再单独吊销：中间失败会留下"密码已换、旧 token 仍可用"的状态）。
+func (r *UserRepo) SaveAndMaybeRevoke(u *model.User, revokeTokens bool) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(u).Error; err != nil {
+			return err
+		}
+		if !revokeTokens {
+			return nil
+		}
+		return tx.Model(&model.User{}).Where("id = ?", u.ID).
+			Update("last_logout", time.Now()).Error
+	})
 }
 
 // UpdatePassword 仅更新密码字段。

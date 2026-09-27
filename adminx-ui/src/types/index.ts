@@ -99,6 +99,19 @@ export interface BusinessCommand {
   updated_at: string
 }
 
+export interface FileRecord {
+  id: string
+  original_name: string
+  size: number
+  mime_type: string
+  storage_backend: string
+  storage_path: string
+  // 鉴权下载地址（需带 JWT 访问，不能直接当 <img src>/<a href> 用）
+  url: string
+  uploaded_by: string
+  created_at: string
+}
+
 // 菜单相关
 export interface Menu {
   id: number
@@ -116,7 +129,7 @@ export interface Menu {
   numchild: number
   parent?: number | null
   children?: Menu[]
-  allowed_paths: string
+  allowed_paths: string[]
   created_at: string
   updated_at: string
 }
@@ -205,11 +218,12 @@ export interface SystemResources {
 
 export interface MonitorHistoryPoint {
   timestamp: number
-  cpu_percent: number
-  memory_percent: number
-  disk_percent: number
-  disk_read_mbps: number
-  disk_write_mbps: number
+  // 空桶（该时段没有采样）为 null：图上应断开而不是画成 0
+  cpu_percent: number | null
+  memory_percent: number | null
+  disk_percent: number | null
+  disk_read_mbps: number | null
+  disk_write_mbps: number | null
 }
 
 export interface SystemResourceHistory {

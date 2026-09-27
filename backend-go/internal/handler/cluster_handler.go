@@ -157,6 +157,14 @@ func (h *ClusterHandler) Register(c *gin.Context) {
 }
 
 // Heartbeat POST /cluster/components/heartbeat/ (AllowAny)
+//
+// 响应契约（业务组件据此触发升级/卸载，见根 AGENTS.md「业务服务对接」）：
+//
+//	data.upgrade   = {"version","url","checksum"} | null
+//	data.uninstall = bool
+//
+// 平铺的组件字段继续保留，供组件管理页展示；但指令必须以 upgrade/uninstall 下发，
+// 否则业务侧读不到（升级/卸载指令会静默失效）。
 func (h *ClusterHandler) Heartbeat(c *gin.Context) {
 	var req struct {
 		AppLabel string `json:"app_label" binding:"required"`
@@ -170,15 +178,18 @@ func (h *ClusterHandler) Heartbeat(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	response.OK(c, model.ToServiceComponentDTO(result))
+	response.OK(c, model.ToHeartbeatDTO(result))
 }
 
 // SetUpgrade POST /cluster/components/:id/set_upgrade/
+// 请求字段与组件 DTO 同名（upgrade_version / upgrade_url / upgrade_checksum）：
+// 组件管理页用 GET 返回的同名字段回填表单再提交，两端字段名必须一致，
+// 否则前端发来的指令在服务端全是零值（静默空操作，接口还返回成功）。
 func (h *ClusterHandler) SetUpgrade(c *gin.Context) {
 	var req struct {
-		Version  string `json:"version"`
-		URL      string `json:"url"`
-		Checksum string `json:"checksum"`
+		Version  string `json:"upgrade_version"`
+		URL      string `json:"upgrade_url"`
+		Checksum string `json:"upgrade_checksum"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BindingError(c, err)

@@ -90,6 +90,17 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	// 目标用户是超管时，仅超级管理员可改动（含禁用/改密/改角色）：
+	// 否则"用户管理"权限持有者重置超管密码即可完成账号接管。
+	target, err := h.svc.GetByID(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	if target.IsSuperuser && !isSuperuser(c) {
+		response.Fail(c, 403, "仅超级管理员可修改超管账号")
+		return
+	}
 	// 授予/撤销超管仅限超级管理员，防止普通管理员提权
 	if in.IsSuperuser != nil && *in.IsSuperuser && !isSuperuser(c) {
 		response.Fail(c, 403, "仅超级管理员可授予超管权限")
@@ -123,6 +134,11 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	// 删除前快照（审计留痕）
 	oldUser, _ := h.svc.GetByID(id)
+	// 删除超管仅限超级管理员（否则"用户管理"权限持有者可直接删掉超管账号）
+	if oldUser != nil && oldUser.IsSuperuser && !isSuperuser(c) {
+		response.Fail(c, 403, "仅超级管理员可删除超管账号")
+		return
+	}
 	repr := id
 	if oldUser != nil {
 		repr = oldUser.Username

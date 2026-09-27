@@ -16,6 +16,7 @@ import (
 
 	"adminx/internal/model"
 	"adminx/internal/repository"
+	"adminx/internal/trigger"
 )
 
 var _ = time.Second // 保留 time 引用（executeShell 超时用到）
@@ -92,6 +93,11 @@ func (s *JobService) Create(in JobCreateInput) (*model.ScheduleJob, error) {
 	if tt == "" {
 		tt = "interval"
 	}
+	// 写入前校验触发配置（解析实现与调度器共用 trigger 包）：
+	// 否则接口返回 201，而调度器侧解析失败只打一行日志，任务永远不注册。
+	if _, err := trigger.Parse(tt, in.TriggerConfig); err != nil {
+		return nil, apperr.New(400, err.Error())
+	}
 	isActive := true
 	if in.IsActive != nil {
 		isActive = *in.IsActive
@@ -118,17 +124,20 @@ func (s *JobService) Create(in JobCreateInput) (*model.ScheduleJob, error) {
 	return job, nil
 }
 
-// UpdateInput 更新任务入参。
+// UpdateInput 更新任务入参（PATCH 语义：nil = 请求未携带该字段，保持原值）。
+// 指针不能改回值类型：前端“启用/禁用”开关只提交 is_active，
+// 零值语义会把 handler/command/trigger_config/args 一并清空，
+// 任务就地停跑且配置不可恢复。
 type JobUpdateInput struct {
-	Name          string `json:"name"`
-	CommandType   string `json:"command_type"`
-	Handler       string `json:"handler"`
-	Command       string `json:"command"`
-	TriggerType   string `json:"trigger_type"`
-	TriggerConfig string `json:"trigger_config"`
-	Args          string `json:"args"`
-	Kwargs        string `json:"kwargs"`
-	IsActive      *bool  `json:"is_active"`
+	Name          *string `json:"name"`
+	CommandType   *string `json:"command_type"`
+	Handler       *string `json:"handler"`
+	Command       *string `json:"command"`
+	TriggerType   *string `json:"trigger_type"`
+	TriggerConfig *string `json:"trigger_config"`
+	Args          *string `json:"args"`
+	Kwargs        *string `json:"kwargs"`
+	IsActive      *bool   `json:"is_active"`
 }
 
 func (s *JobService) Update(id string, in JobUpdateInput) (*model.ScheduleJob, error) {
@@ -139,24 +148,36 @@ func (s *JobService) Update(id string, in JobUpdateInput) (*model.ScheduleJob, e
 		}
 		return nil, apperr.ErrInternal
 	}
-	if in.Name != "" {
-		job.Name = in.Name
+	if in.Name != nil {
+		job.Name = *in.Name
 	}
-	if in.CommandType != "" {
-		job.CommandType = in.CommandType
+	if in.CommandType != nil {
+		job.CommandType = *in.CommandType
 	}
-	job.Handler = in.Handler
-	job.Command = in.Command
-	if in.TriggerType != "" {
-		job.TriggerType = in.TriggerType
+	if in.Handler != nil {
+		job.Handler = *in.Handler
 	}
-	job.TriggerConfig = in.TriggerConfig
-	job.Args = in.Args
-	if in.Kwargs != "" {
-		job.Kwargs = in.Kwargs
+	if in.Command != nil {
+		job.Command = *in.Command
+	}
+	if in.TriggerType != nil {
+		job.TriggerType = *in.TriggerType
+	}
+	if in.TriggerConfig != nil {
+		job.TriggerConfig = *in.TriggerConfig
+	}
+	if in.Args != nil {
+		job.Args = *in.Args
+	}
+	if in.Kwargs != nil {
+		job.Kwargs = *in.Kwargs
 	}
 	if in.IsActive != nil {
 		job.IsActive = *in.IsActive
+	}
+	// 合并后的触发配置必须可用（PATCH 可能只改了 trigger_type/trigger_config）
+	if _, err := trigger.Parse(job.TriggerType, job.TriggerConfig); err != nil {
+		return nil, apperr.New(400, err.Error())
 	}
 	if err := s.repo.Update(job); err != nil {
 		return nil, apperr.ErrInternal
@@ -173,7 +194,8 @@ func (s *JobService) Delete(id string) error {
 	return nil
 }
 
-// RunOnce 手动触发一次任务执行（不受调度器控制）。
+// RunOnce 手动触发一次任务执行（不受调度器控制，同样写 job_logs）。
+// 手动执行必须留痕：否则管理员跑过的副作用在日志里查不到。
 func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 	job, err := s.repo.FindByID(id)
 	if err != nil {
@@ -182,9 +204,7 @@ func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 		}
 		return "", apperr.ErrInternal
 	}
-
-	result, errMsg := s.executeJob(ctx, job)
-	return result, errMsg
+	return s.executeWithLog(ctx, job)
 }
 
 // ExecuteJob 调度器调用的执行入口（带 JobLog 记录）。
@@ -194,7 +214,32 @@ func (s *JobService) ExecuteJob(ctx context.Context, jobID string) {
 		s.log.Warn("执行任务时找不到 job", "id", jobID, "error", err)
 		return
 	}
+	if _, err := s.executeWithLog(ctx, job); err != nil {
+		// 详情已写入 job_logs，这里补一条进程日志
+		s.log.Error("任务执行失败", "job", job.Name, "error", err)
+	}
+}
 
+// RecordSkippedLock 记录"因未取得分布式锁而跳过本次执行"。
+// gocron 拿不到锁时直接 Skip（不调用任务函数、不写任何日志），
+// 必须由 AfterLockError 监听器补一条 failed 记录，否则漏跑完全无痕。
+func (s *JobService) RecordSkippedLock(jobID string, cause error) {
+	now := time.Now()
+	entry := &model.JobLog{
+		JobID:      jobID,
+		Status:     "failed",
+		Result:     truncateStr("未取得分布式锁，本次执行被跳过: "+cause.Error(), 500),
+		StartedAt:  &now,
+		FinishedAt: &now,
+	}
+	if err := s.repo.CreateLog(entry); err != nil {
+		s.log.Warn("写跳过执行日志失败", "job_id", jobID, "error", err)
+	}
+}
+
+// executeWithLog 执行任务并写 job_logs（running → success/failed）。
+// 调度器执行与手动执行共用同一条路径。
+func (s *JobService) executeWithLog(ctx context.Context, job *model.ScheduleJob) (string, error) {
 	now := time.Now()
 	logEntry := &model.JobLog{
 		JobID:     job.ID,
@@ -212,19 +257,22 @@ func (s *JobService) ExecuteJob(ctx context.Context, jobID string) {
 	if execErr != nil {
 		logEntry.Status = "failed"
 		logEntry.Result = truncateStr(execErr.Error(), 500)
-		s.log.Error("任务执行失败", "job", job.Name, "error", execErr)
 	} else {
 		logEntry.Status = "success"
 		logEntry.Result = truncateStr(result, 500)
 	}
 	_ = s.repo.UpdateLog(logEntry)
+	return result, execErr
 }
 
 // executeJob 执行单个任务（python handler 反射 / shell 命令）。
-func (s *JobService) executeJob(ctx context.Context, job *model.ScheduleJob) (string, error) {
+// panic 必须转成 error 返回：recover 后若直接返回零值，调用方会把“执行崩溃”记成 success。
+func (s *JobService) executeJob(ctx context.Context, job *model.ScheduleJob) (result string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.log.Error("任务 panic", "job", job.Name, "panic", r, "stack", string(debug.Stack()))
+			result = ""
+			err = fmt.Errorf("任务执行 panic: %v", r)
 		}
 	}()
 

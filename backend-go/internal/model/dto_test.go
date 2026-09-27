@@ -5,6 +5,38 @@ import (
 	"time"
 )
 
+// 心跳响应必须把升级/卸载指令放在 upgrade/uninstall 字段里。
+// 业务组件读的是 data.upgrade（平铺的 upgrade_version/upgrade_url 它读不到），
+// 只返回平铺字段等于指令永远不生效。
+func TestToHeartbeatDTO(t *testing.T) {
+	checksum := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	comp := &ServiceComponent{
+		AppLabel:         "demo",
+		Name:             "演示业务",
+		UpgradeVersion:   "1.1.0",
+		UpgradeURL:       "http://example.com/pkg.zip",
+		UpgradeChecksum:  checksum,
+		UninstallPending: true,
+	}
+
+	dto := ToHeartbeatDTO(comp)
+	if dto.Upgrade == nil {
+		t.Fatal("完整升级指令必须下发到 data.upgrade")
+	}
+	if dto.Upgrade.Version != "1.1.0" || dto.Upgrade.URL != "http://example.com/pkg.zip" || dto.Upgrade.Checksum != checksum {
+		t.Errorf("升级指令字段不完整: %+v", dto.Upgrade)
+	}
+	if !dto.Uninstall {
+		t.Error("卸载标记必须下发到 data.uninstall")
+	}
+
+	// 指令不完整时不下发，避免业务侧拿到无校验的包
+	partial := ToHeartbeatDTO(&ServiceComponent{AppLabel: "demo", UpgradeVersion: "1.1.0"})
+	if partial.Upgrade != nil {
+		t.Error("缺 url/checksum 的升级指令不应下发")
+	}
+}
+
 func TestToUserDTO(t *testing.T) {
 	now := time.Now()
 	user := &User{

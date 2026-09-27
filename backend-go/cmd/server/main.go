@@ -102,7 +102,7 @@ func main() {
 	jobSvc := service.NewJobService(db, jobRepo, log)
 	notifSvc := service.NewNotificationService(db, notifRepo, log)
 	clusterSvc := service.NewClusterService(db, clusterRepo)
-	fileSvc := service.NewFileService(db, cfg)
+	fileSvc := service.NewFileService(db, cfg, log)
 	monitorRepo := repository.NewMonitorRepo(db)
 	monitorSvc := service.NewMonitorService(monitorRepo, log)
 	systemComponentSvc := service.NewSystemComponentService(db, rdb, jobRepo)
@@ -145,11 +145,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go hub.Run(ctx)
-	wsH := handler.NewWSHandler(hub, jwtMgr, cfg.Security.WSAllowedOrigins, log)
+	wsH := handler.NewWSHandler(hub, jwtMgr, db, cfg.Security.WSAllowedOrigins, log)
 
 	// 11. 调度器（可选，--scheduler 启用）
 	if *enableScheduler || cfg.Scheduler.Enabled {
-		schedMgr, err := scheduler.New(jobSvc, jobRepo, rdb, log)
+		schedMgr, err := scheduler.New(jobSvc, jobRepo, rdb, cfg.Scheduler.LockTTLSec, log)
 		if err != nil {
 			log.Error("调度器初始化失败", "error", err)
 		} else {
@@ -157,7 +157,12 @@ func main() {
 				log.Error("调度器启动失败", "error", err)
 			}
 			schedMgrPtr.Store(schedMgr)
-			defer func() { _ = schedMgr.Stop() }()
+			// 关闭错误不能丢：任务收尾超时 / 在跑任务未取消都是需要看见的运维信号
+			defer func() {
+				if err := schedMgr.Stop(); err != nil {
+					log.Warn("调度器停止时存在未正常收尾的任务", "error", err)
+				}
+			}()
 			log.Info("调度器已启用（内置模式）")
 		}
 	}

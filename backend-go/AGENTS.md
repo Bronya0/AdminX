@@ -80,19 +80,34 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - superuser 全放行
 - 普通用户：查 user→role→menu→allowed_paths，glob 匹配（`path.Match`）
 - 规则格式：`METHOD:/api/path/*` 或 `/api/path`
+- **菜单 `path` 为空时其 `allowed_paths` 不参与授权**（查权限前先按 `path != ''` 收菜单集合）：想用菜单控制接口权限就必须给它一个路径
 - 菜单可见性同一条“全放行”约定：`MenuService.MenusByUser(uid, isSuperuser)` 对超管返回全部启用菜单（`/accounts/users/me/`、`/menu/user_tree/` 均传入 `isSuperuser(c)`）
 
 ### 调度器
 
 - gocron v2 + `WithDistributedLocker(gocron-redis-lock)`
-- **任务级锁**（非 leader 选举）：多实例并行跑不同任务
+- **任务级锁**（非 leader 选举）：多实例并行跑不同任务；锁 key = **数据库任务 ID**（`gocron.WithName(job.ID)` —— 用任务名会让同名任务共用一把锁，一次执行被静默吞掉）
+- 锁 TTL 取 `scheduler.lock_ttl_sec`（<10s 或未配则 30s）+ `WithAutoExtendDuration` 自动续期；拿不到锁时 gocron 是**静默 Skip**，靠 `AfterLockError` 监听补一条 failed job_logs
+- `Reload` **全程持锁**且**先读库再动现有任务**：否则并发重载会留下清不掉的孤儿 job（任务双跑），一次 DB 抖动会清空全部任务
+- reload_pending 消费后重载失败必须**放回标记**，否则全量任务停摆且不再重试
+- `Stop` 先取消任务 context（`jobCtx`）再 `ShutdownWithContext`：否则 SIGTERM 后 shell 子进程变孤儿继续跑
 - handler 注册表：`service.RegisterHandler("jobs.TaskName", func)`（在 init-data 或启动时注册）
+- 独立调度器进程 = 同一二进制加 `--scheduler`（需另一份配置换端口，否则与 web 进程抢 :8000）；`scripts/build.sh` 未单独产出 scheduler 二进制
 - `m.jobIDs` 有 mutex 保护
+- **触发配置（trigger_config）的解析/校验只有 `internal/trigger` 一处**：service 写入前校验（非法直接 400）、scheduler 用它建 gocron 定义。契约：cron `{"expr":"*/5 * * * *"}`（6 段带秒）、interval `{"minutes":5}`、date `{"datetime":"2006-01-02 15:04:05"}`；同时兼容裸 cron 串与 `run_date` 历史数据。任何新增的解析点都必须接它 —— 各写一份的下场是接口 201、任务永不注册
+
+### 文件中心
+
+- 上传**流式**消费 multipart part（`c.Request.MultipartReader()`）：`c.FormFile` 会把整份 body 先落到系统临时目录，100MB 上限挡不住写满 /tmp
+- 落盘名 = UUID + 扩展名白名单（不含 svg），原始文件名只入库（已去目录/控制字符）
+- **归属隔离**：非超管只能列举/下载/删除 `uploaded_by = 自己` 的记录；取文件统一走鉴权端点 `GET /files/records/:id/download/`，不要挂匿名静态目录
+- 权限归 `system:file` 菜单（`/api/v1/files/*`），不要寄生在其它菜单上
+- 删除先删记录再删盘（反之会留下谁也清不掉的孤儿文件）；`mime_type` 用内容嗅探而非客户端声明的 Content-Type
 
 ### 监控与历史采样
 
 - `monitor_samples` 采样**不依赖调度器**：每次 `/monitor/resources/`（含仪表盘）按 1 分钟最小间隔补一条，历史查询时顺手清理 7 天前的数据；采样失败只记 warn，不影响实时接口
-- `/monitor/resources/history/` 在 Go 侧分桶聚合（不写方言时间函数），range=1h/6h/24h/7d、interval=1m/5m/15m/1h（缺省按窗口推导）
+- `/monitor/resources/history/` 在 Go 侧分桶聚合（不写方言时间函数），range=1h/6h/24h/7d、interval=1m/5m/15m/1h（缺省按窗口推导）；**空桶必须补齐并返回 null**（前端按索引等距画图，缺桶会让时间轴压缩失真），前端在 null 处断开折线
 - `SetReloadPending` **不得写 `last_heartbeat`**：心跳只能由调度器进程自己写，否则 web 进程一调 reload，组件状态页会把未启动的调度器误报为在线
 
 ### WebSocket
@@ -117,12 +132,14 @@ response.Paginated(c, count, next, prev, results)  // 分页
 
 ## 安全基线（改动时必须维持）
 
-- **Refresh 必须校验 last_logout**（与 JWTAuth 同标准），否则登出二次失效被绕过
-- **jobs 写操作 / run_once / set_upgrade / menu create+register / policy 写** 挂在 router 的 admin 组（JWT+RBAC+RequireSuperuser），新增高危端点一律进该组
+- **Refresh 必须校验 last_logout**（与 JWTAuth 同标准），否则登出二次失效被绕过；WS 日志流也走同一判定（`jwt.RevokedByLogout`）
+- **jobs 写操作 / run_once / set_upgrade / menu 写（create+update+delete+register） / policy 写** 挂在 router 的 admin 组（JWT+RBAC+RequireSuperuser），新增高危端点一律进该组
 - **组件端点**（/cluster/components/*）依赖 `security.component_secret`（X-Component-Token，恒时比较）；生产必须配置
 - **登录**：`security.login_captcha_required` 开启后强制验证码（一次性、Redis 存储）；登录锁定常开（不随 mode）
 - **service 层禁止 map 直通 GORM Updates**（mass assignment），一律白名单 struct
-- **改密成功会更新 last_logout 吊销全部旧 token**；创建/重置密码走 `validatePasswordPolicy`
+- **改密成功会更新 last_logout 吊销全部旧 token**；创建/重置密码走 `validatePasswordPolicy`；**管理员重置用户密码同样吊销该用户旧 token**（`UserRepo.SaveAndMaybeRevoke`，与密码写入同事务）
+- **通知已读按用户隔离**：真值在 `notification_reads`，`notifications.is_read` 只是按当前用户计算出的响应字段，不要当列读写
+- **超管账号不可被普通管理员改动/删除**（改密、禁用、删除一律 403）
 - **LIKE 搜索词必须过 `repository.EscapeLike`**
 
 ## 已知技术债

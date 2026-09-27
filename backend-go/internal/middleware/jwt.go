@@ -99,12 +99,10 @@ func loadAuthUser(c *gin.Context, db *gorm.DB, claims *jwt.Claims) (*model.User,
 		return nil, false
 	}
 
-	// 校验 last_logout
-	if user.LastLogout != nil && claims.IssuedAt != nil {
-		if claims.IssuedAt.Time.Before(*user.LastLogout) {
-			response.Fail(c, 401, "认证令牌已失效，请重新登录")
-			return nil, false
-		}
+	// 校验 last_logout（与 Refresh/Introspect/WS 共用同一判定）
+	if jwt.RevokedByLogout(claims.IssuedAt, user.LastLogout) {
+		response.Fail(c, 401, "认证令牌已失效，请重新登录")
+		return nil, false
 	}
 
 	// 写入 context，供后续 handler/middleware 使用

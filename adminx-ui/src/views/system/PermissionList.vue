@@ -142,15 +142,22 @@ const formState = reactive({ name: '', code: '', icon: '', path: '', allowed_pat
 const formRules = { name: [{ required: true, message: '请输入菜单名称' }], code: [{ required: true, message: '请输入菜单编码' }] }
 const resetForm = () => { Object.assign(formState, { name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent: undefined }) }
 
-function jsonPathsToLines(val: string): string {
-  try {
-    const arr = JSON.parse(val)
-    return Array.isArray(arr) ? arr.join('\n') : val
-  } catch { return val }
+// allowed_paths 的线上格式是字符串数组（对应后端 jsonb 列 + RBAC 的 []string），
+// 不是 JSON 字符串：发 JSON 字符串会被后端拒绑
+// （cannot unmarshal string into Go struct field ... of type []string）。
+function pathsToLines(val: unknown): string {
+  if (Array.isArray(val)) return val.join('\n')
+  // 容忍历史数据/旧接口里的 JSON 字符串形态
+  if (typeof val === 'string' && val) {
+    try {
+      const arr = JSON.parse(val)
+      return Array.isArray(arr) ? arr.join('\n') : val
+    } catch { return val }
+  }
+  return ''
 }
-function linesToJsonPaths(val: string): string {
-  const arr = val.split('\n').map(s => s.trim()).filter(Boolean)
-  return JSON.stringify(arr)
+function linesToPaths(val: string): string[] {
+  return val.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
 const findNode = (nodes: any[], key: string): any | null => {
@@ -167,7 +174,7 @@ const handleEdit = (key: string) => {
   const node = findNode(filteredMenuTreeData.value, key)
   if (!node) return
   isEdit.value = true; modalTitle.value = '编辑菜单'; currentId.value = key
-  Object.assign(formState, { name: node.title, code: node.code, icon: node.icon || '', path: node.path || '', allowed_paths: jsonPathsToLines(node.allowed_paths || '[]'), is_active: node.is_active ?? true, sort_order: node.sort_order ?? 0, parent: undefined })
+  Object.assign(formState, { name: node.title, code: node.code, icon: node.icon || '', path: node.path || '', allowed_paths: pathsToLines(node.allowed_paths), is_active: node.is_active ?? true, sort_order: node.sort_order ?? 0, parent: undefined })
   modalVisible.value = true
 }
 const handleDelete = async (key: string) => { try { await menuApi.deleteMenu(key); message.success('删除成功'); loadData() } catch { /* interceptor handles error */ } }
@@ -175,7 +182,7 @@ const handleModalOk = async () => {
   try {
     await formRef.value.validate()
     modalLoading.value = true
-    const data = { ...formState, allowed_paths: linesToJsonPaths(formState.allowed_paths) }
+    const data = { ...formState, allowed_paths: linesToPaths(formState.allowed_paths) }
     if (!data.parent) delete data.parent
     if (isEdit.value) {
       await menuApi.updateMenu(currentId.value, data)

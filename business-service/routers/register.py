@@ -55,11 +55,15 @@ def _build_menu_data(menu: dict) -> dict:
         "is_active": True,
         "is_visible": True,
         "sort_order": menu.get("sort_order", 10),
-        "allowed_paths": (
-            '["GET:/api/v1/posts/", "POST:/api/v1/posts/",'
-            ' "GET:/api/v1/posts/*", "PUT:/api/v1/posts/*",'
-            ' "DELETE:/api/v1/posts/*"]'
-        ),
+        # allowed_paths 必须发字符串数组：后端菜单模型的该字段是 []string / jsonb，
+        # 发 JSON 字符串会被拒绑（cannot unmarshal string into ... of type []string）。
+        "allowed_paths": [
+            "GET:/api/v1/posts/",
+            "POST:/api/v1/posts/",
+            "GET:/api/v1/posts/*",
+            "PUT:/api/v1/posts/*",
+            "DELETE:/api/v1/posts/*",
+        ],
     }
 
 
