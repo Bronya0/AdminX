@@ -11,21 +11,19 @@
             </a-space>
           </template>
 
-          <div class="table-toolbar">
-            <div class="table-toolbar-left">
-              <template v-if="sysData?.platform">
-                <span class="toolbar-label">运行环境</span>
-                <a-tag color="blue">运行时 {{ sysData.platform.runtime_version }}</a-tag>
-                <a-tag color="blue">{{ sysData.platform.os }}</a-tag>
-              </template>
-            </div>
-            <div class="table-toolbar-right">
+          <TableToolbar>
+            <template v-if="sysData?.platform">
+              <span class="toolbar-label">运行环境</span>
+              <a-tag color="blue">运行时 {{ sysData.platform.runtime_version }}</a-tag>
+              <a-tag color="blue">{{ sysData.platform.os }}</a-tag>
+            </template>
+            <template #right>
               <a-button size="small" @click="loadSys" :loading="sysLoading">
                 <template #icon><ReloadOutlined /></template>
                 刷新
               </a-button>
-            </div>
-          </div>
+            </template>
+          </TableToolbar>
 
           <a-table
             :data-source="sysComponents"
@@ -51,15 +49,13 @@
             <span>业务组件</span>
           </template>
 
-          <div class="table-toolbar">
-            <div class="table-toolbar-left">
-              <a-tag color="success">在线 {{ bizOnline }}</a-tag>
-              <a-tag color="error">离线 {{ bizOffline }}</a-tag>
-              <a-tag v-if="pendingCommandCount > 0" color="warning">
-                待指令 {{ pendingCommandCount }}
-              </a-tag>
-            </div>
-            <div class="table-toolbar-right">
+          <TableToolbar>
+            <a-tag color="success">在线 {{ bizOnline }}</a-tag>
+            <a-tag color="error">离线 {{ bizOffline }}</a-tag>
+            <a-tag v-if="pendingCommandCount > 0" color="warning">
+              待指令 {{ pendingCommandCount }}
+            </a-tag>
+            <template #right>
               <a-input-search
                 v-model:value="bizSearch"
                 placeholder="搜索组件名/标识"
@@ -70,8 +66,8 @@
               <a-button size="small" @click="loadBiz" :loading="bizLoading">
                 <template #icon><ReloadOutlined /></template>
               </a-button>
-            </div>
-          </div>
+            </template>
+          </TableToolbar>
 
           <a-table
             :data-source="bizComponents"
@@ -187,6 +183,7 @@ import { ReloadOutlined } from '@ant-design/icons-vue'
 import { componentApi } from '@/api/cluster'
 import { formatDateTime } from '@/utils/format'
 import type { ServiceComponent, SystemComponentsData } from '@/types'
+import TableToolbar from '@/components/TableToolbar.vue'
 
 const activeTab = ref('system')
 

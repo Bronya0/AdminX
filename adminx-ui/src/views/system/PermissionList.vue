@@ -4,14 +4,12 @@
       <a-tabs v-model:activeKey="activeTab" type="card">
         <!-- ===== 菜单权限 ===== -->
         <a-tab-pane key="menu" tab="菜单权限">
-          <div class="table-toolbar">
-            <div class="table-toolbar-left">
-              <a-button type="primary" @click="handleAdd"><PlusOutlined /> 新增菜单</a-button>
-              <a-button @click="expandAllMenuTree"><ExpandOutlined /> 展开全部</a-button>
-              <a-button @click="collapseAllMenuTree"><CompressOutlined /> 收起全部</a-button>
-              <a-input-search v-model:value="menuSearchText" placeholder="搜索菜单名称..." allow-clear style="width: 240px; margin-left: 16px;" @change="filterMenuTree" />
-            </div>
-          </div>
+          <TableToolbar>
+            <a-button type="primary" @click="handleAdd"><PlusOutlined /> 新增菜单</a-button>
+            <a-button @click="expandAllMenuTree"><ExpandOutlined /> 展开全部</a-button>
+            <a-button @click="collapseAllMenuTree"><CompressOutlined /> 收起全部</a-button>
+            <a-input-search v-model:value="menuSearchText" placeholder="搜索菜单名称..." allow-clear style="width: 240px" @change="filterMenuTree" />
+          </TableToolbar>
           <a-tree v-model:expandedKeys="menuExpandedKeys" :tree-data="filteredMenuTreeData" :loading="loading" :block-node="true">
             <template #title="{ key, title, is_active, path, permission_code }">
               <div class="tree-node-content">
@@ -88,6 +86,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, ExpandOutlined, CompressOut
 import { menuApi } from '@/api/menu'
 import { menusToTreeData, flatMenusToTreeByDepth, filterTreeBySearch } from '@/utils/menuTree'
 import type { Menu } from '@/types'
+import TableToolbar from '@/components/TableToolbar.vue'
 
 // ─── 状态 ───
 const activeTab = ref('menu')
@@ -207,8 +206,6 @@ onMounted(() => { loadData() })
 <style scoped>
 .page-container { padding: 24px; }
 .table-card { margin-bottom: 16px; }
-.table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
-.table-toolbar-left { display: flex; gap: 8px; }
 .tree-node-content { display: flex; align-items: center; gap: 8px; padding: 2px 0; width: 100%; }
 .node-icon { font-size: 14px; color: #1890ff; flex-shrink: 0; }
 .node-name { font-weight: 500; font-size: 14px; min-width: 80px; }

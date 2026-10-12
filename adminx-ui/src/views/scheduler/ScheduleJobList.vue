@@ -2,48 +2,47 @@
   <div class="page-container">
     <!-- 搜索栏 -->
     <a-card class="search-card">
-      <a-form layout="inline" :model="searchForm">
-        <a-form-item label="任务名称">
+      <SearchBar>
+        <SearchField label="任务名称">
           <a-input v-model:value="searchForm.search" placeholder="名称" allow-clear @pressEnter="handleSearch" />
-        </a-form-item>
-        <a-form-item label="类型">
-          <a-select v-model:value="searchForm.command_type" placeholder="全部" allow-clear style="width: 120px">
+        </SearchField>
+        <SearchField label="类型">
+          <a-select v-model:value="searchForm.command_type" placeholder="全部" allow-clear>
             <a-select-option value="python">Python 函数</a-select-option>
             <a-select-option value="shell">Shell 命令</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="触发">
-          <a-select v-model:value="searchForm.trigger_type" placeholder="全部" allow-clear style="width: 120px">
+        </SearchField>
+        <SearchField label="触发">
+          <a-select v-model:value="searchForm.trigger_type" placeholder="全部" allow-clear>
             <a-select-option value="cron">Cron</a-select-option>
             <a-select-option value="interval">间隔</a-select-option>
             <a-select-option value="date">指定时间</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="状态">
-          <a-select v-model:value="searchForm.is_active" placeholder="全部" allow-clear style="width: 100px">
+        </SearchField>
+        <SearchField label="状态">
+          <a-select v-model:value="searchForm.is_active" placeholder="全部" allow-clear>
             <a-select-option :value="true">启用</a-select-option>
             <a-select-option :value="false">禁用</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item>
+        </SearchField>
+
+        <template #actions>
           <a-button type="primary" @click="handleSearch"><SearchOutlined /> 搜索</a-button>
-          <a-button style="margin-left: 8px" @click="resetSearch"><ReloadOutlined /> 重置</a-button>
-        </a-form-item>
-      </a-form>
+          <a-button @click="resetSearch"><ReloadOutlined /> 重置</a-button>
+        </template>
+      </SearchBar>
     </a-card>
 
     <!-- 操作栏 -->
     <a-card class="table-card">
-      <div class="table-toolbar">
-        <div class="table-toolbar-left">
-          <a-button type="primary" @click="handleAdd"><PlusOutlined /> 新建任务</a-button>
-          <a-button @click="handleReload"><ReloadOutlined /> 重载调度器</a-button>
-        </div>
-        <div class="table-toolbar-right">
+      <TableToolbar>
+        <a-button type="primary" @click="handleAdd"><PlusOutlined /> 新建任务</a-button>
+        <a-button @click="handleReload"><ReloadOutlined /> 重载调度器</a-button>
+        <template #right>
           <a-tag :color="schedulerRunning ? 'green' : 'red'">{{ schedulerRunning ? '调度器运行中' : '调度器未启动' }}</a-tag>
           <a-tag v-if="schedulerJobCount !== null">APS 任务: {{ schedulerJobCount }}</a-tag>
-        </div>
-      </div>
+        </template>
+      </TableToolbar>
 
       <a-table
         :columns="columns"
@@ -205,6 +204,9 @@ import {
 import { message } from 'ant-design-vue'
 import { scheduleJobApi } from '@/api/webservice'
 import { formatDateTime } from '@/utils/format'
+import SearchBar from '@/components/SearchBar.vue'
+import SearchField from '@/components/SearchField.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
 import type { ScheduleJob, JobLog } from '@/types'
 
 // ── 搜索 ──
@@ -515,3 +517,9 @@ const formatDuration = (start: string, end: string) => {
 
 onMounted(() => { fetchData(); fetchSchedulerStatus() })
 </script>
+
+<style scoped>
+.search-card {
+  margin-bottom: 16px;
+}
+</style>

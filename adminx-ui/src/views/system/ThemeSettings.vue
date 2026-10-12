@@ -1,5 +1,20 @@
 <template>
   <div class="theme-settings-inner">
+    <!-- 整页操作放在顶部：导出 / 导入只含主题外观，「保存设置」一次性写回服务端 -->
+    <div class="settings-toolbar">
+      <span class="settings-toolbar-hint">导入 / 导出只含主题外观（布局、主题、导航配色等），不含站点信息与登录页设置</span>
+      <a-space>
+        <a-button @click="exportTheme">
+          <DownloadOutlined /> 导出主题
+        </a-button>
+        <a-upload :show-upload-list="false" accept=".json,application/json" :before-upload="importTheme">
+          <a-button>
+            <UploadOutlined /> 导入主题
+          </a-button>
+        </a-upload>
+        <a-button type="primary" :loading="saving" @click="saveAll">保存设置</a-button>
+      </a-space>
+    </div>
     <a-tabs v-model:activeKey="activeTab" type="card">
         <!-- ===== 布局 ===== -->
         <a-tab-pane key="layout" tab="布局">
@@ -263,20 +278,6 @@
           </div>
         </a-tab-pane>
       </a-tabs>
-      <div class="settings-footer">
-        <span class="settings-footer-hint">导入 / 导出只包含主题外观（布局、主题、导航配色等），不含站点信息与登录页设置</span>
-        <a-space>
-          <a-button @click="exportTheme">
-            <DownloadOutlined /> 导出主题
-          </a-button>
-          <a-upload :show-upload-list="false" accept=".json,application/json" :before-upload="importTheme">
-            <a-button>
-              <UploadOutlined /> 导入主题
-            </a-button>
-          </a-upload>
-          <a-button type="primary" :loading="saving" @click="saveAll">保存设置</a-button>
-        </a-space>
-      </div>
   </div>
 </template>
 
@@ -510,17 +511,18 @@ const importTheme = (file: File): false => {
   min-height: 200px;
 }
 
-.settings-footer {
+.settings-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.settings-footer-hint {
+.settings-toolbar-hint {
   font-size: 12px;
   color: #999;
 }

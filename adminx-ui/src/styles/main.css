@@ -86,24 +86,6 @@ html, body, #app {
   border-bottom: 1px solid #f0f0f0;
 }
 
-/* 表格样式 */
-.table-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.table-toolbar-left {
-  display: flex;
-  gap: 8px;
-}
-
-.table-toolbar-right {
-  display: flex;
-  gap: 8px;
-}
-
 /* 表单样式 */
 .form-actions {
   display: flex;

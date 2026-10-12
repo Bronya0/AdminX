@@ -1,7 +1,7 @@
 <template>
   <div class="page-container">
     <a-card class="table-card">
-      <div class="table-toolbar">
+      <TableToolbar>
         <a-upload
           :show-upload-list="false"
           :custom-request="handleUpload"
@@ -13,7 +13,7 @@
         <span class="upload-hint">
           单个文件最大 100MB，仅支持图片/文档/压缩包；非超级管理员只能看到并管理自己上传的文件
         </span>
-      </div>
+      </TableToolbar>
 
       <a-table
         :columns="columns"
@@ -44,6 +44,7 @@ import { message } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import { fileApi } from '@/api/file'
 import { formatDateTime } from '@/utils/format'
+import TableToolbar from '@/components/TableToolbar.vue'
 import type { FileRecord } from '@/types'
 
 // 与后端 allowedUploadExt 白名单保持一致（后端才是权威校验，这里只是提前拦一次）
@@ -140,6 +141,5 @@ onMounted(() => { fetchData() })
 <style scoped>
 .page-container { padding: 24px; }
 .table-card { margin-bottom: 16px; }
-.table-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .upload-hint { color: #999; font-size: 12px; }
 </style>

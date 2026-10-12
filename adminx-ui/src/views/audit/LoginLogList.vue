@@ -2,51 +2,46 @@
   <div class="page-container">
     <!-- 搜索栏 -->
     <a-card class="search-card">
-      <a-form layout="inline" :model="searchForm">
-        <a-form-item label="关键字">
+      <SearchBar>
+        <SearchField label="关键字">
           <a-input
             v-model:value="searchForm.search"
             placeholder="用户名/IP/消息"
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item label="IP">
+        </SearchField>
+        <SearchField label="IP">
           <a-input
             v-model:value="searchForm.ip"
             placeholder="IP 地址"
             allow-clear
             @pressEnter="handleSearch"
-            style="width: 140px"
           />
-        </a-form-item>
-        <a-form-item label="结果">
-          <a-select
-            v-model:value="searchForm.success"
-            placeholder="全部"
-            allow-clear
-            style="width: 100px"
-          >
+        </SearchField>
+        <SearchField label="结果">
+          <a-select v-model:value="searchForm.success" placeholder="全部" allow-clear>
             <a-select-option :value="true">成功</a-select-option>
             <a-select-option :value="false">失败</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="起止">
+        </SearchField>
+        <SearchField label="起止">
           <a-range-picker
             v-model:value="dateRange"
             :placeholder="['开始日期', '结束日期']"
             @change="handleSearch"
           />
-        </a-form-item>
-        <a-form-item>
+        </SearchField>
+
+        <template #actions>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 搜索
           </a-button>
-          <a-button style="margin-left: 8px" @click="resetSearch">
+          <a-button @click="resetSearch">
             <ReloadOutlined /> 重置
           </a-button>
-        </a-form-item>
-      </a-form>
+        </template>
+      </SearchBar>
     </a-card>
 
     <!-- 表格 -->
@@ -77,6 +72,8 @@ import { ref, onMounted } from 'vue'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { loginLogApi } from '@/api/auth'
 import { formatDateTime } from '@/utils/format'
+import SearchBar from '@/components/SearchBar.vue'
+import SearchField from '@/components/SearchField.vue'
 import type { LoginLog } from '@/types'
 
 const columns = [
@@ -132,3 +129,9 @@ const handleTableChange = (pag: any) => {
 
 onMounted(fetchData)
 </script>
+
+<style scoped>
+.search-card {
+  margin-bottom: 16px;
+}
+</style>

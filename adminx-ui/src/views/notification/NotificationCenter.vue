@@ -13,39 +13,37 @@
         </a-button>
       </template>
 
-      <div style="margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-        <a-input-search
-          v-model:value="searchText"
-          placeholder="搜索通知标题..."
-          allow-clear
-          style="width: 240px"
-          @search="page = 1; fetchData()"
-        />
-        <a-select
-          v-model:value="filterType"
-          placeholder="全部类型"
-          allow-clear
-          style="width: 140px"
-          @change="page = 1; fetchData()"
-        >
-          <a-select-option value="info">信息</a-select-option>
-          <a-select-option value="success">成功</a-select-option>
-          <a-select-option value="warning">警告</a-select-option>
-          <a-select-option value="error">错误</a-select-option>
-        </a-select>
-        <a-select
-          v-model:value="filterRead"
-          placeholder="全部状态"
-          allow-clear
-          style="width: 140px"
-          @change="page = 1; fetchData()"
-        >
-          <a-select-option :value="false">未读</a-select-option>
-          <a-select-option :value="true">已读</a-select-option>
-        </a-select>
-        <a-button @click="fetchData">
-          <ReloadOutlined /> 刷新
-        </a-button>
+      <div style="margin-bottom: 16px">
+        <SearchBar>
+          <SearchField label="标题">
+            <a-input-search
+              v-model:value="searchText"
+              placeholder="搜索通知标题..."
+              allow-clear
+              @search="page = 1; fetchData()"
+            />
+          </SearchField>
+          <SearchField label="类型">
+            <a-select v-model:value="filterType" placeholder="全部类型" allow-clear @change="page = 1; fetchData()">
+              <a-select-option value="info">信息</a-select-option>
+              <a-select-option value="success">成功</a-select-option>
+              <a-select-option value="warning">警告</a-select-option>
+              <a-select-option value="error">错误</a-select-option>
+            </a-select>
+          </SearchField>
+          <SearchField label="状态">
+            <a-select v-model:value="filterRead" placeholder="全部状态" allow-clear @change="page = 1; fetchData()">
+              <a-select-option :value="false">未读</a-select-option>
+              <a-select-option :value="true">已读</a-select-option>
+            </a-select>
+          </SearchField>
+
+          <template #actions>
+            <a-button @click="fetchData">
+              <ReloadOutlined /> 刷新
+            </a-button>
+          </template>
+        </SearchBar>
       </div>
 
       <div v-if="loading" style="text-align: center; padding: 40px;">
@@ -194,6 +192,8 @@ import { webhookApi } from '@/api/webhook'
 import { formatRelativeTime } from '@/utils/format'
 import type { Notification, WebhookConfig } from '@/types'
 import { message } from 'ant-design-vue'
+import SearchBar from '@/components/SearchBar.vue'
+import SearchField from '@/components/SearchField.vue'
 
 // ── 通知列表 ──
 const listData = ref<Notification[]>([])

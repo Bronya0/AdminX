@@ -2,21 +2,20 @@
   <div class="config-list-content">
     <!-- 搜索栏 -->
     <a-card class="search-card">
-      <a-form layout="inline" :model="searchForm">
-        <a-form-item label="键">
+      <SearchBar>
+        <SearchField label="键">
           <a-input
             v-model:value="searchForm.search"
             placeholder="配置键"
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item label="类型">
+        </SearchField>
+        <SearchField label="类型">
           <a-select
             v-model:value="searchForm.value_type"
             placeholder="全部"
             allow-clear
-            style="width: 120px"
             @change="handleSearch"
           >
             <a-select-option value="string">字符串</a-select-option>
@@ -25,58 +24,57 @@
             <a-select-option value="json">JSON</a-select-option>
             <a-select-option value="options">选项列表</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="加密">
+        </SearchField>
+        <SearchField label="加密">
           <a-select
             v-model:value="searchForm.is_encrypted"
             placeholder="全部"
             allow-clear
-            style="width: 80px"
             @change="handleSearch"
           >
             <a-select-option :value="true">是</a-select-option>
             <a-select-option :value="false">否</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="分组">
+        </SearchField>
+        <SearchField label="分组">
           <a-select
             v-model:value="searchForm.group"
             placeholder="全部"
             allow-clear
-            style="width: 120px"
             @change="handleSearch"
           >
             <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="描述">
+        </SearchField>
+        <SearchField label="描述">
           <a-input
             v-model:value="searchForm.desc"
             placeholder="描述"
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item>
+        </SearchField>
+
+        <template #actions>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 查询
           </a-button>
-          <a-button style="margin-left: 8px" @click="resetSearch">
+          <a-button @click="resetSearch">
             <ReloadOutlined /> 重置
           </a-button>
-          <a-button type="primary" style="margin-left: 16px" @click="handleAdd">
+          <a-button type="primary" @click="handleAdd">
             <PlusOutlined /> 新增配置
           </a-button>
-          <a-button style="margin-left: 8px" @click="handleExport">
+          <a-button @click="handleExport">
             <DownloadOutlined /> 导出
           </a-button>
           <a-upload :show-upload-list="false" accept=".json,application/json" :before-upload="handleImportFile">
-            <a-button style="margin-left: 8px">
+            <a-button>
               <UploadOutlined /> 导入
             </a-button>
           </a-upload>
-        </a-form-item>
-      </a-form>
+        </template>
+      </SearchBar>
     </a-card>
 
     <a-card class="table-card">
@@ -231,6 +229,8 @@ import {
 import { configApi } from '@/api/config'
 import type { Config } from '@/types'
 import { downloadJsonFile, readJsonFile } from '@/utils/jsonFile'
+import SearchBar from '@/components/SearchBar.vue'
+import SearchField from '@/components/SearchField.vue'
 
 // 表格列定义
 const columns = [
@@ -491,7 +491,7 @@ const handleModalCancel = () => {
   formRef.value?.resetFields()
 }
 
-// 导出全部非加密配置（文件内容由后端生成，前端只负责保存）
+// 导出全部非加密配置（文件内容由后端生成，前端只负责落盘）
 const handleExport = async () => {
   try {
     const file = await configApi.exportConfigs()
@@ -539,10 +539,6 @@ onMounted(() => {
 }
 
 .table-card {
-  margin-bottom: 16px;
-}
-
-.table-toolbar {
   margin-bottom: 16px;
 }
 

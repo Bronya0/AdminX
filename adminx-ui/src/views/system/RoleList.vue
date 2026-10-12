@@ -2,47 +2,47 @@
   <div class="page-container">
     <!-- 搜索栏 -->
     <a-card class="search-card">
-      <a-form layout="inline" :model="searchForm">
-        <a-form-item label="角色名称">
+      <SearchBar>
+        <SearchField label="角色名称">
           <a-input
             v-model:value="searchForm.search"
             placeholder="名称"
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item label="描述">
+        </SearchField>
+        <SearchField label="描述">
           <a-input
             v-model:value="searchForm.desc"
             placeholder="描述"
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item label="状态">
+        </SearchField>
+        <SearchField label="状态">
           <a-select
             v-model:value="searchForm.is_active"
             placeholder="全部"
             allow-clear
-            style="width: 120px"
             @change="handleSearch"
           >
             <a-select-option :value="true">启用</a-select-option>
             <a-select-option :value="false">禁用</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item>
+        </SearchField>
+
+        <template #actions>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 查询
           </a-button>
-          <a-button style="margin-left: 8px" @click="resetSearch">
+          <a-button @click="resetSearch">
             <ReloadOutlined /> 重置
           </a-button>
-          <a-button type="primary" style="margin-left: 16px" @click="handleAdd">
+          <a-button type="primary" @click="handleAdd">
             <PlusOutlined /> 新增角色
           </a-button>
-        </a-form-item>
-      </a-form>
+        </template>
+      </SearchBar>
     </a-card>
 
     <a-card class="table-card">
@@ -155,6 +155,8 @@ import {
 import { roleApi } from '@/api/auth'
 import { menusToTreeData, filterTreeBySearch } from '@/utils/menuTree'
 import { formatDateTime } from '@/utils/format'
+import SearchBar from '@/components/SearchBar.vue'
+import SearchField from '@/components/SearchField.vue'
 import type { Role } from '@/types'
 
 const route = useRoute()

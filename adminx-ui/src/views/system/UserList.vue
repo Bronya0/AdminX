@@ -2,62 +2,60 @@
   <div class="page-container">
     <!-- 搜索栏 -->
     <a-card class="search-card">
-      <a-form layout="inline" :model="searchForm">
-        <a-form-item label="用户名">
+      <SearchBar>
+        <SearchField label="用户名">
           <a-input
             v-model:value="searchForm.search"
             placeholder="请输入用户名"
             allow-clear
             @pressEnter="handleSearch"
           />
-        </a-form-item>
-        <a-form-item label="角色">
+        </SearchField>
+        <SearchField label="角色">
           <a-select
             v-model:value="searchForm.role"
             placeholder="全部"
             allow-clear
-            style="width: 150px"
             @change="handleSearch"
           >
             <a-select-option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="在线">
+        </SearchField>
+        <SearchField label="在线">
           <a-select
             v-model:value="searchForm.is_online"
             placeholder="全部"
             allow-clear
-            style="width: 120px"
             @change="handleSearch"
           >
             <a-select-option value="true">在线</a-select-option>
             <a-select-option value="false">离线</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="状态">
+        </SearchField>
+        <SearchField label="状态">
           <a-select
             v-model:value="searchForm.is_active"
             placeholder="全部"
             allow-clear
-            style="width: 120px"
             @change="handleSearch"
           >
             <a-select-option :value="true">启用</a-select-option>
             <a-select-option :value="false">禁用</a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item>
+        </SearchField>
+
+        <template #actions>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 查询
           </a-button>
-          <a-button style="margin-left: 8px" @click="resetSearch">
+          <a-button @click="resetSearch">
             <ReloadOutlined /> 重置
           </a-button>
-          <a-button type="primary" style="margin-left: 16px" @click="handleAdd">
+          <a-button type="primary" @click="handleAdd">
             <PlusOutlined /> 新增用户
           </a-button>
-        </a-form-item>
-      </a-form>
+        </template>
+      </SearchBar>
     </a-card>
 
     <a-card class="table-card">
@@ -220,6 +218,8 @@ import {
 import { userApi, roleApi, authApi } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
+import SearchBar from '@/components/SearchBar.vue'
+import SearchField from '@/components/SearchField.vue'
 import type { Menu, User } from '@/types'
 
 const router = useRouter()
