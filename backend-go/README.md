@@ -62,7 +62,7 @@ backend-go/
 |---|---|---|
 | **认证** | `/accounts/login/` `logout/` `refresh/` `introspect/` | JWT + 登录锁定 + 黑名单 + last_logout 二次失效 |
 | **用户/角色/菜单** | `/accounts/users/` `/accounts/roles/` `/menu/` | 完整 CRUD + RBAC |
-| **配置中心** | `/config/` + `by_group/` `get_value/` `groups/` | 5 种值类型 + AES-GCM 加密 + Redis 缓存 |
+| **配置中心** | `/config/` + `by_group/` `get_value/` `groups/` `export/` `import/` | 5 种值类型 + AES-GCM 加密 + Redis 缓存 + JSON 导入导出（按 key 覆盖） |
 | **审计日志** | `/audit/` | create/update/delete 记录 |
 | **定时任务** | `/jobs/` + `run_once/` `status/` `logs/` `reload/` | gocron + Redis 任务级锁 HA |
 | **通知中心** | `/notification/messages/` `webhooks/` | webhook HMAC-SHA256 签名外发 |
@@ -71,7 +71,7 @@ backend-go/
 | **系统监控** | `/monitor/resources/`（`history/`）`netstat/` | CPU/内存/磁盘/网络（gopsutil）+ 1 分钟采样趋势 |
 | **密码策略** | `/policy/policy/` `change-password/` | 策略校验 + 历史防重用 |
 | **验证码** | `/captcha/captcha/` `verify/` | Redis 存储 |
-| **通用** | `/common/health/` `dashboard/stats/` `site-info/` `components/` | 健康检查 + 仪表盘 + 站点信息（配置中心 `group=site`）+ 内置组件状态 |
+| **通用** | `/common/health/` `dashboard/stats/` `site-info/` `theme/` `components/` | 健康检查 + 仪表盘 + 站点信息（配置中心 `group=site`）+ 全局主题（配置中心 `group=theme`）+ 内置组件状态 |
 | **WebSocket** | `/ws/log/` | Hub + Redis pub/sub 跨实例广播 |
 
 ## 快速开始

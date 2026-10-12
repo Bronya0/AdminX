@@ -7,9 +7,9 @@
     <a-menu
       :selectedKeys="selectedKeys"
       mode="horizontal"
-      theme="dark"
+      :theme="navTheme"
       @select="handleMenuClick"
-      style="flex: 1; min-width: 0; line-height: 56px;"
+      style="flex: 1; min-width: 0;"
     >
       <template v-for="item in menus" :key="item.key">
         <a-sub-menu v-if="item.children && item.children.length" :key="item.key">
@@ -44,12 +44,16 @@ import type { SidebarItem } from '@/types'
 const getIcon = resolveIcon
 const userStore = useUserStore()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   menus: SidebarItem[]
   selectedKeys: string[]
   showLogo?: boolean
   isMix?: boolean
-}>()
+  /** 导航底色是浅色时，antd 菜单要跟着切浅色主题，否则白字看不见 */
+  navTheme?: 'light' | 'dark'
+}>(), {
+  navTheme: 'dark',
+})
 
 const emit = defineEmits<{
   select: [key: string]
@@ -65,21 +69,18 @@ const handleMenuClick = (info: any) => {
 .top-nav {
   display: flex;
   align-items: center;
-  height: 56px;
-  background: #001529;
+  /* 行高由主题配置下发（AdminLayout 注入），top 与 mix 共用同一个值 */
+  height: var(--admin-nav-height, 56px);
+  background: var(--admin-nav-top-bg, #001529);
   padding: 0 16px;
   overflow: hidden;
-}
-
-.top-nav.mix-mode {
-  height: 48px;
 }
 
 .top-nav-logo {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #fff;
+  color: var(--admin-nav-top-text, #fff);
   font-size: 18px;
   font-weight: bold;
   padding-right: 24px;
@@ -88,6 +89,15 @@ const handleMenuClick = (info: any) => {
 
 :deep(.ant-menu-horizontal) {
   border-bottom: none;
+  line-height: var(--admin-nav-height, 56px);
+  /* 菜单底透明，导航底色才能透出来（色由主题配置给） */
+  background: transparent;
+}
+
+:deep(.ant-menu-horizontal),
+:deep(.ant-menu-item),
+:deep(.ant-menu-submenu-title) {
+  font-size: var(--admin-nav-font-size, 14px);
 }
 
 :deep(.ant-menu-item),

@@ -67,6 +67,14 @@
           <a-button type="primary" style="margin-left: 16px" @click="handleAdd">
             <PlusOutlined /> 新增配置
           </a-button>
+          <a-button style="margin-left: 8px" @click="handleExport">
+            <DownloadOutlined /> 导出
+          </a-button>
+          <a-upload :show-upload-list="false" accept=".json,application/json" :before-upload="handleImportFile">
+            <a-button style="margin-left: 8px">
+              <UploadOutlined /> 导入
+            </a-button>
+          </a-upload>
         </a-form-item>
       </a-form>
     </a-card>
@@ -210,16 +218,19 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import {
   SearchOutlined,
   ReloadOutlined,
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  DownloadOutlined,
+  UploadOutlined,
 } from '@ant-design/icons-vue'
 import { configApi } from '@/api/config'
 import type { Config } from '@/types'
+import { downloadJsonFile, readJsonFile } from '@/utils/jsonFile'
 
 // 表格列定义
 const columns = [
@@ -478,6 +489,38 @@ const handleModalOk = async () => {
 const handleModalCancel = () => {
   modalVisible.value = false
   formRef.value?.resetFields()
+}
+
+// 导出全部非加密配置（文件内容由后端生成，前端只负责保存）
+const handleExport = async () => {
+  try {
+    const file = await configApi.exportConfigs()
+    downloadJsonFile('dictionary', file)
+    message.success(`已导出 ${file.items.length} 条配置`)
+  } catch { /* interceptor handles error */ }
+}
+
+const confirmImportConfigs = (data: unknown) => {
+  Modal.confirm({
+    title: '确认导入字典配置？',
+    content: '文件中的配置键若已存在，将整条覆盖为文件内容；文件中没有的配置保持不变。',
+    okText: '确认导入',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        const res = await configApi.importConfigs(data)
+        message.success(`导入完成：新增 ${res.created} 条，更新 ${res.updated} 条`)
+        loadData()
+        loadGroups()
+      } catch { /* interceptor handles error */ }
+    },
+  })
+}
+
+// 选择文件后先读取并二次确认；返回 false 阻止 a-upload 自动上传
+const handleImportFile = (file: File): false => {
+  readJsonFile(file).then(confirmImportConfigs).catch((e: Error) => message.error(e.message))
+  return false
 }
 
 onMounted(() => {

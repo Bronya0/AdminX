@@ -124,6 +124,9 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - AES-GCM 密钥 base64 编码 32 字节，留空则加密功能禁用（不报错）
 - 加密配置明文 **不缓存** Redis（安全）
 - 站点信息（站点名/描述/Logo/主题色/空闲超时/版本）存配置中心 `group=site`、key 固定 `site.*`：`GET /common/site-info/` 为公共端点（登录页需要），`POST` 走 RBAC（默认绑在 `system-config` 菜单）；写键值走 `ConfigService.SetValue`，别直接建 repo 行
+- 全局主题（不分用户）整份 JSON 存配置中心 `group=theme`、key=`theme.settings`，由 `ThemeService` 读写：`GET /common/theme/` 为公共端点（登录页也要应用主题），`POST` 与导入导出走 RBAC（同挂在 `system-config` 菜单，新增路径需重跑 init-data 才会刷新种子）。字段覆盖式合并 + 整体校验，未知字段直接 400
+- 字典导入导出：`ConfigService.ImportFile/ExportFile`。导入按 key 整条覆盖、整批校验后单事务写入；加密配置不导出、导入时拒绝覆盖。`ConfigRepo.Create` 必须经过回写，别删：`is_active` 带 `default:true`，GORM 会把停用项写成启用
+- 由专用服务维护的配置分组（主题 `group=theme`、站点信息 `group=site`）必须登记进 `serviceOwnedGroups`：字典导出跳过它们、导入拒绝写入。否则通用导入只校验「值是合法 JSON」，能把 `theme.settings` 写成非法布局 → 前端三个布局分支全不成立，整站白屏
 - 密码策略单例 `password_policies` ID=1：默认值只在 `model.DefaultPasswordPolicy()` 定义一处，init-data 用同一份播种（否则读取时会打 record not found 日志）
 
 ## 测试

@@ -1,9 +1,17 @@
 <template>
-  <div class="admin-wrapper" :class="layout">
+  <div
+    class="admin-wrapper"
+    :class="layout"
+    :style="{
+      '--admin-nav-height': navHeight + 'px',
+      '--admin-header-height': headerHeight + 'px',
+    }"
+  >
     <!-- SIDE layout: sidebar only -->
     <SideBar
       v-if="layout === 'side'"
       :menus="sidebarMenus"
+      :navTheme="userStore.navSide.menuTheme"
       :collapsed="collapsed"
       :selectedKeys="selectedKeys"
       :openKeys="openKeys"
@@ -17,6 +25,7 @@
     <TopNav
       v-if="layout === 'top'"
       :menus="sidebarMenus"
+      :navTheme="userStore.navTop.menuTheme"
       :selectedKeys="selectedKeys"
       :showLogo="userStore.theme.showLogo"
       @select="handleMenuClick"
@@ -26,6 +35,7 @@
     <template v-if="layout === 'mix'">
       <TopNav
         :menus="topLevelMenus"
+        :navTheme="userStore.navTop.menuTheme"
         :selectedKeys="[selectedTopKey]"
         :isMix="true"
         :showLogo="userStore.theme.showLogo"
@@ -35,6 +45,7 @@
         <SideBar
           v-if="currentChildMenus.length"
           :menus="currentChildMenus"
+          :navTheme="userStore.navSide.menuTheme"
           :collapsed="collapsed"
           :selectedKeys="selectedKeys"
           :openKeys="openKeys"
@@ -55,18 +66,25 @@
             </div>
             <div class="header-right">
               <a-space>
-                <a-tooltip title="全屏">
-                  <a-button type="text" @click="toggleFullscreen">
-                    <FullscreenOutlined />
-                  </a-button>
-                </a-tooltip>
-                <a-tooltip title="通知中心">
-                  <a-button type="text" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0;" @click="goToNotification">
-                     <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
-                      <BellOutlined style="font-size: 18px;" />
-                    </a-badge>
-                  </a-button>
-                </a-tooltip>
+                <a-button
+                  v-if="canConfigCenter"
+                  class="header-icon-btn"
+                  type="text"
+                  aria-label="配置中心"
+                  @click="goToConfigCenter"
+                >
+                  <SettingOutlined style="font-size: 18px;" />
+                </a-button>
+                <a-button
+                  class="header-icon-btn"
+                  type="text"
+                  aria-label="通知中心"
+                  @click="goToNotification"
+                >
+                  <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
+                    <BellOutlined style="font-size: 18px;" />
+                  </a-badge>
+                </a-button>
                 <a-dropdown>
                   <a-space style="cursor: pointer; display: inline-flex; align-items: center;">
                     <a-avatar :size="32">
@@ -106,18 +124,25 @@
         </div>
         <div class="header-right">
           <a-space>
-            <a-tooltip title="全屏">
-              <a-button type="text" @click="toggleFullscreen">
-                <FullscreenOutlined />
-              </a-button>
-            </a-tooltip>
-            <a-tooltip title="通知中心">
-              <a-button type="text" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0;" @click="goToNotification">
-                 <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
-                  <BellOutlined style="font-size: 18px;" />
-                </a-badge>
-              </a-button>
-            </a-tooltip>
+            <a-button
+              v-if="canConfigCenter"
+              class="header-icon-btn"
+              type="text"
+              aria-label="配置中心"
+              @click="goToConfigCenter"
+            >
+              <SettingOutlined style="font-size: 18px;" />
+            </a-button>
+            <a-button
+              class="header-icon-btn"
+              type="text"
+              aria-label="通知中心"
+              @click="goToNotification"
+            >
+              <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
+                <BellOutlined style="font-size: 18px;" />
+              </a-badge>
+            </a-button>
             <a-dropdown>
               <a-space style="cursor: pointer; display: inline-flex; align-items: center;">
                 <a-avatar :size="32">
@@ -149,9 +174,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, watchEffect, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
+import { useUserStore, defaultTheme } from '@/stores/user'
 import { message, Modal } from 'ant-design-vue'
 import IdleWatcher from '@/components/IdleWatcher.vue'
 import { notificationApi } from '@/api/notification'
@@ -161,7 +186,7 @@ import {
   UserOutlined,
   BellOutlined,
   LogoutOutlined,
-  FullscreenOutlined,
+  SettingOutlined,
   DownOutlined,
 } from '@ant-design/icons-vue'
 import { flatMenusToTreeByDepth, menusToSidebarItems } from '@/utils/menuTree'
@@ -181,6 +206,28 @@ const collapsed = computed({
 const isDark = computed(() => userStore.theme.isDark)
 const layout = computed(() => userStore.theme.layout)
 const showBreadcrumb = computed(() => userStore.theme.showBreadcrumb !== false)
+// 行高在「配置中心 → 主题设置 → 布局」里调，由这两个 CSS 变量下发到顶栏/页头/侧栏 Logo
+const navHeight = computed(() => userStore.theme.navHeight ?? defaultTheme.navHeight)
+const headerHeight = computed(() => userStore.theme.headerHeight ?? defaultTheme.headerHeight)
+// 导航配色变量挂在 <html> 上：顶部导航的子菜单弹出层是 teleport 到 body 的，
+// 挂在 .admin-wrapper 上的话它读不到变量，会跟导航区两个色。
+watchEffect(() => {
+  const el = document.documentElement.style
+  const top = userStore.navTop
+  const side = userStore.navSide
+  el.setProperty('--admin-nav-top-bg', top.bg)
+  el.setProperty('--admin-nav-top-text', top.text)
+  el.setProperty('--admin-nav-top-border', top.border)
+  el.setProperty('--admin-nav-side-bg', side.bg)
+  el.setProperty('--admin-nav-side-text', side.text)
+  el.setProperty('--admin-nav-side-border', side.border)
+  el.setProperty('--admin-nav-font-size', `${userStore.theme.navTextSize ?? defaultTheme.navTextSize}px`)
+})
+// 页头「配置中心」入口的准入码取自路由定义，不和 router/index.ts 各写一份
+const canConfigCenter = computed(() => {
+  const code = router.getRoutes().find(r => r.name === 'system-config')?.meta?.permission
+  return !code || userStore.hasPermission(String(code))
+})
 
 const selectedKeys = ref<string[]>([])
 const openKeys = ref<string[]>([])
@@ -270,12 +317,8 @@ watch(
 
 const toggleCollapsed = () => userStore.toggleCollapsed()
 
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen()
-  } else {
-    document.exitFullscreen()
-  }
+const goToConfigCenter = () => {
+  router.push('/system/config?tab=theme')
 }
 
 const findSidebarItem = (key: string, items: SidebarItem[]): SidebarItem | undefined => {
@@ -386,19 +429,6 @@ const handleLogout = () => {
 }
 
 onMounted(() => {
-  // 应用暗黑模式
-  if (userStore.theme.isDark) {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-  // 应用主题色
-  document.documentElement.style.setProperty('--primary-color', userStore.theme.primaryColor)
-  // 应用字体大小
-  const fontSize = userStore.theme.fontSize ?? 14
-  if (fontSize !== 14) {
-    document.documentElement.style.fontSize = fontSize + 'px'
-  }
   fetchUnreadCount()
   startUnreadPolling()
 })
@@ -441,8 +471,8 @@ onUnmounted(() => {
 }
 
 .admin-header {
-  height: 64px;
-  min-height: 64px;
+  height: var(--admin-header-height, 64px);
+  min-height: var(--admin-header-height, 64px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -464,6 +494,27 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* 页头图标按钮：固定 40×40（不写死的话文字按钮是 46×32，和铃铛对不齐）。
+   这里刻意不留任何气泡：a-tooltip 在贴顶页头会反复翻转让位、晃；换成原生 title
+   又会冒出系统深色提示框，鼠标停/移、点一下都闪一下。无障碍名字交给 aria-label，
+   齿轮 / 铃铛的图标含义本身就自解释。 */
+.header-icon-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 点一下会闪的默认装饰也一并压平：点击水波纹画的那圈 box-shadow、按下态偏深的底色 */
+.header-icon-btn :deep(.ant-wave) {
+  display: none;
+}
+.header-icon-btn:active {
+  background-color: rgba(0, 0, 0, 0.06);
 }
 
 .admin-content {

@@ -134,3 +134,28 @@ func (h *ConfigHandler) Groups(c *gin.Context) {
 	}
 	response.OK(c, groups)
 }
+
+// Export GET /config/export/ — 导出全部非加密字典配置（文件内容由前端下载）。
+func (h *ConfigHandler) Export(c *gin.Context) {
+	file, err := h.svc.ExportFile()
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, file)
+}
+
+// Import POST /config/import/ — 按 key 覆盖式导入字典配置。
+func (h *ConfigHandler) Import(c *gin.Context) {
+	raw, err := c.GetRawData()
+	if err != nil {
+		response.Fail(c, 400, "读取请求体失败")
+		return
+	}
+	result, err := h.svc.ImportFile(c.Request.Context(), raw)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, result)
+}

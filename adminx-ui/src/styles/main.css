@@ -11,6 +11,16 @@
   --admin-bg-header: #fff;
   --admin-bg-content: #f0f2f5;
   --admin-header-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+
+  /* 导航区配色：顶栏与侧栏各一套，运行时由主题设置覆盖（AdminLayout 写到 <html> 上），
+     这里给默认值，供子菜单弹出层等挂在 body 上的元素读取 */
+  --admin-nav-top-bg: #001529;
+  --admin-nav-top-text: rgba(255, 255, 255, 0.85);
+  --admin-nav-top-border: rgba(255, 255, 255, 0.1);
+  --admin-nav-side-bg: #001529;
+  --admin-nav-side-text: rgba(255, 255, 255, 0.85);
+  --admin-nav-side-border: rgba(255, 255, 255, 0.1);
+  --admin-nav-font-size: 14px;
 }
 
 * {
@@ -26,6 +36,13 @@ html, body, #app {
 }
 
 /* 布局样式 — 已移至 AdminLayout.vue scoped */
+
+/* 顶部导航的子菜单弹出层是 teleport 到 body 的，读不到组件上的变量，
+   这里用同一份变量上色，免得导航改色后弹出层还是默认深蓝 */
+.ant-menu-submenu-popup .ant-menu {
+  background: var(--admin-nav-top-bg, #001529);
+  font-size: var(--admin-nav-font-size, 14px);
+}
 
 /* 登录页样式 */
 .login-container {

@@ -41,6 +41,7 @@ type Deps struct {
 	PolicyH *handler.PolicyHandler
 	CapH    *handler.CaptchaHandler
 	WSH     *handler.WSHandler
+	ThemeH  *handler.ThemeHandler
 
 	JWTCfg JWTConfig
 }
@@ -86,6 +87,8 @@ func New(deps *Deps) *gin.Engine {
 		})
 		// 站点信息：登录页需要，无鉴权（仅站点名/描述/Logo/空闲超时等非敏感展示项）
 		public.GET("/common/site-info/", deps.MonH.SiteInfo)
+		// 全局主题：登录页也要先应用主题，无鉴权（仅外观配置，不含敏感信息）
+		public.GET("/common/theme/", deps.ThemeH.Get)
 		// captcha（无鉴权）
 		public.GET("/captcha/captcha/", deps.CapH.Generate)
 		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
@@ -197,9 +200,15 @@ func New(deps *Deps) *gin.Engine {
 		rbac.PATCH("/config/:id/", deps.CfgH.Update)
 		rbac.DELETE("/config/:id/", deps.CfgH.Delete)
 		rbac.GET("/config/groups/", deps.CfgH.Groups)
+		rbac.GET("/config/export/", deps.CfgH.Export)
+		rbac.POST("/config/import/", deps.CfgH.Import)
 		// 站点信息写入：与配置中心同级别（由菜单 allowed_paths 控制），
 		// 默认绑定在 system-config 菜单上（见 init-data 种子）
 		rbac.POST("/common/site-info/", deps.MonH.UpdateSiteInfo)
+		// 主题设置写入与导入导出：同样由 system-config 菜单的 allowed_paths 控制
+		rbac.GET("/common/theme/export/", deps.ThemeH.Export)
+		rbac.POST("/common/theme/", deps.ThemeH.Update)
+		rbac.POST("/common/theme/import/", deps.ThemeH.Import)
 
 		// 审计
 		rbac.GET("/audit/", deps.AuditH.List)

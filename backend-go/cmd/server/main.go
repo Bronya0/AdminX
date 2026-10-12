@@ -98,6 +98,7 @@ func main() {
 	menuSvc := service.NewMenuService(db, menuRepo)
 	configSvc := service.NewConfigService(db, configRepo, rdb, aesGCM)
 	siteInfoSvc := service.NewSiteInfoService(configSvc)
+	themeSvc := service.NewThemeService(configSvc)
 	auditSvc := service.NewAuditService(auditRepo)
 	jobSvc := service.NewJobService(db, jobRepo, log)
 	notifSvc := service.NewNotificationService(db, notifRepo, log)
@@ -137,6 +138,7 @@ func main() {
 	clsH := handler.NewClusterHandler(clusterSvc, log)
 	fileH := handler.NewFileHandler(fileSvc, log)
 	monH := handler.NewCommonHandler(db, monitorSvc, siteInfoSvc, systemComponentSvc, log)
+	themeH := handler.NewThemeHandler(themeSvc, log)
 	policyH := handler.NewPolicyHandler(policySvc, log)
 	capH := handler.NewCaptchaHandler(capMgr, log)
 
@@ -178,7 +180,7 @@ func main() {
 		AuthH: authH, UserH: userH, RoleH: roleH, MenuH: menuH,
 		CfgH: cfgH, AuditH: auditH, JobH: jobH, NotifH: notifH,
 		ClsH: clsH, FileH: fileH, MonH: monH, PolicyH: policyH,
-		CapH: capH, WSH: wsH,
+		CapH: capH, WSH: wsH, ThemeH: themeH,
 		JWTCfg: router.JWTConfig{
 			Secret: cfg.JWT.Secret, Issuer: cfg.JWT.Issuer,
 			AccessExpire: cfg.AccessExpireDuration(), RefreshExpire: cfg.RefreshExpireDuration(),

@@ -150,6 +150,34 @@ export interface Config {
   updated_at: string
 }
 
+// 字典配置导入导出文件（与后端 config_transfer 对齐）
+export interface ConfigExportFile {
+  kind: string
+  version: number
+  exported_at: string
+  items: Array<{
+    key: string
+    value: string
+    value_type: Config['value_type']
+    group: string
+    desc: string
+    is_active: boolean
+  }>
+}
+
+export interface ConfigImportResult {
+  created: number
+  updated: number
+}
+
+// 主题设置导入导出文件（与后端 theme_service 对齐）
+export interface ThemeExportFile {
+  kind: string
+  version: number
+  exported_at: string
+  theme: ThemeConfig
+}
+
 // 集群节点相关
 export interface ClusterNode {
   id: string
@@ -356,6 +384,20 @@ export interface ThemeConfig {
   showVersion: boolean
   borderRadius: number
   fontSize: number
+  /** 顶栏（一级导航那一行）高度，px */
+  navHeight: number
+  /** 页头高度，px：面包屑 + 配置中心/通知/账号所在的那一行 */
+  headerHeight: number
+  /** 顶栏（一级导航那一行）底色 */
+  navTopBgColor: string
+  /** 侧栏底色（可与顶栏不同） */
+  navSideBgColor: string
+  /** 导航菜单文字大小，px */
+  navTextSize: number
+  /** 导航文字/边框颜色是否按底色亮度自动取（为 true 时忽略 navTextColor） */
+  navTextAuto: boolean
+  /** 导航文字颜色（navTextAuto 为 false 时生效） */
+  navTextColor: string
 }
 
 // 业务组件

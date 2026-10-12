@@ -5,7 +5,7 @@
         <a-tab-pane key="layout" tab="布局">
           <a-form layout="vertical" style="max-width: 600px;">
             <a-form-item label="布局模式">
-              <a-radio-group v-model:value="form.layout" button-style="solid" size="large" @change="onLayoutChange">
+              <a-radio-group v-model:value="form.layout" button-style="solid" size="large" @change="updateTheme">
                 <a-radio-button value="side">
                   <MenuFoldOutlined /> 侧边栏
                 </a-radio-button>
@@ -22,7 +22,7 @@
             </a-form-item>
 
             <a-form-item label="侧边栏默认状态">
-              <a-switch v-model:checked="form.collapsed" checked-children="收起" un-checked-children="展开" @change="onCollapsedChange" />
+              <a-switch v-model:checked="form.collapsed" checked-children="收起" un-checked-children="展开" @change="updateTheme" />
               <span style="margin-left: 8px; color: #999; font-size: 12px;">页面初始加载时侧边栏是否收起</span>
             </a-form-item>
 
@@ -34,6 +34,69 @@
             <a-form-item label="显示版本号">
               <a-switch v-model:checked="form.showVersion" @change="updateTheme" />
               <span style="margin-left: 8px; color: #999; font-size: 12px;">侧边栏底部是否显示平台版本号</span>
+            </a-form-item>
+
+            <a-divider>行高</a-divider>
+
+            <a-form-item label="顶栏高度">
+              <a-slider v-model:value="form.navHeight" :min="40" :max="88" :step="2" @change="updateTheme" />
+              <span style="margin-left: 8px; font-size: 12px; color: #999;">{{ form.navHeight }}px</span>
+              <div style="font-size: 12px; color: #999;">
+                一级导航那一行（顶部导航 / 混合布局的顶栏），默认 56px
+              </div>
+            </a-form-item>
+
+            <a-form-item label="页头高度">
+              <a-slider v-model:value="form.headerHeight" :min="40" :max="88" :step="2" @change="updateTheme" />
+              <span style="margin-left: 8px; font-size: 12px; color: #999;">{{ form.headerHeight }}px</span>
+              <div style="font-size: 12px; color: #999;">
+                面包屑 + 配置中心/通知/账号那一行，默认 64px；调小可压缩上方留白
+              </div>
+            </a-form-item>
+
+            <a-divider>导航配色</a-divider>
+
+            <a-form-item label="顶栏底色">
+              <ThemeColorField
+                v-model="form.navTopBgColor"
+                :presets="presetNavColors"
+                :default-value="defaultTheme.navTopBgColor"
+                @change="updateTheme"
+              />
+            </a-form-item>
+
+            <a-form-item label="侧栏底色">
+              <ThemeColorField
+                v-model="form.navSideBgColor"
+                :presets="presetNavColors"
+                :default-value="defaultTheme.navSideBgColor"
+                @change="updateTheme"
+              />
+            </a-form-item>
+
+            <a-form-item label="导航文字大小">
+              <a-slider v-model:value="form.navTextSize" :min="12" :max="18" :step="1" @change="updateTheme" />
+              <span style="margin-left: 8px; font-size: 12px; color: #999;">{{ form.navTextSize }}px（默认 14px）</span>
+            </a-form-item>
+
+            <a-form-item label="导航文字颜色">
+              <a-switch
+                v-model:checked="form.navTextAuto"
+                checked-children="跟随底色"
+                un-checked-children="自定义"
+                @change="updateTheme"
+              />
+              <div v-if="!form.navTextAuto" style="margin-top: 12px;">
+                <ThemeColorField
+                  v-model="form.navTextColor"
+                  :presets="presetNavTextColors"
+                  :default-value="defaultTheme.navTextColor"
+                  @change="updateTheme"
+                />
+              </div>
+              <div style="margin-top: 8px; font-size: 12px; color: #999;">
+                跟随底色：亮底配深字、暗底配白字（分隔线也按底色走）；改成自定义后顶栏与侧栏用同一个字色
+              </div>
             </a-form-item>
           </a-form>
         </a-tab-pane>
@@ -49,29 +112,17 @@
                   { label: '🌙 深色', value: true },
                 ]"
                 block
-                @change="onDarkChange"
+                @change="updateTheme"
               />
             </a-form-item>
 
             <a-form-item label="主题色">
-              <div style="display: flex; align-items: center; gap: 16px;">
-                <a-input
-                  v-model:value="form.primaryColor"
-                  type="color"
-                  style="width: 48px; height: 36px; padding: 2px; cursor: pointer;"
-                  @change="onPrimaryColorChange"
-                />
-                <span style="font-family: monospace;">{{ form.primaryColor }}</span>
-                <a-button size="small" @click="resetPrimaryColor">恢复默认</a-button>
-              </div>
-              <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-                <div
-                  v-for="c in presetColors"
-                  :key="c"
-                  :style="{ background: c, width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', border: form.primaryColor === c ? '3px solid #333' : '2px solid #e8e8e8' }"
-                  @click="selectPresetColor(c)"
-                />
-              </div>
+              <ThemeColorField
+                v-model="form.primaryColor"
+                :presets="presetColors"
+                default-value="#1890ff"
+                @change="updateTheme"
+              />
             </a-form-item>
 
             <a-divider>内容区域</a-divider>
@@ -92,12 +143,12 @@
             <a-divider>视觉效果</a-divider>
 
             <a-form-item label="圆角大小">
-              <a-slider v-model:value="form.borderRadius" :min="0" :max="16" :step="1" @change="onBorderRadiusChange" />
+              <a-slider v-model:value="form.borderRadius" :min="0" :max="16" :step="1" @change="updateTheme" />
               <span style="margin-left: 8px; font-size: 12px; color: #999;">{{ form.borderRadius }}px</span>
             </a-form-item>
 
             <a-form-item label="字体大小">
-              <a-select v-model:value="form.fontSize" style="width: 160px;" @change="onFontSizeChange" :options="fontSizeOptions" />
+              <a-select v-model:value="form.fontSize" style="width: 160px;" @change="updateTheme" :options="fontSizeOptions" />
             </a-form-item>
           </a-form>
         </a-tab-pane>
@@ -150,7 +201,7 @@
           <div class="preview-area" :class="{ 'preview-dark': form.isDark }">
             <div class="preview-frame">
               <!-- 模拟顶栏 -->
-              <div class="preview-header" :style="{ background: form.isDark ? '#1f1f1f' : '#fff' }">
+              <div class="preview-header" :style="{ height: previewHeight(form.headerHeight, PREVIEW_SCALE.header), background: form.isDark ? '#1f1f1f' : '#fff' }">
                 <div class="preview-header-left">
                   <div class="preview-logo-dot" :style="{ background: form.primaryColor }" />
                   <span v-if="form.showBreadcrumb" style="font-size: 12px; opacity: 0.5;">首页 / 页面</span>
@@ -169,13 +220,13 @@
                   class="preview-sider"
                   :style="{
                     width: form.collapsed ? '40px' : '120px',
-                    background: form.isDark ? '#000' : '#001529',
+                    background: form.navSideBgColor,
                   }"
                 >
                   <template v-if="form.showLogo">
-                    <div class="preview-sider-logo" :style="{ borderColor: 'rgba(255,255,255,0.1)' }">
+                    <div class="preview-sider-logo" :style="{ borderColor: userStore.navSide.menuTheme === 'light' ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.1)' }">
                       <div class="preview-logo-dot" :style="{ background: form.primaryColor }" />
-                      <span v-if="!form.collapsed" style="color: #fff; font-size: 10px;">{{ form.siteName }}</span>
+                      <span v-if="!form.collapsed" :style="{ color: userStore.navSide.menuTheme === 'light' ? 'rgba(0, 0, 0, 0.88)' : '#fff', fontSize: '10px' }">{{ form.siteName }}</span>
                     </div>
                   </template>
                   <div class="preview-sider-item" v-for="i in 4" :key="i"
@@ -183,7 +234,7 @@
                 </div>
 
                 <!-- 顶导（top/mix） -->
-                <div v-if="form.layout !== 'side'" class="preview-topnav" :style="{ background: form.isDark ? '#000' : '#001529' }">
+                <div v-if="form.layout !== 'side'" class="preview-topnav" :style="{ height: previewHeight(form.navHeight, PREVIEW_SCALE.nav), background: form.navTopBgColor }">
                   <div class="preview-topnav-item" v-for="i in 4" :key="i"
                        :style="{ background: i === 1 ? form.primaryColor : 'transparent' }" />
                 </div>
@@ -212,29 +263,51 @@
           </div>
         </a-tab-pane>
       </a-tabs>
-      <div style="margin-top: 20px; text-align: right; border-top: 1px solid #f0f0f0; padding-top: 16px;">
-        <a-button type="primary" :loading="saving" @click="saveAll">保存设置</a-button>
+      <div class="settings-footer">
+        <span class="settings-footer-hint">导入 / 导出只包含主题外观（布局、主题、导航配色等），不含站点信息与登录页设置</span>
+        <a-space>
+          <a-button @click="exportTheme">
+            <DownloadOutlined /> 导出主题
+          </a-button>
+          <a-upload :show-upload-list="false" accept=".json,application/json" :before-upload="importTheme">
+            <a-button>
+              <UploadOutlined /> 导入主题
+            </a-button>
+          </a-upload>
+          <a-button type="primary" :loading="saving" @click="saveAll">保存设置</a-button>
+        </a-space>
       </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import {
+  AppstoreOutlined,
+  DownloadOutlined,
   MenuFoldOutlined,
   MenuOutlined,
-  AppstoreOutlined,
+  UploadOutlined,
 } from '@ant-design/icons-vue'
-import { useUserStore } from '@/stores/user'
+import { useUserStore, defaultTheme } from '@/stores/user'
+import type { ThemeConfig } from '@/types'
+import ThemeColorField from './ThemeColorField.vue'
 import { commonApi } from '@/api/common'
-import { configApi } from '@/api/config'
+import { themeApi } from '@/api/theme'
+import { downloadJsonFile, readJsonFile } from '@/utils/jsonFile'
 
 const userStore = useUserStore()
 
 const activeTab = ref('layout')
 
 const presetColors = ['#1890ff', '#f5222d', '#fa541c', '#faad14', '#52c41a', '#13c2c2', '#1677ff', '#2f54eb', '#722ed1', '#eb2f96']
+
+// 导航区底色预设：平台现状深蓝、主题主色、白与几个中性色
+const presetNavColors = ['#001529', '#1677ff', '#ffffff', '#f5f7fa', '#1f2937', '#0f172a']
+
+// 导航文字色预设：白、浅灰、深字、主色
+const presetNavTextColors = ['#ffffff', '#d9d9d9', '#000000', '#1890ff']
 
 const fontSizeOptions = [
   { label: '小 (13px)', value: 13 },
@@ -252,6 +325,10 @@ const layoutDesc = (layout: string) => {
   return map[layout] || ''
 }
 
+// 预览区是缩略图：按平台默认高度等比缩放（顶栏 56 → 28、页头 64 → 36）
+const PREVIEW_SCALE = { nav: 1 / 2, header: 9 / 16 }
+const previewHeight = (value: number, ratio: number) => `${Math.round(value * ratio)}px`
+
 // 表单同步自 store
 // 注意: 不能在 setup 顶层访问 document/localStorage（SSR/测试环境会报错，
 // 且 favicon 读取 DOM 绝对 URL 会把部署域名硬编码写回后端）。
@@ -268,6 +345,13 @@ const form = reactive({
   showVersion: userStore.theme.showVersion !== false,
   borderRadius: userStore.theme.borderRadius ?? 6,
   fontSize: userStore.theme.fontSize ?? 14,
+  navHeight: userStore.theme.navHeight ?? defaultTheme.navHeight,
+  headerHeight: userStore.theme.headerHeight ?? defaultTheme.headerHeight,
+  navTopBgColor: userStore.theme.navTopBgColor ?? defaultTheme.navTopBgColor,
+  navSideBgColor: userStore.theme.navSideBgColor ?? defaultTheme.navSideBgColor,
+  navTextSize: userStore.theme.navTextSize ?? defaultTheme.navTextSize,
+  navTextAuto: userStore.theme.navTextAuto ?? defaultTheme.navTextAuto,
+  navTextColor: userStore.theme.navTextColor ?? defaultTheme.navTextColor,
   siteName: userStore.siteName,
   siteDesc: userStore.siteDesc,
   siteLogo: userStore.siteLogo,
@@ -277,8 +361,9 @@ const form = reactive({
   appVersion: userStore.appVersion,
 })
 
-// 同步 store → form（当 store 被其他地方修改时）
-onMounted(() => {
+// 打开设置页时先拉取服务端最新主题再回填表单，避免用本地缓存覆盖服务端的值
+onMounted(async () => {
+  await userStore.fetchTheme()
   syncFormFromStore()
   // 登录背景图以配置中心为唯一事实源（saveSiteInfo 持久化到后端）
   commonApi.getSiteInfo().then((res) => {
@@ -298,6 +383,13 @@ const syncFormFromStore = () => {
   form.showVersion = userStore.theme.showVersion !== false
   form.borderRadius = userStore.theme.borderRadius ?? 6
   form.fontSize = userStore.theme.fontSize ?? 14
+  form.navHeight = userStore.theme.navHeight ?? defaultTheme.navHeight
+  form.headerHeight = userStore.theme.headerHeight ?? defaultTheme.headerHeight
+  form.navTopBgColor = userStore.theme.navTopBgColor ?? defaultTheme.navTopBgColor
+  form.navSideBgColor = userStore.theme.navSideBgColor ?? defaultTheme.navSideBgColor
+  form.navTextSize = userStore.theme.navTextSize ?? defaultTheme.navTextSize
+  form.navTextAuto = userStore.theme.navTextAuto ?? defaultTheme.navTextAuto
+  form.navTextColor = userStore.theme.navTextColor ?? defaultTheme.navTextColor
   form.siteName = userStore.siteName
   form.siteDesc = userStore.siteDesc
   form.siteLogo = userStore.siteLogo
@@ -306,54 +398,31 @@ const syncFormFromStore = () => {
   form.appVersion = userStore.appVersion
 }
 
-// ---- 通用主题更新 ----
-const updateTheme = () => {
-  userStore.updateTheme({
-    layout: form.layout as any,
-    isDark: form.isDark,
-    primaryColor: form.primaryColor,
-    collapsed: form.collapsed,
-    showLogo: form.showLogo,
-    showBreadcrumb: form.showBreadcrumb,
-    showTabs: form.showTabs,
-    showFooter: form.showFooter,
-    showVersion: form.showVersion,
-    borderRadius: form.borderRadius,
-    fontSize: form.fontSize,
-  })
-}
+// ---- 主题：表单 → store 即时预览；写入服务端只发生在「保存设置」或「导入」时 ----
+const buildTheme = (): ThemeConfig => ({
+  layout: form.layout,
+  isDark: form.isDark,
+  primaryColor: form.primaryColor,
+  collapsed: form.collapsed,
+  showLogo: form.showLogo,
+  showBreadcrumb: form.showBreadcrumb,
+  showTabs: form.showTabs,
+  showFooter: form.showFooter,
+  showVersion: form.showVersion,
+  borderRadius: form.borderRadius,
+  fontSize: form.fontSize,
+  navHeight: form.navHeight,
+  headerHeight: form.headerHeight,
+  navTopBgColor: form.navTopBgColor,
+  navSideBgColor: form.navSideBgColor,
+  navTextSize: form.navTextSize,
+  navTextAuto: form.navTextAuto,
+  navTextColor: form.navTextColor,
+})
 
-// ---- 各字段处理（仅保留即时 CSS 视觉反馈，持久化统一由 saveAll 完成）----
-const onLayoutChange = () => { /* 预览 tab 实时响应 form 变化，无需额外操作 */ }
+const updateTheme = () => userStore.updateTheme(buildTheme())
 
-const onDarkChange = () => {
-  if (form.isDark) {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-}
-
-const onPrimaryColorChange = () => {
-  document.documentElement.style.setProperty('--primary-color', form.primaryColor)
-}
-
-const selectPresetColor = (color: string) => {
-  form.primaryColor = color
-  onPrimaryColorChange()
-}
-
-const resetPrimaryColor = () => {
-  form.primaryColor = '#1890ff'
-  onPrimaryColorChange()
-}
-
-const onCollapsedChange = () => {}
-const onBorderRadiusChange = () => {}
-
-const onFontSizeChange = () => {
-  document.documentElement.style.fontSize = form.fontSize + 'px'
-}
+// ---- 站点信息字段的即时副作用（仅 DOM 反馈，持久化统一由 saveAll 完成）----
 
 const onSiteNameChange = () => { document.title = form.siteName }
 
@@ -376,14 +445,12 @@ const onLoginBgChange = () => {}
 const onIdleTimeoutChange = () => {}
 const onAppVersionChange = () => {}
 
-// ---- 统一保存 ----
+// ---- 保存：主题写入服务端（全站一份），站点信息写入配置中心 ----
 const saving = ref(false)
 const saveAll = async () => {
   saving.value = true
   try {
-    // 主题持久化到 Pinia（localStorage）
-    updateTheme()
-    // 站点信息持久化到后端配置中心
+    await userStore.saveTheme(buildTheme())
     await commonApi.saveSiteInfo({
       site_name: form.siteName,
       site_desc: form.siteDesc,
@@ -405,11 +472,57 @@ const saveAll = async () => {
   finally { saving.value = false }
 }
 
+// ---- 主题导入导出（仅外观主题，不含站点信息）----
+const exportTheme = async () => {
+  try {
+    const file = await themeApi.exportTheme()
+    downloadJsonFile('theme', file)
+    message.success('主题配置已导出')
+  } catch { /* interceptor handles error */ }
+}
+
+const confirmImportTheme = (data: unknown) => {
+  Modal.confirm({
+    title: '确认导入主题配置？',
+    content: '文件中出现的主题项会覆盖当前全局主题，未出现的项保持不变；导入后对所有用户生效。',
+    okText: '确认导入',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        userStore.setTheme(await themeApi.importTheme(data))
+        syncFormFromStore()
+        message.success('主题配置已导入')
+      } catch { /* interceptor handles error */ }
+    },
+  })
+}
+
+// 选择文件后先读取并二次确认；返回 false 阻止 a-upload 自动上传
+const importTheme = (file: File): false => {
+  readJsonFile(file).then(confirmImportTheme).catch((e: Error) => message.error(e.message))
+  return false
+}
+
 </script>
 
 <style scoped>
 .theme-settings-inner {
   min-height: 200px;
+}
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.settings-footer-hint {
+  font-size: 12px;
+  color: #999;
 }
 
 /* ===== 预览区域 ===== */
@@ -432,7 +545,7 @@ const saveAll = async () => {
 }
 
 .preview-header {
-  height: 36px;
+  /* 高度由 form.headerHeight 等比缩放后内联给出 */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -503,7 +616,6 @@ const saveAll = async () => {
   align-items: center;
   gap: 6px;
   padding: 0 12px;
-  height: 28px;
 }
 .preview-topnav-item {
   height: 6px;

@@ -57,6 +57,13 @@ func (r *ConfigRepo) FindByGroup(group string) ([]model.Config, error) {
 	return cfgs, err
 }
 
+// FindPlain 查询全部非加密配置（含停用项），按 key 排序，供导出使用。
+func (r *ConfigRepo) FindPlain() ([]model.Config, error) {
+	var cfgs []model.Config
+	err := r.db.Where("is_encrypted = ?", false).Order("key").Find(&cfgs).Error
+	return cfgs, err
+}
+
 // Groups 查询所有不重复的 group。
 func (r *ConfigRepo) Groups() ([]string, error) {
 	var groups []string
@@ -64,8 +71,21 @@ func (r *ConfigRepo) Groups() ([]string, error) {
 	return groups, err
 }
 
+// Create 新增配置。IsActive 带 default:true，GORM 会跳过零值 false，导致停用项被写成启用，
+// 因此插入后若期望停用则显式回写。
 func (r *ConfigRepo) Create(c *model.Config) error {
-	return r.db.Create(c).Error
+	wantActive := c.IsActive
+	if err := r.db.Create(c).Error; err != nil {
+		return err
+	}
+	if wantActive {
+		return nil
+	}
+	if err := r.db.Model(c).Update("is_active", false).Error; err != nil {
+		return err
+	}
+	c.IsActive = false
+	return nil
 }
 
 func (r *ConfigRepo) Update(c *model.Config) error {

@@ -2,10 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import { commonApi } from '@/api/common'
+import { themeApi } from '@/api/theme'
 import type { User, UserInfo, ThemeConfig, Menu } from '@/types'
 
 // 默认主题配置
-const defaultTheme: ThemeConfig = {
+// 导出：主题持久化在 localStorage，旧会话存的 theme 不含后来新增的字段，
+// 直接读会拿到 undefined（拼进 CSS 变量即为非法值，行高会退回 auto），
+// 所以消费方一律用 defaultTheme 兜底。
+export const defaultTheme: ThemeConfig = {
   primaryColor: '#1890ff',
   isDark: false,
   layout: 'side',
@@ -17,6 +21,24 @@ const defaultTheme: ThemeConfig = {
   showVersion: true,
   borderRadius: 6,
   fontSize: 14,
+  navHeight: 56,
+  headerHeight: 64,
+  navTopBgColor: '#001529',
+  navSideBgColor: '#001529',
+  navTextSize: 14,
+  navTextAuto: true,
+  navTextColor: '#ffffff',
+}
+
+// 感知亮度判断（sRGB 权重）：决定导航的文字/边框走深色还是浅色
+const isLightColor = (color: string): boolean => {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(String(color || '').trim())?.[1]
+  if (!hex) return false
+  const n = parseInt(hex, 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150
 }
 
 // refresh token 会话级存储：不进 localStorage（XSS 无法长期续期），
@@ -67,6 +89,27 @@ export const useUserStore = defineStore(
       if (user.value?.is_superuser) return true
       return permissions.value.includes(code)
     }
+
+    // 导航区配色：顶栏与侧栏各一套（底色可不同，antd 菜单的 light/dark 主题随之不同）。
+    // 文字颜色默认按底色亮度自动取，也可以在主题设置里改成固定值；边框线一律跟随底色。
+    const navTokens = (bg: string) => {
+      const light = isLightColor(bg)
+      return {
+        bg,
+        menuTheme: (light ? 'light' : 'dark') as 'light' | 'dark',
+        text:
+          theme.value.navTextAuto || !theme.value.navTextColor
+            ? light
+              ? 'rgba(0, 0, 0, 0.88)'
+              : 'rgba(255, 255, 255, 0.85)'
+            : theme.value.navTextColor,
+        border: light ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.1)',
+      }
+    }
+    const navTopBg = computed(() => theme.value.navTopBgColor ?? defaultTheme.navTopBgColor)
+    const navSideBg = computed(() => theme.value.navSideBgColor ?? defaultTheme.navSideBgColor)
+    const navTop = computed(() => navTokens(navTopBg.value))
+    const navSide = computed(() => navTokens(navSideBg.value))
 
     // Actions
     const setToken = (access: string, refresh: string) => {
@@ -136,13 +179,26 @@ export const useUserStore = defineStore(
       theme.value = { ...theme.value, ...config }
     }
 
-    const toggleCollapsed = () => {
-      theme.value.collapsed = !theme.value.collapsed
+    // 主题以服务端为准（全站一份）；localStorage 里的 theme 只是首屏缓存。
+    const setTheme = (config: ThemeConfig) => {
+      theme.value = { ...defaultTheme, ...config }
     }
 
-    const setPrimaryColor = (color: string) => {
-      theme.value.primaryColor = color
-      document.documentElement.style.setProperty('--primary-color', color)
+    // 拉取失败时沿用本地缓存，不打断页面
+    const fetchTheme = async () => {
+      try {
+        setTheme(await themeApi.get())
+      } catch {
+        /* 沿用本地缓存 */
+      }
+    }
+
+    const saveTheme = async (config: ThemeConfig) => {
+      setTheme(await themeApi.save(config))
+    }
+
+    const toggleCollapsed = () => {
+      theme.value.collapsed = !theme.value.collapsed
     }
 
     const clearToken = () => {
@@ -152,15 +208,6 @@ export const useUserStore = defineStore(
       user.value = null
       permissions.value = []
       menus.value = []
-    }
-
-    const toggleDarkMode = () => {
-      theme.value.isDark = !theme.value.isDark
-      if (theme.value.isDark) {
-        document.documentElement.classList.add('dark')
-      } else {
-        document.documentElement.classList.remove('dark')
-      }
     }
 
     return {
@@ -180,6 +227,8 @@ export const useUserStore = defineStore(
       username,
       avatar,
       hasPermission,
+      navTop,
+      navSide,
       setToken,
       setUserInfo,
       login,
@@ -188,9 +237,10 @@ export const useUserStore = defineStore(
       logout,
       updateTheme,
       toggleCollapsed,
-      setPrimaryColor,
       clearToken,
-      toggleDarkMode,
+      setTheme,
+      fetchTheme,
+      saveTheme,
     }
   },
   {

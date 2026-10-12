@@ -9,7 +9,7 @@
       :selectedKeys="selectedKeys"
       :openKeys="collapsed ? [] : openKeys"
       mode="inline"
-      theme="dark"
+      :theme="navTheme"
       :inline-collapsed="collapsed"
       @select="handleMenuClick"
       @openChange="handleOpenChange"
@@ -34,14 +34,19 @@ import type { SidebarItem } from '@/types'
 const getIcon = resolveIcon
 const userStore = useUserStore()
 
-defineProps<{
-  menus: SidebarItem[]
-  collapsed: boolean
-  selectedKeys: string[]
-  openKeys: string[]
-  showLogo?: boolean
-  showVersion?: boolean
-}>()
+withDefaults(
+  defineProps<{
+    menus: SidebarItem[]
+    collapsed: boolean
+    selectedKeys: string[]
+    openKeys: string[]
+    showLogo?: boolean
+    showVersion?: boolean
+    /** 导航底色是浅色时，antd 菜单要跟着切浅色主题，否则白字看不见 */
+    navTheme?: 'light' | 'dark'
+  }>(),
+  { navTheme: 'dark' }
+)
 
 const emit = defineEmits<{
   select: [key: string]
@@ -63,7 +68,7 @@ const handleOpenChange = (keys: string[]) => {
   width: 256px;
   min-width: 256px;
   height: 100vh;
-  background: #001529;
+  background: var(--admin-nav-side-bg, #001529);
   overflow-y: auto;
   overflow-x: hidden;
   transition: all 0.2s;
@@ -73,30 +78,39 @@ const handleOpenChange = (keys: string[]) => {
   min-width: 80px;
 }
 .logo {
-  height: 64px;
+  /* 与页头行同高：侧栏顶部 Logo 和右侧账号区始终在同一条水平线上 */
+  height: var(--admin-header-height, 64px);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--admin-nav-side-text, #fff);
   font-size: 20px;
   font-weight: bold;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--admin-nav-side-border, rgba(255, 255, 255, 0.1));
 }
 
 .admin-sider {
   display: flex;
   flex-direction: column;
 }
+.admin-sider :deep(.ant-menu),
+.admin-sider :deep(.ant-menu-item),
+.admin-sider :deep(.ant-menu-submenu-title) {
+  font-size: var(--admin-nav-font-size, 14px);
+}
 .admin-sider :deep(.ant-menu) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 菜单底透明，导航底色才能透出来（色由主题配置给） */
+  background: transparent;
 }
 .sider-version {
   padding: 12px 16px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--admin-nav-side-text, rgba(255, 255, 255, 0.3));
+  opacity: 0.5;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--admin-nav-side-border, rgba(255, 255, 255, 0.06));
 }
 </style>

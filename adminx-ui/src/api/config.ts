@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { Config, PaginatedResponse } from '@/types'
+import type { Config, ConfigExportFile, ConfigImportResult, PaginatedResponse } from '@/types'
 
 // 配置中心 API
 export const configApi = {
@@ -24,5 +24,13 @@ export const configApi = {
   // 获取所有分组列表
   getGroups: (): Promise<string[]> =>
     request.get('/config/groups/'),
+
+  // 导出全部非加密字典配置（文件内容）
+  exportConfigs: (): Promise<ConfigExportFile> =>
+    request.get('/config/export/'),
+
+  // 按 key 覆盖式导入（file 为解析后的 JSON，格式由后端校验）
+  importConfigs: (file: unknown): Promise<ConfigImportResult> =>
+    request.post('/config/import/', file),
 
 }

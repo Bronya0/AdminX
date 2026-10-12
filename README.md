@@ -85,6 +85,7 @@ AdminX/
 | | `GET /api/v1/menu/tree/` | 当前用户菜单树 |
 | **配置中心** | `GET/POST/PUT/DELETE /api/v1/config/` | 动态配置 CRUD |
 | | `GET /api/v1/config/by_group/` | 按分组批量查询 |
+| | `GET /api/v1/config/export/` `POST /api/v1/config/import/` | 字典配置 JSON 导出 / 按 key 覆盖式导入 |
 | **监控** | `GET /api/v1/monitor/resources/` | 系统资源实时数据 |
 | **集群** | `GET/POST/PUT/DELETE /api/v1/cluster/nodes/` | 集群节点管理 |
 | | `GET /api/v1/cluster/nodes/overview/` | 集群概览 |
@@ -99,6 +100,8 @@ AdminX/
 | **通知** | `GET/POST /api/v1/notification/` | 通知中心 + Webhook |
 | **健康检查** | `GET /api/v1/common/health/` | 健康检查 |
 | **站点信息** | `GET /api/v1/common/site-info/` | 站点信息 |
+| **主题设置** | `GET/POST /api/v1/common/theme/` | 全局主题（服务端存储，全站一份） |
+| | `GET /api/v1/common/theme/export/` `POST /api/v1/common/theme/import/` | 主题 JSON 导出 / 字段覆盖式导入 |
 
 ## 业务容器开发
 
