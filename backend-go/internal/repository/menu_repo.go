@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 
 	"adminx/internal/model"
@@ -48,12 +50,14 @@ func (r *MenuRepo) AllActive() ([]model.Menu, error) {
 }
 
 // MenusByUser 通过 user_id 查关联的活跃菜单（用户角色 → 菜单）。
+// 必须过滤停用角色，与 RBAC 判定口径一致：否则停用角色后侧栏仍显示菜单、点进去全是 403。
 func (r *MenuRepo) MenusByUser(userID string) ([]model.Menu, error) {
 	var menus []model.Menu
 	err := r.db.Distinct("menus.*").
 		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
 		Joins("JOIN user_roles ON user_roles.role_id = role_menus.role_id").
-		Where("user_roles.user_id = ? AND menus.is_active = ?", userID, true).
+		Joins("JOIN roles ON roles.id = role_menus.role_id").
+		Where("user_roles.user_id = ? AND menus.is_active = ? AND roles.is_active = ?", userID, true, true).
 		Order("menus.sort_order ASC, menus.id ASC").
 		Find(&menus).Error
 	return menus, err
@@ -69,7 +73,29 @@ func (r *MenuRepo) Update(m *model.Menu) error {
 	return r.db.Save(m).Error
 }
 
-// Delete 删除菜单。
+// ErrMenuHasChildren 删除含子菜单的菜单时返回（service 层翻译为 400）。
+var ErrMenuHasChildren = errors.New("menu has children")
+
+// CountChildren 统计直接子菜单数量。
+func (r *MenuRepo) CountChildren(id int64) (int64, error) {
+	var n int64
+	if err := r.db.Model(&model.Menu{}).Where("parent_id = ?", id).Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+// Delete 删除菜单：有子菜单时拒绝；在事务内先清 role_menus 再删行。
 func (r *MenuRepo) Delete(id int64) error {
-	return r.db.Delete(&model.Menu{}, id).Error
+	if n, err := r.CountChildren(id); err != nil {
+		return err
+	} else if n > 0 {
+		return ErrMenuHasChildren
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM role_menus WHERE menu_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Menu{}, id).Error
+	})
 }

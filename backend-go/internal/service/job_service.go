@@ -194,8 +194,8 @@ func (s *JobService) Delete(id string) error {
 	return nil
 }
 
-// RunOnce 手动触发一次任务执行（不受调度器控制，同样写 job_logs）。
-// 手动执行必须留痕：否则管理员跑过的副作用在日志里查不到。
+// RunOnce 手动触发一次任务执行：先建 running log，异步执行，立即返回 logID。
+// 调用方按返回的 logID 轮询 logs 表拿执行结果（避免 HTTP 长时间阻塞）。
 func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 	job, err := s.repo.FindByID(id)
 	if err != nil {
@@ -204,7 +204,32 @@ func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 		}
 		return "", apperr.ErrInternal
 	}
-	return s.executeWithLog(ctx, job)
+	now := time.Now()
+	logEntry := &model.JobLog{
+		JobID:     job.ID,
+		Status:    "running",
+		StartedAt: &now,
+	}
+	if err := s.repo.CreateLog(logEntry); err != nil {
+		return "", apperr.ErrInternal
+	}
+	logID := logEntry.ID
+	go func() {
+		result, execErr := s.executeJob(context.Background(), job)
+		finished := time.Now()
+		logEntry.FinishedAt = &finished
+		if execErr != nil {
+			logEntry.Status = "failed"
+			logEntry.Result = truncateStr(execErr.Error(), 500)
+		} else {
+			logEntry.Status = "success"
+			logEntry.Result = truncateStr(result, 500)
+		}
+		if err := s.repo.UpdateLog(logEntry); err != nil {
+			s.log.Error("更新任务日志失败", "log_id", logID, "error", err)
+		}
+	}()
+	return logID, nil
 }
 
 // ExecuteJob 调度器调用的执行入口（带 JobLog 记录）。
@@ -223,18 +248,22 @@ func (s *JobService) ExecuteJob(ctx context.Context, jobID string) {
 // RecordSkippedLock 记录"因未取得分布式锁而跳过本次执行"。
 // gocron 拿不到锁时直接 Skip（不调用任务函数、不写任何日志），
 // 必须由 AfterLockError 监听器补一条 failed 记录，否则漏跑完全无痕。
+// DB 写库异步化：监听器跑在调度器回调里，同步写库会拖住调度循环。
 func (s *JobService) RecordSkippedLock(jobID string, cause error) {
-	now := time.Now()
-	entry := &model.JobLog{
-		JobID:      jobID,
-		Status:     "failed",
-		Result:     truncateStr("未取得分布式锁，本次执行被跳过: "+cause.Error(), 500),
-		StartedAt:  &now,
-		FinishedAt: &now,
-	}
-	if err := s.repo.CreateLog(entry); err != nil {
-		s.log.Warn("写跳过执行日志失败", "job_id", jobID, "error", err)
-	}
+	msg := "未取得分布式锁，本次执行被跳过: " + cause.Error()
+	go func() {
+		now := time.Now()
+		entry := &model.JobLog{
+			JobID:      jobID,
+			Status:     "failed",
+			Result:     truncateStr(msg, 500),
+			StartedAt:  &now,
+			FinishedAt: &now,
+		}
+		if err := s.repo.CreateLog(entry); err != nil {
+			s.log.Warn("写跳过执行日志失败", "job_id", jobID, "error", err)
+		}
+	}()
 }
 
 // executeWithLog 执行任务并写 job_logs（running → success/failed）。

@@ -198,8 +198,14 @@ func TestConfigTransfer_SkipsServiceOwnedGroups(t *testing.T) {
 	db := setupTestDB(t)
 	repo := repository.NewConfigRepo(db)
 	svc := NewConfigService(db, repo, nil, nil)
-	mustCreateConfig(t, svc, ConfigCreateInput{Key: themeConfigKey, Value: `{"layout":"top"}`, ValueType: "json", Group: themeConfigGroup})
-	mustCreateConfig(t, svc, ConfigCreateInput{Key: "site.name", Value: "平台", Group: siteConfigGroup})
+	// 专用分组只能由对应服务写入：这里用 SetValue 模拟 ThemeService/SiteInfoService 的写入路径
+	// （通用 Create 已拒绝专用分组）
+	if err := svc.SetValue(themeConfigKey, `{"layout":"top"}`, "json", "主题设置", themeConfigGroup); err != nil {
+		t.Fatalf("写入主题配置失败: %v", err)
+	}
+	if err := svc.SetValue("site.name", "平台", "string", "站点名称", siteConfigGroup); err != nil {
+		t.Fatalf("写入站点配置失败: %v", err)
+	}
 	mustCreateConfig(t, svc, ConfigCreateInput{Key: "plain.key", Value: "v1"})
 
 	file, err := svc.ExportFile()

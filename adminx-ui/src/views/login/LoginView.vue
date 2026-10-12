@@ -41,11 +41,12 @@
           >
             <template #suffix>
               <img
-                v-if="captchaSvg"
+                v-if="captchaImage"
                 class="captcha-img"
-                :src="captchaDataUri"
+                :src="captchaImage"
+                alt="验证码"
+                title="看不清？点击刷新"
                 @click="fetchCaptcha"
-                style="cursor: pointer; width: 100px; height: 36px"
               />
             </template>
           </a-input>
@@ -89,19 +90,12 @@ const loading = ref(false)
 const rememberMe = ref(false)
 const REMEMBER_KEY = 'adminx_remember_username' 
 const captchaEnabled = ref(false)
-const captchaSvg = ref('')
+const captchaImage = ref('')
 const captchaId = ref('')
 const formRef = ref()
 const siteName = ref('AdminX')
 const siteDesc = ref('企业级 Admin 框架')
 const loginBgImage = ref('')
-
-// SVG 验证码 data URI（用 img 标签替代 v-html 防 XSS）
-const captchaDataUri = computed(() => {
-  if (!captchaSvg.value) return ''
-  const encoded = btoa(new TextEncoder().encode(captchaSvg.value).reduce((s, b) => s + String.fromCharCode(b), ''))
-  return 'data:image/svg+xml;base64,' + encoded
-})
 
 // 表单状态
 const formState = reactive({
@@ -118,14 +112,23 @@ const rules = computed(() => ({
   captchaText: [{ required: captchaEnabled.value, message: '请输入验证码', trigger: 'blur' }],
 }))
 
-// 获取验证码
-const fetchCaptcha = async () => {
+// 获取验证码（返回是否成功：加载失败时登录页要给出明确提示，
+// 否则用户只看到一个空的验证码输入框）
+const fetchCaptcha = async (): Promise<boolean> => {
   try {
     const res = await captchaApi.getCaptcha()
+    // 后端未返回图片（版本不匹配等）按失败处理：不校验的话页面只会空白，
+    // 看不出是接口出错还是渲染问题
+    if (!res.image) {
+      console.error('验证码接口未返回图片（后端版本可能不匹配）', res)
+      return false
+    }
     captchaId.value = res.captchaId
-    captchaSvg.value = res.svg
+    captchaImage.value = res.image
+    return true
   } catch (e) {
     console.error('获取验证码失败', e)
+    return false
   }
 }
 
@@ -172,6 +175,16 @@ const bgStyle = computed(() => {
   return {}
 })
 
+// 挂载时读站点信息里的验证码开关（公共端点返回，后端默认开启）。
+// 读不到时按“需要”处理：登录页宁可多显示一次验证码，也不能漏掉这层防爆破校验。
+const applyCaptchaRequired = async (required: boolean) => {
+  captchaEnabled.value = required
+  if (!required) return
+  if (!(await fetchCaptcha())) {
+    message.error('验证码加载失败，请检查后端服务与 Redis 配置')
+  }
+}
+
 onMounted(async () => {
   // 清除残留的旧 token
   userStore.clearToken()
@@ -183,15 +196,19 @@ onMounted(async () => {
       formState.username = remembered
     }
   } catch { /* ignore */ }
-  // 站点名称/背景图以配置中心为唯一事实源（此前本地 localStorage 值会覆盖服务端配置）
+  // 站点名称/背景图/验证码开关以配置中心为唯一事实源
+  // （此前本地 localStorage 值会覆盖服务端配置）
+  let captchaRequired = true
   try {
     const res = await commonApi.getSiteInfo()
     siteName.value = res.site_name
     siteDesc.value = res.site_desc
     loginBgImage.value = res.login_bg_image || ''
+    if (typeof res.login_captcha_required === 'boolean') captchaRequired = res.login_captcha_required
   } catch (e) {
-    // 使用默认值
+    // 使用默认值（含验证码默认开启）
   }
+  await applyCaptchaRequired(captchaRequired)
 })
 </script>
 
@@ -229,16 +246,12 @@ onMounted(async () => {
 }
 
 .captcha-img {
-  width: 100px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.captcha-img svg {
-  width: 100%;
-  height: 100%;
+  width: 120px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
 }
 
 .login-footer {

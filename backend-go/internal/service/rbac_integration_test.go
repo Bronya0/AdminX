@@ -473,6 +473,7 @@ func assertNoAccess(t *testing.T, db any, userID, method, path string) {
 
 // checkPermissionWithDB 直接调 middleware 的 checkPermission 验证权限。
 // db 参数类型为 any 以绕过 middleware 包对 *gorm.DB 的导入限制。
+// 权限判定每次直查库（不做进程内缓存），断言的就是“写库即时生效”的真值。
 func checkPermissionWithDB(db any, userID, method, requestPath string) bool {
 	ok, err := middleware.CheckPermissionForTest(db, userID, method, requestPath)
 	if err != nil {

@@ -208,6 +208,13 @@
               <a-input-number v-model:value="form.idleTimeout" :min="0" :max="480" style="width: 160px;" @change="onIdleTimeoutChange" />
               <span style="margin-left: 8px; color: #999; font-size: 12px;">0 = 不超时</span>
             </a-form-item>
+
+            <a-form-item label="登录验证码">
+              <a-switch v-model:checked="form.loginCaptchaRequired" checked-children="开启" un-checked-children="关闭" />
+              <div style="margin-top: 4px; font-size: 12px; color: #999;">
+                默认开启（防暴力破解基线）；关闭后登录页不再要求验证码，保存后即时生效
+              </div>
+            </a-form-item>
           </a-form>
         </a-tab-pane>
 
@@ -228,6 +235,13 @@
                 </div>
               </div>
 
+              <!-- 模拟顶导（top/mix）：独占一行放在内容之上 ——
+                   preview-body 是横向 flex，塞进去会被压成一竖条 -->
+              <div v-if="form.layout !== 'side'" class="preview-topnav" :style="{ height: previewHeight(form.navHeight, PREVIEW_SCALE.nav), background: form.navTopBgColor }">
+                <div class="preview-topnav-item" v-for="i in 4" :key="i"
+                     :style="{ background: i === 1 ? form.primaryColor : 'transparent' }" />
+              </div>
+
               <!-- 模拟侧边栏 + 内容 -->
               <div class="preview-body">
                 <div
@@ -245,12 +259,6 @@
                     </div>
                   </template>
                   <div class="preview-sider-item" v-for="i in 4" :key="i"
-                       :style="{ background: i === 1 ? form.primaryColor : 'transparent' }" />
-                </div>
-
-                <!-- 顶导（top/mix） -->
-                <div v-if="form.layout !== 'side'" class="preview-topnav" :style="{ height: previewHeight(form.navHeight, PREVIEW_SCALE.nav), background: form.navTopBgColor }">
-                  <div class="preview-topnav-item" v-for="i in 4" :key="i"
                        :style="{ background: i === 1 ? form.primaryColor : 'transparent' }" />
                 </div>
 
@@ -360,15 +368,17 @@ const form = reactive({
   loginBgImage: '',
   idleTimeout: userStore.idleTimeout,
   appVersion: userStore.appVersion,
+  loginCaptchaRequired: true,
 })
 
 // 打开设置页时先拉取服务端最新主题再回填表单，避免用本地缓存覆盖服务端的值
 onMounted(async () => {
   await userStore.fetchTheme()
   syncFormFromStore()
-  // 登录背景图以配置中心为唯一事实源（saveSiteInfo 持久化到后端）
+  // 登录背景图/验证码开关以配置中心为唯一事实源（saveSiteInfo 持久化到后端）
   commonApi.getSiteInfo().then((res) => {
     if (res.login_bg_image !== undefined) form.loginBgImage = res.login_bg_image || ''
+    if (typeof res.login_captcha_required === 'boolean') form.loginCaptchaRequired = res.login_captcha_required
   }).catch(() => { /* 静默：保持默认 */ })
 })
 
@@ -460,6 +470,7 @@ const saveAll = async () => {
       idle_timeout: form.idleTimeout,
       login_bg_image: form.loginBgImage,
       app_version: form.appVersion,
+      login_captcha_required: form.loginCaptchaRequired,
     })
     // 同步 store 中的站点信息字段
     userStore.siteName = form.siteName

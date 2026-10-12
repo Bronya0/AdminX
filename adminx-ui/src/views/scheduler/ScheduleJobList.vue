@@ -6,25 +6,6 @@
         <SearchField label="任务名称">
           <a-input v-model:value="searchForm.search" placeholder="名称" allow-clear @pressEnter="handleSearch" />
         </SearchField>
-        <SearchField label="类型">
-          <a-select v-model:value="searchForm.command_type" placeholder="全部" allow-clear>
-            <a-select-option value="python">Python 函数</a-select-option>
-            <a-select-option value="shell">Shell 命令</a-select-option>
-          </a-select>
-        </SearchField>
-        <SearchField label="触发">
-          <a-select v-model:value="searchForm.trigger_type" placeholder="全部" allow-clear>
-            <a-select-option value="cron">Cron</a-select-option>
-            <a-select-option value="interval">间隔</a-select-option>
-            <a-select-option value="date">指定时间</a-select-option>
-          </a-select>
-        </SearchField>
-        <SearchField label="状态">
-          <a-select v-model:value="searchForm.is_active" placeholder="全部" allow-clear>
-            <a-select-option :value="true">启用</a-select-option>
-            <a-select-option :value="false">禁用</a-select-option>
-          </a-select>
-        </SearchField>
 
         <template #actions>
           <a-button type="primary" @click="handleSearch"><SearchOutlined /> 搜索</a-button>
@@ -40,7 +21,6 @@
         <a-button @click="handleReload"><ReloadOutlined /> 重载调度器</a-button>
         <template #right>
           <a-tag :color="schedulerRunning ? 'green' : 'red'">{{ schedulerRunning ? '调度器运行中' : '调度器未启动' }}</a-tag>
-          <a-tag v-if="schedulerJobCount !== null">APS 任务: {{ schedulerJobCount }}</a-tag>
         </template>
       </TableToolbar>
 
@@ -210,7 +190,7 @@ import TableToolbar from '@/components/TableToolbar.vue'
 import type { ScheduleJob, JobLog } from '@/types'
 
 // ── 搜索 ──
-const searchForm = ref({ search: '', command_type: undefined as string | undefined, trigger_type: undefined as string | undefined, is_active: undefined as boolean | undefined })
+const searchForm = ref({ search: '' })
 
 // ── 表格 ──
 const columns = [
@@ -235,7 +215,6 @@ const tableData = ref<ScheduleJob[]>([])
 const loading = ref(false)
 const pagination = ref({ current: 1, pageSize: 10, total: 0, showTotal: (total: number) => `共 ${total} 条` })
 const schedulerRunning = ref(false)
-const schedulerJobCount = ref<number | null>(null)
 const runLoadingMap = reactive<Record<string, boolean>>({})
 
 // 展开行日志
@@ -340,9 +319,6 @@ const fetchData = async () => {
   try {
     const params: any = { page: pagination.value.current, size: pagination.value.pageSize }
     if (searchForm.value.search) params.search = searchForm.value.search
-    if (searchForm.value.command_type) params.command_type = searchForm.value.command_type
-    if (searchForm.value.trigger_type) params.trigger_type = searchForm.value.trigger_type
-    if (searchForm.value.is_active !== undefined) params.is_active = searchForm.value.is_active
     const res = await scheduleJobApi.getJobs(params)
     tableData.value = res.results
     pagination.value.total = res.count
@@ -352,19 +328,22 @@ const fetchData = async () => {
 const fetchSchedulerStatus = async () => {
   try {
     const s = await scheduleJobApi.getStatus()
-    schedulerRunning.value = s.running
-    schedulerJobCount.value = s.job_count
+    schedulerRunning.value = s.scheduler_alive
   } catch { /* ignore */ }
 }
 
 // ── 展开日志 ──
 const handleExpand = async (expanded: boolean, record: ScheduleJob) => {
+  // expandedRows 是受控展开键：必须与视图同步维护，否则展开态与视图错位
+  // （展开不 push 会闪开又收起，收起不移除会留下打不开的幽灵 key）
   if (expanded) {
+    if (!expandedRows.value.includes(record.id)) expandedRows.value.push(record.id)
     try {
-      const res = await scheduleJobApi.getLogs({ page: 1, size: 10, job: record.id })
+      const res = await scheduleJobApi.getLogs({ page: 1, size: 10, job_id: record.id })
       logMap.value[record.id] = res.results
     } catch { logMap.value[record.id] = [] }
   } else {
+    expandedRows.value = expandedRows.value.filter((id) => id !== record.id)
     // 收起时清理缓存，避免下次展开瞬间渲染旧数据造成闪烁
     delete logMap.value[record.id]
   }
@@ -372,7 +351,7 @@ const handleExpand = async (expanded: boolean, record: ScheduleJob) => {
 
 // ── 操作 ──
 const handleSearch = () => { pagination.value.current = 1; fetchData() }
-const resetSearch = () => { searchForm.value = { search: '', command_type: undefined, trigger_type: undefined, is_active: undefined }; pagination.value.current = 1; fetchData() }
+const resetSearch = () => { searchForm.value = { search: '' }; pagination.value.current = 1; fetchData() }
 const handleTableChange = (pag: any) => { pagination.value.current = pag.current; pagination.value.pageSize = pag.pageSize; fetchData() }
 
 const displayContent = (job: ScheduleJob) => job.command_type === 'shell' ? (job.command || '-') : (job.handler || '-')

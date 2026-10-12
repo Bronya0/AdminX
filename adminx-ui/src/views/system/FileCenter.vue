@@ -90,7 +90,15 @@ const handleTableChange = (pag: any) => {
   fetchData()
 }
 
+const MAX_UPLOAD_SIZE = 100 * 1024 * 1024 // 100MB（与后端上限对齐）
+
 const handleUpload = async (options: any) => {
+  // 前端先拦截超限文件：否则 100MB+ 的包仍会完整上传，浪费带宽后才被后端拒绝
+  if (options.file?.size > MAX_UPLOAD_SIZE) {
+    message.error('文件超过 100MB 上限，无法上传')
+    options.onError?.(new Error('文件超过 100MB 上限'))
+    return
+  }
   uploading.value = true
   try {
     await fileApi.upload(options.file)

@@ -44,7 +44,8 @@ type WebhookConfig struct {
 	ID        string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name      string    `gorm:"size:128;not null" json:"name"`
 	URL       string    `gorm:"size:512;not null" json:"url"`
-	Secret    string    `gorm:"size:256;not null;default:''" json:"secret"` // HMAC 签名密钥
+	// Secret 是 HMAC 签名密钥，任何响应都不得回传（只经 WebhookConfigDTO 暴露 has_secret）
+	Secret    string    `gorm:"size:256;not null;default:''" json:"-"`
 	Events    string    `gorm:"size:256;not null;default:'info,success,warning,error'" json:"events"`
 	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`

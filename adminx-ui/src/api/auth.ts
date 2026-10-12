@@ -43,7 +43,7 @@ export const authApi = {
 }
 
 export const userApi = {
-  getUsers: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; role?: string; is_online?: string }): Promise<PaginatedResponse<User>> =>
+  getUsers: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; role?: string }): Promise<PaginatedResponse<User>> =>
     request.get('/accounts/users/', { params }),
 
   getRoleOptions: (): Promise<{ name: string }[]> =>
@@ -63,7 +63,7 @@ export const userApi = {
 }
 
 export const roleApi = {
-  getRoles: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; desc?: string }): Promise<PaginatedResponse<Role>> =>
+  getRoles: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<Role>> =>
     request.get('/accounts/roles/', { params }),
 
   getMenuTree: (): Promise<Menu[]> =>
@@ -88,15 +88,16 @@ export const roleApi = {
 
 
 export const loginLogApi = {
-  getLoginLogs: (params?: { page?: number; size?: number; search?: string; ip?: string; success?: boolean; created_at__gte?: string; created_at__lte?: string }): Promise<PaginatedResponse<LoginLog>> =>
+  getLoginLogs: (params?: { page?: number; size?: number; username?: string; ip?: string }): Promise<PaginatedResponse<LoginLog>> =>
     request.get('/accounts/login-logs/', { params }),
 }
 
 export const captchaApi = {
-  getCaptcha: (): Promise<{ captchaId: string; svg: string }> =>
+  // image 是后端拼好的 data:image/png;base64,... 完整 data URI（PNG 而非 SVG：
+  // SVG 是文本格式，答案就写在节点里，抓一次响应即可读出）
+  getCaptcha: (): Promise<{ captchaId: string; image: string }> =>
     request.get('/captcha/captcha/').then((res: any) => ({
       captchaId: res.captcha_id,
-      svg: res.svg,
+      image: res.image,
     })),
-
 }

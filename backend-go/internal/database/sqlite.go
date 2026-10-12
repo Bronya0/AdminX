@@ -249,6 +249,11 @@ func SQLiteStatements() []string {
 			disk_write_m_bps REAL NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS captcha_codes (
+			id TEXT PRIMARY KEY,
+			answer TEXT NOT NULL,
+			expires_at DATETIME NOT NULL
+		)`,
 	}
 }
 

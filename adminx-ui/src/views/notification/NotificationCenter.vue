@@ -15,27 +15,9 @@
 
       <div style="margin-bottom: 16px">
         <SearchBar>
-          <SearchField label="标题">
-            <a-input-search
-              v-model:value="searchText"
-              placeholder="搜索通知标题..."
-              allow-clear
-              @search="page = 1; fetchData()"
-            />
-          </SearchField>
-          <SearchField label="类型">
-            <a-select v-model:value="filterType" placeholder="全部类型" allow-clear @change="page = 1; fetchData()">
-              <a-select-option value="info">信息</a-select-option>
-              <a-select-option value="success">成功</a-select-option>
-              <a-select-option value="warning">警告</a-select-option>
-              <a-select-option value="error">错误</a-select-option>
-            </a-select>
-          </SearchField>
-          <SearchField label="状态">
-            <a-select v-model:value="filterRead" placeholder="全部状态" allow-clear @change="page = 1; fetchData()">
-              <a-select-option :value="false">未读</a-select-option>
-              <a-select-option :value="true">已读</a-select-option>
-            </a-select>
+          <!-- 后端只支持 unread 一个过滤条件：标题/类型筛不了，就不放控件（放了也是静默无效） -->
+          <SearchField label="只看未读">
+            <a-switch v-model:checked="unreadOnly" @change="page = 1; fetchData()" />
           </SearchField>
 
           <template #actions>
@@ -160,7 +142,7 @@
           <a-input v-model:value="whForm.url" placeholder="https://hooks.example.com/alert" />
         </a-form-item>
         <a-form-item label="签名密钥">
-          <a-input-password v-model:value="whForm.secret" placeholder="HMAC-SHA256 密钥（可选）" />
+          <a-input-password v-model:value="whForm.secret" placeholder="HMAC-SHA256 密钥（留空表示不修改）" />
         </a-form-item>
         <a-form-item label="触发事件">
           <a-select v-model:value="whForm.events" mode="multiple" placeholder="选择触发事件">
@@ -202,9 +184,7 @@ const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const unreadCount = ref(0)
-const searchText = ref('')
-const filterType = ref<string | undefined>(undefined)
-const filterRead = ref<boolean | undefined>(undefined)
+const unreadOnly = ref(false)
 
 const tagColor = (type: string) =>
   ({ info: 'blue', success: 'green', warning: 'orange', error: 'red' })[type] || 'default'
@@ -215,16 +195,17 @@ const typeLabel = (type: string) =>
 const fetchData = async () => {
   loading.value = true
   try {
-    const res = await notificationApi.list({
-      page: page.value,
-      size: pageSize.value,
-      search: searchText.value || undefined,
-      notification_type: filterType.value,
-      is_read: filterRead.value,
-    })
+    // 列表与未读数无依赖，并行取（串行会让每次翻页多等一倍 RTT）
+    const [res, cnt] = await Promise.all([
+      notificationApi.list({
+        page: page.value,
+        size: pageSize.value,
+        unread: unreadOnly.value ? true : undefined,
+      }),
+      notificationApi.unreadCount(),
+    ])
     listData.value = res.results
     total.value = res.count
-    const cnt = await notificationApi.unreadCount()
     unreadCount.value = cnt.count
   } finally {
     loading.value = false
@@ -246,21 +227,35 @@ const onPageChange = (p: number, ps: number) => {
 
 const handleMarkRead = async (item: Notification) => {
   if (item.is_read) return
-  await notificationApi.markRead(item.id)
+  // 乐观更新，失败回滚并恢复未读数（否则 UI 显示已读、后端仍是未读，刷新后“复活”）
   item.is_read = true
   unreadCount.value = Math.max(0, unreadCount.value - 1)
+  try {
+    await notificationApi.markRead(item.id)
+  } catch {
+    item.is_read = false
+    unreadCount.value += 1
+  }
 }
 
 const handleMarkAllRead = async () => {
-  await notificationApi.markAllRead()
+  // 快照用于失败回滚
+  const prevRead = listData.value.map((item) => item.is_read ?? false)
+  const prevUnread = unreadCount.value
   unreadCount.value = 0
   listData.value.forEach(item => { item.is_read = true })
-  // 同步更新头部 badge（重新查询后端确保一致性）
   try {
-    const cnt = await notificationApi.unreadCount()
-    unreadCount.value = cnt.count
-  } catch { /* ignore */ }
-  message.success('已全部标记已读')
+    await notificationApi.markAllRead()
+    // 同步更新头部 badge（重新查询后端确保一致性）
+    try {
+      const cnt = await notificationApi.unreadCount()
+      unreadCount.value = cnt.count
+    } catch { /* ignore */ }
+    message.success('已全部标记已读')
+  } catch {
+    listData.value.forEach((item, i) => { item.is_read = prevRead[i] ?? false })
+    unreadCount.value = prevUnread
+  }
 }
 
 // ── Webhook 配置 ──
@@ -320,7 +315,7 @@ const whEdit = (record: WebhookConfig) => {
   whForm.value = {
     name: record.name,
     url: record.url,
-    secret: record.secret || '',
+    secret: '',
     events: (record.events || '').split(',').filter(Boolean),
     is_active: record.is_active,
   }

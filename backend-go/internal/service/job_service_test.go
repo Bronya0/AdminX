@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"adminx/internal/repository"
 )
@@ -139,12 +140,31 @@ func TestJobService_RunOnce(t *testing.T) {
 		TriggerConfig: `{"minutes":5}`,
 	})
 
-	result, err := svc.RunOnce(context.Background(), job.ID)
+	// RunOnce 异步执行：立即返回 logID，调用方轮询 logs 拿结果
+	logID, err := svc.RunOnce(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("RunOnce 失败: %v", err)
 	}
-	if result == "" {
-		t.Error("执行结果为空")
+	if logID == "" {
+		t.Error("应返回 logID")
+	}
+	// 轮询等待异步执行落库（最多 5s）
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		logs, _, err := svc.ListLogs(0, 10, job.ID, "")
+		if err != nil {
+			t.Fatalf("ListLogs 失败: %v", err)
+		}
+		if len(logs) > 0 && logs[0].Status == "success" {
+			if logs[0].Result == "" {
+				t.Error("执行结果为空")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("异步执行 5s 内未落库 success 日志: %+v", logs)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -164,9 +184,16 @@ func TestJobService_RunOnce_EmptyHandler(t *testing.T) {
 
 	job, _ := svc.Create(JobCreateInput{Name: "no-handler", TriggerType: "interval", TriggerConfig: `{"minutes":5}`})
 
-	_, err := svc.RunOnce(context.Background(), job.ID)
-	if err == nil {
-		t.Fatal("无 handler 的任务应返回 error")
+	// 异步执行：立即返回 logID；执行失败落在 logs 里（轮询 failed 状态）
+	logID, err := svc.RunOnce(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("RunOnce 应立即返回 logID: %v", err)
+	}
+	if logID == "" {
+		t.Fatal("应返回 logID")
+	}
+	if !waitLogStatus(t, svc, job.ID, "failed", 5*time.Second) {
+		t.Fatal("无 handler 的任务应在 logs 里记 failed")
 	}
 }
 
@@ -181,9 +208,11 @@ func TestJobService_RunOnce_UnregisteredHandler(t *testing.T) {
 		TriggerConfig: `{"minutes":5}`,
 	})
 
-	_, err := svc.RunOnce(context.Background(), job.ID)
-	if err == nil {
-		t.Fatal("未注册的 handler 应返回 error")
+	if _, err := svc.RunOnce(context.Background(), job.ID); err != nil {
+		t.Fatalf("RunOnce 应立即返回 logID: %v", err)
+	}
+	if !waitLogStatus(t, svc, job.ID, "failed", 5*time.Second) {
+		t.Fatal("未注册的 handler 应在 logs 里记 failed")
 	}
 }
 
@@ -199,14 +228,33 @@ func TestJobService_RunOnce_ShellBlockedChars(t *testing.T) {
 		TriggerConfig: `{"minutes":5}`,
 	})
 
-	result, err := svc.RunOnce(context.Background(), job.ID)
-	if err == nil {
-		// 可能 echo 没被阻止，但 ; rm -rf 应被阻止
-		t.Logf("result: %s", result)
+	if _, err := svc.RunOnce(context.Background(), job.ID); err != nil {
+		t.Fatalf("RunOnce 应立即返回 logID: %v", err)
 	}
-	// 预期应因为含 `;` 被拒绝
-	if err == nil {
-		t.Fatal("含禁用字符的 shell 命令应返回 error")
+	// 预期含 `;` 的命令在异步执行里被拒绝，logs 记 failed
+	if !waitLogStatus(t, svc, job.ID, "failed", 5*time.Second) {
+		t.Fatal("含禁用字符的 shell 命令应在 logs 里记 failed")
+	}
+}
+
+// waitLogStatus 轮询该任务的 logs，直到出现期望状态或超时
+func waitLogStatus(t *testing.T, svc *JobService, jobID, status string, timeout time.Duration) bool {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		logs, _, err := svc.ListLogs(0, 10, jobID, "")
+		if err != nil {
+			t.Fatalf("ListLogs 失败: %v", err)
+		}
+		for _, l := range logs {
+			if l.Status == status {
+				return true
+			}
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

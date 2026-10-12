@@ -42,7 +42,7 @@ type Manager struct {
 	issuer        string
 	accessExpire  time.Duration
 	refreshExpire time.Duration
-	rdb           *redis.Client // 可为 nil（无 Redis 时不校验黑名单）
+	rdb           *redis.Client // 可为 nil（无 Redis 时不校验黑名单/不防重放，仅适合单机开发）
 }
 
 // New 构造 JWT Manager。
@@ -118,6 +118,8 @@ func (m *Manager) Parse(tokenString string) (*Claims, error) {
 // ConsumeRefreshToken 原子消费 refresh token（防并发重放）。
 // 首次使用返回 true；已被使用/拉黑返回 false。
 // 无 Redis 时降级放行（无法防重放，但功能可用）。
+// 注意：rdb==nil 意味着重放防护与注销黑名单全部失效，仅适合无 Redis 的单机开发环境；
+// 生产必须配置 Redis，否则登出/轮换的吊销语义只剩 last_logout 一道防线。
 func (m *Manager) ConsumeRefreshToken(ctx context.Context, tokenString string) (bool, error) {
 	if m.rdb == nil {
 		return true, nil

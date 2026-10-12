@@ -44,11 +44,18 @@ security:
   # 留空则加密功能不可用（不报错，创建加密配置时返回 500）
   aes_key: ""
   cors_allowed_origins:             # CORS 允许来源
-    - "http://localhost:5173"        # vite dev
+    # 必须覆盖前端**实际**访问地址：浏览器对 POST/PUT/PATCH/DELETE 一律携带 Origin，
+    # 即使同源（dev 经 vite 代理、生产经反向代理）也会带；来源不在白名单时
+    # gin-contrib/cors 直接返回空体 403，前端只能显示“没有权限执行此操作”，掩盖真实错误。
+    # vite 的 5173 被占用时会自动顺延端口，故把常见顺延端口一并列出。
+    - "http://localhost:5173"        # vite dev（默认端口）
+    - "http://localhost:5174"        # vite dev 顺延端口
+    - "http://localhost:5175"        # vite dev 顺延端口
     - "http://localhost:8080"
   trust_proxy_headers: false         # 生产反向代理后设 true
   component_secret: ""               # 业务组件共享密钥（请求头 X-Component-Token）；空 = /cluster/components/* 无鉴权（仅限本地演示），生产必配
-  login_captcha_required: false      # 登录是否强制验证码（开启后未提交验证码的登录一律拒绝）
+  # 登录验证码开关不在此配置：存配置中心 site.login_captcha_required，默认开启，
+  # 可在「系统设置 → 登录页」随时开关，登录时实时生效（两个来源会互相矛盾）
   ws_allowed_origins: []             # WebSocket 额外允许的 Origin；空 = 仅同源
 
 scheduler:

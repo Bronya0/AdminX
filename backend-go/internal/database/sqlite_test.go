@@ -3,6 +3,7 @@ package database
 import (
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -29,6 +30,7 @@ func openSQLiteMemory(t *testing.T) *gorm.DB {
 func TestSQLiteStatementsCoverAllModels(t *testing.T) {
 	db := openSQLiteMemory(t)
 	tables := sqliteTables(t, db)
+	known := map[string]bool{}
 
 	for _, m := range Models() {
 		stmt := &gorm.Statement{DB: db}
@@ -36,6 +38,7 @@ func TestSQLiteStatementsCoverAllModels(t *testing.T) {
 			t.Fatalf("解析模型失败: %v", err)
 		}
 		schema := stmt.Schema
+		known[schema.Table] = true
 
 		if !tables[schema.Table] {
 			t.Errorf("SQLite DDL 缺少表 %s（模型 %s）", schema.Table, schema.Name)
@@ -56,6 +59,7 @@ func TestSQLiteStatementsCoverAllModels(t *testing.T) {
 			if join == nil {
 				continue
 			}
+			known[join.Name] = true
 			if !tables[join.Name] {
 				t.Errorf("SQLite DDL 缺少中间表 %s", join.Name)
 				continue
@@ -70,6 +74,15 @@ func TestSQLiteStatementsCoverAllModels(t *testing.T) {
 				}
 			}
 		}
+	}
+
+	// 反向守卫：DDL 建了表、Models() 里却没有对应模型时，postgres 走 AutoMigrate 不会建它，
+	// 只有 SQLite 能跑——这类“只在本地正常”的漂移必须在这里拦住。
+	for table := range tables {
+		if strings.HasPrefix(table, "sqlite_") || known[table] {
+			continue
+		}
+		t.Errorf("SQLite DDL 建了表 %s，但 Models() 里没有对应模型（postgres 不会建该表）", table)
 	}
 }
 

@@ -126,8 +126,12 @@ func main() {
 	})
 
 	// 9. Handler 层
-	capMgr := captcha.NewManager(rdb)
-	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, capMgr, cfg.Security.LoginCaptchaRequired, log)
+	// 验证码答案优先存 Redis；未配置 Redis 时降级到数据库表，本地调试不必先装 Redis。
+	capMgr := captcha.NewManager(rdb, db)
+	if rdb == nil {
+		log.Info("未配置 Redis：验证码答案改用数据库表 captcha_codes 存储")
+	}
+	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, capMgr, siteInfoSvc, log)
 	userH := handler.NewUserHandler(userSvc, auditSvc, log)
 	roleH := handler.NewRoleHandler(roleSvc, auditSvc, log)
 	menuH := handler.NewMenuHandler(menuSvc, auditSvc, log)
@@ -177,7 +181,8 @@ func main() {
 	// 12. 路由
 	r := router.New(&router.Deps{
 		Config: cfg, DB: db, Redis: rdb,
-		AuthH: authH, UserH: userH, RoleH: roleH, MenuH: menuH,
+		AuditSvc: auditSvc,
+		AuthH:    authH, UserH: userH, RoleH: roleH, MenuH: menuH,
 		CfgH: cfgH, AuditH: auditH, JobH: jobH, NotifH: notifH,
 		ClsH: clsH, FileH: fileH, MonH: monH, PolicyH: policyH,
 		CapH: capH, WSH: wsH, ThemeH: themeH,

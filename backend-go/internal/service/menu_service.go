@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 
 	apperr "adminx/pkg/errors"
@@ -29,16 +31,26 @@ func (s *MenuService) Tree() ([]model.Menu, error) {
 	return buildMenuTree(menus), nil
 }
 
-// buildMenuTree 平铺菜单按 ParentID 组装为嵌套树（孤儿节点视为顶级）。
+// buildMenuTree 平铺菜单按 ParentID 组装为嵌套树。
+// 孤儿节点（ParentID 非空但父不存在）提升为顶级，保证不丢。
 func buildMenuTree(all []model.Menu) []model.Menu {
+	exists := make(map[int64]bool, len(all))
+	for _, m := range all {
+		exists[m.ID] = true
+	}
 	childrenOf := make(map[int64][]model.Menu, len(all))
 	roots := make([]model.Menu, 0)
 	for _, m := range all {
 		if m.ParentID == nil {
 			roots = append(roots, m)
-		} else {
-			childrenOf[*m.ParentID] = append(childrenOf[*m.ParentID], m)
+			continue
 		}
+		if !exists[*m.ParentID] {
+			// 父不存在：当 root，保证不丢
+			roots = append(roots, m)
+			continue
+		}
+		childrenOf[*m.ParentID] = append(childrenOf[*m.ParentID], m)
 	}
 	var attach func(items []model.Menu) []model.Menu
 	attach = func(items []model.Menu) []model.Menu {
@@ -140,6 +152,7 @@ func (s *MenuService) Create(in MenuCreateInput) (*model.Menu, error) {
 }
 
 // RegisterOrUpdate 按 code 幂等注册菜单（业务容器对接用）：存在则更新，不存在则创建。
+// 支持 ParentID 变更（变更后重算自身 depth + 递归重算子孙 depth）。
 func (s *MenuService) RegisterOrUpdate(in MenuCreateInput) (*model.Menu, error) {
 	existing, err := s.menuRepo.FindByCode(in.Code)
 	if err == nil && existing != nil {
@@ -174,6 +187,21 @@ func (s *MenuService) RegisterOrUpdate(in MenuCreateInput) (*model.Menu, error) 
 		if in.AllowedPaths != nil {
 			existing.AllowedPaths = mustJSON(in.AllowedPaths)
 		}
+		if in.ParentID != nil && !sameParent(existing.ParentID, in.ParentID) {
+			depth, err := s.depthForParent(in.ParentID, existing.ID)
+			if err != nil {
+				return nil, err
+			}
+			existing.ParentID = in.ParentID
+			existing.Depth = depth
+			if err := s.menuRepo.Update(existing); err != nil {
+				return nil, apperr.ErrInternal
+			}
+			if err := s.recalcDescendantDepths(existing.ID, depth); err != nil {
+				return nil, err
+			}
+			return existing, nil
+		}
 		if err := s.menuRepo.Update(existing); err != nil {
 			return nil, apperr.ErrInternal
 		}
@@ -197,7 +225,7 @@ type MenuUpdateInput struct {
 	MenuType       string   `json:"menu_type"`
 	IsActive       *bool    `json:"is_active"`
 	IsVisible      *bool    `json:"is_visible"`
-	SortOrder      int      `json:"sort_order"`
+	SortOrder      *int     `json:"sort_order"`
 	// ParentID nil = 不改动父子关系；传父菜单 ID 时按其深度重算 depth。
 	ParentID     *int64   `json:"parent_id"`
 	AllowedPaths []string `json:"allowed_paths"`
@@ -239,9 +267,15 @@ func (s *MenuService) Update(id int64, in MenuUpdateInput) (*model.Menu, error) 
 	if in.IsVisible != nil {
 		menu.IsVisible = *in.IsVisible
 	}
-	menu.SortOrder = in.SortOrder
+	if in.SortOrder != nil {
+		menu.SortOrder = *in.SortOrder
+	}
 	// 传了 parent_id 才调整层级，并按父级重算 depth（nil = 保持原父子关系）
+	parentChanged := false
 	if in.ParentID != nil {
+		if !sameParent(menu.ParentID, in.ParentID) {
+			parentChanged = true
+		}
 		depth, err := s.depthForParent(in.ParentID, menu.ID)
 		if err != nil {
 			return nil, err
@@ -256,12 +290,66 @@ func (s *MenuService) Update(id int64, in MenuUpdateInput) (*model.Menu, error) 
 	if err := s.menuRepo.Update(menu); err != nil {
 		return nil, apperr.ErrInternal
 	}
+	// 换父后递归重算子孙 depth：否则子孙 depth 还停在旧层级，前端多级菜单变平铺。
+	if parentChanged {
+		if err := s.recalcDescendantDepths(menu.ID, menu.Depth); err != nil {
+			return nil, err
+		}
+	}
 	return menu, nil
 }
 
 func (s *MenuService) Delete(id int64) error {
 	if err := s.menuRepo.Delete(id); err != nil {
+		if errors.Is(err, repository.ErrMenuHasChildren) {
+			return apperr.New(400, "该菜单下有子菜单，请先删除子菜单")
+		}
 		return apperr.ErrInternal
+	}
+	return nil
+}
+
+// sameParent 比较两个 ParentID 是否指向同一父级（都为 nil 或值相等）。
+func sameParent(a, b *int64) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+// recalcDescendantDepths 换父后递归重算全部子孙 depth（BFS 按层下推 parent.Depth+1）。
+func (s *MenuService) recalcDescendantDepths(rootID int64, rootDepth int) error {
+	menus, err := s.menuRepo.All()
+	if err != nil {
+		return apperr.ErrInternal
+	}
+	childrenOf := make(map[int64][]int64, len(menus))
+	depthOf := make(map[int64]int, len(menus))
+	for _, m := range menus {
+		depthOf[m.ID] = m.Depth
+		if m.ParentID != nil {
+			childrenOf[*m.ParentID] = append(childrenOf[*m.ParentID], m.ID)
+		}
+	}
+	depthOf[rootID] = rootDepth
+	queue := []int64{rootID}
+	for len(queue) > 0 {
+		parent := queue[0]
+		queue = queue[1:]
+		for _, child := range childrenOf[parent] {
+			want := depthOf[parent] + 1
+			if depthOf[child] != want {
+				if err := s.db.Model(&model.Menu{}).Where("id = ?", child).
+					Update("depth", want).Error; err != nil {
+					return apperr.ErrInternal
+				}
+				depthOf[child] = want
+			}
+			queue = append(queue, child)
+		}
 	}
 	return nil
 }

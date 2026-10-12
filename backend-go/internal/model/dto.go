@@ -115,6 +115,34 @@ func ToHeartbeatDTO(s *ServiceComponent) HeartbeatDTO {
 	return dto
 }
 
+// WebhookConfigDTO Webhook 序列化视图。Secret 不回传，只告知是否已配置：
+// 拿到签名密钥就能伪造 webhook 签名冒充平台向业务系统投递。
+type WebhookConfigDTO struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	URL       string    `json:"url"`
+	HasSecret bool      `json:"has_secret"`
+	Events    string    `json:"events"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func ToWebhookConfigDTO(w *WebhookConfig) WebhookConfigDTO {
+	return WebhookConfigDTO{
+		ID: w.ID, Name: w.Name, URL: w.URL, HasSecret: w.Secret != "",
+		Events: w.Events, IsActive: w.IsActive, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt,
+	}
+}
+
+func ToWebhookConfigDTOList(ws []WebhookConfig) []WebhookConfigDTO {
+	out := make([]WebhookConfigDTO, len(ws))
+	for i := range ws {
+		out[i] = ToWebhookConfigDTO(&ws[i])
+	}
+	return out
+}
+
 // ToServiceComponentDTO 转换 ServiceComponent 为 DTO（含计算 status）。
 func ToServiceComponentDTO(s *ServiceComponent) ServiceComponentDTO {
 	extra := map[string]interface{}{}

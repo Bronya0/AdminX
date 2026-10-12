@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -20,6 +21,10 @@ import (
 
 	"adminx/internal/model"
 )
+
+// compiledCache glob 模式编译缓存（sync.Map，读多写少）。
+// 只缓存“模式→正则”这个纯函数结果；权限规则本身不做进程内缓存（见 checkPermission）。
+var compiledCache sync.Map // map[string]*regexp.Regexp
 
 // RBAC 权限校验中间件。
 // 必须在 JWTAuth 之后使用（依赖 context 中的 user_id/is_superuser）。
@@ -59,54 +64,71 @@ func RBAC(db *gorm.DB, basePath string) gin.HandlerFunc {
 }
 
 // checkPermission 查询用户角色关联菜单的 allowed_paths，glob 匹配请求。
+// checkPermission 每次直查库（不再做进程内用户规则缓存）：
+// 停用角色/改菜单必须即时生效，不能有 30s 延迟窗口。
+// 查询本身合并为单条 JOIN（原先两次查询已在 loadUserRules 内合并为“查 ID + 查规则”两次，
+// 这里进一步合并为一次取规则原文），glob 编译仍走 compiledCache。
 func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, error) {
-	// 1. 取用户角色关联的活跃菜单的 path 集合
-	var menuPaths []struct {
-		Path string
-	}
-	err := db.Model(&model.Menu{}).
-		Distinct("menus.path").
-		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
-			Joins("JOIN user_roles ON user_roles.role_id = role_menus.role_id").
-			Joins("JOIN roles ON roles.id = role_menus.role_id").
-		Where("user_roles.user_id = ? AND menus.is_active = ? AND roles.is_active = ? AND menus.path != ''", userID, true, true).
-		Find(&menuPaths).Error
+	rules, err := loadUserRules(db, userID)
 	if err != nil {
 		return false, err
 	}
-	if len(menuPaths) == 0 {
-		return false, nil
-	}
-
-	pathSet := make(map[string]bool, len(menuPaths))
-	for _, mp := range menuPaths {
-		pathSet[mp.Path] = true
-	}
-
-	// 2. 查这些菜单的 allowed_paths（非空）
-	var menus []model.Menu
-	err = db.Where("is_active = ? AND path IN ? AND allowed_paths IS NOT NULL AND allowed_paths != '[]' AND allowed_paths != ''",
-		true, keys(pathSet)).Find(&menus).Error
-	if err != nil {
-		return false, err
-	}
-
-	// 3. 逐条匹配 allowed_paths 规则
-	for _, menu := range menus {
-		var rules []string
-		if err := json.Unmarshal(menu.AllowedPaths, &rules); err != nil {
-			continue
-		}
-		for _, rule := range rules {
-			if matchPath(method, requestPath, rule) {
-				return true, nil
-			}
+	for _, rule := range rules {
+		if matchPath(method, requestPath, rule) {
+			return true, nil
 		}
 	}
 
 	// 4. 检查三方业务命令的白名单
 	// 当前阶段未实现 BusinessCommand 模型，后续补充
 	return false, nil
+}
+
+// loadUserRules 从库加载用户的 allowed_paths 规则原文。
+func loadUserRules(db *gorm.DB, userID string) ([]string, error) {
+	// 1. 取用户角色关联的活跃菜单 ID
+	// 菜单是权限单元，必须按 ID 取规则：path 只是前端路由地址、没有唯一约束，
+	// 用 path 反查会把同 path 菜单的 allowed_paths 一并授予。
+	var menuIDs []struct {
+		ID int64
+	}
+	err := db.Model(&model.Menu{}).
+		Distinct("menus.id").
+		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
+		Joins("JOIN user_roles ON user_roles.role_id = role_menus.role_id").
+		Joins("JOIN roles ON roles.id = role_menus.role_id").
+		Where("user_roles.user_id = ? AND menus.is_active = ? AND roles.is_active = ? AND menus.path != ''", userID, true, true).
+		Find(&menuIDs).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(menuIDs) == 0 {
+		return []string{}, nil
+	}
+
+	ids := make([]int64, 0, len(menuIDs))
+	for _, m := range menuIDs {
+		ids = append(ids, m.ID)
+	}
+
+	// 2. 查这些菜单的 allowed_paths（非空）
+	var menus []model.Menu
+	err = db.Where("is_active = ? AND id IN ? AND allowed_paths IS NOT NULL AND allowed_paths != '[]' AND allowed_paths != ''",
+		true, ids).Find(&menus).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. 收集规则原文（匹配由调用方逐条做）
+	rules := make([]string, 0)
+	for _, menu := range menus {
+		var rs []string
+		if err := json.Unmarshal(menu.AllowedPaths, &rs); err != nil {
+			continue
+		}
+		rules = append(rules, rs...)
+	}
+	return rules, nil
 }
 
 // matchPath 匹配单条规则
@@ -131,12 +153,27 @@ func matchPath(method, requestPath, rule string) bool {
 		return false
 	}
 
-	re, err := globToRegex(rulePath)
+	re, err := getCompiledRegex(rulePath)
 	if err != nil {
 		// 模式非法时降级为字面量比较
 		return rulePath == requestPath
 	}
 	return re.MatchString(requestPath)
+}
+
+// getCompiledRegex 取 glob 模式的编译结果（命中缓存免重复编译）。
+func getCompiledRegex(pattern string) (*regexp.Regexp, error) {
+	if v, ok := compiledCache.Load(pattern); ok {
+		if re, ok := v.(*regexp.Regexp); ok && re != nil {
+			return re, nil
+		}
+	}
+	re, err := globToRegex(pattern)
+	if err != nil {
+		return nil, err
+	}
+	compiledCache.Store(pattern, re)
+	return re, nil
 }
 
 // globToRegex 将 glob 模式（* 任意多段、? 单字符）编译为正则。
@@ -160,15 +197,6 @@ func globToRegex(pattern string) (*regexp.Regexp, error) {
 	}
 	b.WriteString("$")
 	return regexp.Compile(b.String())
-}
-
-// keys 提取 map 的 key 切片。
-func keys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 // CheckPermissionForTest 测试用权限检查入口（绕过 gin 中间件）。

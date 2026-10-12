@@ -2,7 +2,7 @@ import { request } from '@/utils/request'
 import type { Notification, PaginatedResponse } from '@/types'
 
 export const notificationApi = {
-  list: (params?: object): Promise<PaginatedResponse<Notification>> =>
+  list: (params?: { page?: number; size?: number; unread?: boolean }): Promise<PaginatedResponse<Notification>> =>
     request.get('/notification/messages/', { params }),
 
   markRead: (id: string): Promise<void> =>

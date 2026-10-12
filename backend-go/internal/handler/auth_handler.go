@@ -16,19 +16,21 @@ import (
 
 // AuthHandler 认证相关 HTTP 处理器。
 type AuthHandler struct {
-	authSvc              *service.AuthService
-	userSvc              *service.UserService
-	menuSvc              *service.MenuService
-	captcha              *captcha.Manager
-	loginCaptchaRequired bool
-	logger               *slog.Logger
+	authSvc *service.AuthService
+	userSvc *service.UserService
+	menuSvc *service.MenuService
+	captcha *captcha.Manager
+	// siteInfo 提供登录验证码开关（运行时可改，存配置中心，缺省 = 开启）。
+	// 不再用启动时的静态 bool：设置页改开关必须即时生效，否则要重启才生效。
+	siteInfo *service.SiteInfoService
+	logger   *slog.Logger
 }
 
 func NewAuthHandler(authSvc *service.AuthService, userSvc *service.UserService, menuSvc *service.MenuService,
-	captchaMgr *captcha.Manager, loginCaptchaRequired bool, logger *slog.Logger) *AuthHandler {
+	captchaMgr *captcha.Manager, siteInfo *service.SiteInfoService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		authSvc: authSvc, userSvc: userSvc, menuSvc: menuSvc,
-		captcha: captchaMgr, loginCaptchaRequired: loginCaptchaRequired,
+		captcha: captchaMgr, siteInfo: siteInfo,
 		logger: logger,
 	}
 }
@@ -49,22 +51,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// 验证码校验：传入则必须有效；login_captcha_required 开启时必须传入。
+	// 验证码校验：传入则必须有效；开关开启时必须传入（每次实时读，改开关即时生效）。
 	// 一次性消费（Verify 内部校验后删除），防止重放。
-	if req.CaptchaID != "" || req.CaptchaText != "" || h.loginCaptchaRequired {
+	required := h.captchaRequired(c)
+	if req.CaptchaID != "" || req.CaptchaText != "" || required {
 		if req.CaptchaID == "" || req.CaptchaText == "" {
 			response.Fail(c, 400, "请输入验证码")
 			return
 		}
-		if h.captcha == nil {
-			// 未配置 Redis 时无法校验验证码：必填模式下拒绝登录（fail-closed），
-			// 非必填模式下降级为不校验（与无 Redis 时整体降级策略一致）。
-			if h.loginCaptchaRequired {
-				response.Fail(c, 503, "验证码服务不可用，请配置 Redis")
-				return
-			}
-		} else {
-			ok, err := h.captcha.Verify(c.Request.Context(), req.CaptchaID, req.CaptchaText)
+		// Available 是“验证码存储是否可用”的唯一判据（Redis 与 captcha_codes 表都没有才算不可用），
+		// 不再是 nil 判空（Manager 由 main 装配，永远非 nil）。
+		// 不可用时：必填模式拒登（fail-closed），非必填模式降级为不校验。
+		available := h.captcha.Available()
+		if !available && required {
+			response.Fail(c, 503, "验证码服务不可用，请检查 Redis 或数据库配置")
+			return
+		}
+		if available {
+			ok, err := h.captcha.Verify(req.CaptchaID, req.CaptchaText)
 			if err != nil {
 				h.logger.WarnContext(c.Request.Context(), "验证码校验失败", "error", err)
 				response.Fail(c, 503, "验证码服务不可用")
@@ -91,6 +95,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"refresh": result.Refresh,
 		"user":    model.ToUserDTO(result.User),
 	})
+}
+
+// captchaRequired 当前登录是否强制验证码（读配置中心，每次实时生效）。
+// siteInfo 缺失或读取失败时按开启处理（fail-closed）。
+func (h *AuthHandler) captchaRequired(c *gin.Context) bool {
+	if h.siteInfo == nil {
+		return true
+	}
+	return h.siteInfo.IsLoginCaptchaRequired(c.Request.Context())
 }
 
 // logoutRequest 登出请求体。
@@ -200,10 +213,15 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
-	// 不允许自己改 is_superuser / roles / password（改密必须走 change-password 接口校验旧密码）
-	in.IsSuperuser = nil
-	in.Roles = nil
-	in.Password = ""
+	// 白名单构造：只保留可自助修改的资料字段。用「逐个置 nil」的黑名单写法时，
+	// 新增字段（如 is_active）会默认落入可自助修改的范围（用户能把自己停用）。
+	in = service.UpdateInput{
+		Email:    in.Email,
+		Phone:    in.Phone,
+		Avatar:   in.Avatar,
+		Desc:     in.Desc,
+		HomePage: in.HomePage,
+	}
 
 	user, err := h.userSvc.Update(uid, in)
 	if err != nil {

@@ -23,6 +23,9 @@ import (
 // maxUploadSize 单文件大小上限（按实际写入字节流式计数，不信任请求里声明的长度）。
 const maxUploadSize = 100 * 1024 * 1024
 
+// maxTotalStorageBytes 文件中心全局配额上限（全部 file_records 的 size 求和）。
+const maxTotalStorageBytes = 10 * 1024 * 1024 * 1024
+
 // errTooLarge 超过大小上限的哨兵错误（用于区分 413 与 500）。
 var errTooLarge = errors.New("上传文件超过大小上限")
 
@@ -47,6 +50,15 @@ func NewFileService(db *gorm.DB, cfg *config.Config, logger *slog.Logger) *FileS
 // multipart part，超限立刻中断，不在临时盘留副本。
 func (s *FileService) Upload(filename string, src io.Reader, uploadedBy string) (*model.FileRecord, error) {
 	originalName := sanitizeFilename(filename)
+	// 全局配额检查：已用总量 + 本次未知，先按总量是否超限拒绝
+	// （精确到“本次写完后超限则删文件”代价更高，先做总量前置拦截）。
+	var usedBytes int64
+	if err := s.db.Model(&model.FileRecord{}).Select("COALESCE(SUM(size),0)").Scan(&usedBytes).Error; err != nil {
+		return nil, apperr.Wrap(500, "查询存储用量失败", err)
+	}
+	if usedBytes >= maxTotalStorageBytes {
+		return nil, apperr.New(413, "存储空间已满（全局配额 10GB），请联系管理员清理")
+	}
 	// 扩展名白名单（不含 svg：可内嵌脚本，防存储型 XSS）
 	ext := strings.ToLower(filepath.Ext(originalName))
 	if !allowedUploadExt(ext) {
@@ -150,12 +162,16 @@ func allowedUploadExt(ext string) bool {
 }
 
 // sanitizeFilename 清理客户端文件名：去掉目录部分与控制字符并限长。
-// 它会被回显到列表和下载响应头里，控制字符/引号会破坏响应头。
+// 它会被回显到列表和下载响应头里，控制字符/引号/反斜杠/分号会破坏响应头（响应拆分/注入）。
 func sanitizeFilename(name string) string {
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = filepath.Base(name)
 	name = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		switch r {
+		case '"', '\\', ';', '\n', '\r':
 			return -1
 		}
 		return r
@@ -194,13 +210,35 @@ func (s *FileService) FindForUser(id, uploadedBy string, all bool) (*model.FileR
 	return &record, nil
 }
 
+// resolveStoragePath 把库里的 StoragePath 还原为物理路径，并校验仍在 uploadRoot 绝对路径内：
+// StoragePath 若被手改/历史脏数据写成 ../ 可逃出上传目录（目录穿越）。
+func resolveStoragePath(storagePath string) (string, error) {
+	cleaned := filepath.Clean(filepath.FromSlash(storagePath))
+	fullPath := filepath.Join(uploadRootPath, cleaned)
+	rootAbs, err := filepath.Abs(uploadRootPath)
+	if err != nil {
+		return "", apperr.ErrInternal
+	}
+	fullAbs, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", apperr.ErrNotFound
+	}
+	if fullAbs != rootAbs && !strings.HasPrefix(fullAbs, rootAbs+string(os.PathSeparator)) {
+		return "", apperr.ErrNotFound
+	}
+	return fullAbs, nil
+}
+
 // DownloadPath 返回下载用的物理路径与原始文件名（已校验归属）。
 func (s *FileService) DownloadPath(id, uploadedBy string, all bool) (string, string, error) {
 	record, err := s.FindForUser(id, uploadedBy, all)
 	if err != nil {
 		return "", "", err
 	}
-	fullPath := filepath.Join(uploadRootPath, filepath.FromSlash(record.StoragePath))
+	fullPath, err := resolveStoragePath(record.StoragePath)
+	if err != nil {
+		return "", "", err
+	}
 	if _, err := os.Stat(fullPath); err != nil {
 		return "", "", apperr.ErrNotFound
 	}
@@ -217,7 +255,11 @@ func (s *FileService) Delete(id, uploadedBy string, all bool) error {
 	if err := s.db.Delete(&model.FileRecord{}, "id = ?", record.ID).Error; err != nil {
 		return apperr.ErrInternal
 	}
-	fullPath := filepath.Join(uploadRootPath, filepath.FromSlash(record.StoragePath))
+	fullPath, err := resolveStoragePath(record.StoragePath)
+	if err != nil {
+		s.logger.Warn("文件路径非法，已只删记录", "path", record.StoragePath)
+		return nil
+	}
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		s.logger.Warn("删除物理文件失败（记录已删除，需人工清理）", "path", fullPath, "error", err)
 	}

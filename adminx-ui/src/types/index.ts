@@ -307,12 +307,12 @@ export interface Notification {
   created_at: string
 }
 
-// Webhook 配置
+// Webhook 配置（后端只回传是否已配置签名密钥，不回传密钥本身）
 export interface WebhookConfig {
   id: string
   name: string
   url: string
-  secret: string
+  has_secret: boolean
   events: string
   is_active: boolean
   created_at: string
@@ -358,7 +358,8 @@ export interface LoginLog {
 // 验证码
 export interface CaptchaResponse {
   captcha_id: string
-  svg: string
+  // data:image/png;base64,... 完整 data URI
+  image: string
 }
 
 // 侧边栏/导航菜单项（由 Menu 转换而来）
@@ -410,9 +411,6 @@ export interface ServiceComponent {
   description: string
   last_heartbeat: string | null
   status: 'online' | 'offline'
-  has_pending_upgrade: boolean
-  has_pending_uninstall: boolean
-  pending_command: 'upgrade' | 'uninstall' | null
   upgrade_version: string
   upgrade_url: string
   upgrade_checksum: string

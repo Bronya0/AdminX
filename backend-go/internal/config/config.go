@@ -90,8 +90,8 @@ type SecurityConfig struct {
 	// 业务组件共享密钥（X-Component-Token）。为空时组件端点保持开放（仅限本地演示）。
 	ComponentSecret string `mapstructure:"component_secret"`
 
-	// 登录是否强制验证码。false 时验证码仍会被校验（若前端提交），但不强制。
-	LoginCaptchaRequired bool `mapstructure:"login_captcha_required"`
+	// 登录验证码开关存配置中心 site.login_captcha_required（默认开启，站点设置页可改），
+	// 不在此处配置：两个来源会互相矛盾（文件说开、设置页说关，无从判定）。
 
 	// WebSocket 允许的来源（Origin），逗号分隔。为空时仅允许同源连接。
 	WSAllowedOrigins []string `mapstructure:"ws_allowed_origins"`

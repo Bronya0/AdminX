@@ -90,19 +90,28 @@ func (r *NotificationRepo) MarkRead(id, userID string) error {
 }
 
 // MarkAllRead 把当前用户所有可见未读通知标记为已读（只影响该用户）。
+// 分批 1000/批插入，避免未读量大时全量进内存。
 func (r *NotificationRepo) MarkAllRead(userID string) error {
-	var ids []string
-	if err := r.visible(userID).Where(unreadCond, userID).Pluck("id", &ids).Error; err != nil {
-		return err
+	const batchSize = 1000
+	for {
+		var ids []string
+		if err := r.visible(userID).Where(unreadCond, userID).Limit(batchSize).Pluck("id", &ids).Error; err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		rows := make([]model.NotificationRead, 0, len(ids))
+		for _, id := range ids {
+			rows = append(rows, model.NotificationRead{NotificationID: id, UserID: userID})
+		}
+		if err := r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error; err != nil {
+			return err
+		}
+		if len(ids) < batchSize {
+			return nil
+		}
 	}
-	if len(ids) == 0 {
-		return nil
-	}
-	rows := make([]model.NotificationRead, 0, len(ids))
-	for _, id := range ids {
-		rows = append(rows, model.NotificationRead{NotificationID: id, UserID: userID})
-	}
-	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error
 }
 
 // UnreadCount 未读数量。
@@ -123,12 +132,6 @@ func (r *NotificationRepo) ListWebhooks(offset, limit int) ([]model.WebhookConfi
 	}
 	err := q.Order("created_at DESC").Offset(offset).Limit(limit).Find(&items).Error
 	return items, count, err
-}
-
-func (r *NotificationRepo) FindWebhook(id string) (*model.WebhookConfig, error) {
-	var w model.WebhookConfig
-	err := r.db.First(&w, "id = ?", id).Error
-	return &w, err
 }
 
 func (r *NotificationRepo) ActiveWebhooks() ([]model.WebhookConfig, error) {

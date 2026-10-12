@@ -67,7 +67,8 @@ const handleOpenChange = (keys: string[]) => {
 .admin-sider {
   width: 256px;
   min-width: 256px;
-  height: 100vh;
+  /* 高度跟随父容器（顶栏下方那一行）：写 100vh 在混合布局里会溢出被裁掉 */
+  height: 100%;
   background: var(--admin-nav-side-bg, #001529);
   overflow-y: auto;
   overflow-x: hidden;

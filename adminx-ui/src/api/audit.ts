@@ -6,11 +6,10 @@ export const auditApi = {
   getAuditLogs: (params?: {
     page?: number
     size?: number
-    search?: string
     action?: string
-    model_name?: string
-    created_at__gte?: string
-    created_at__lte?: string
+    model?: string
+    start?: string
+    end?: string
   }): Promise<PaginatedResponse<AuditLog>> =>
     request.get('/audit/', { params }),
 }

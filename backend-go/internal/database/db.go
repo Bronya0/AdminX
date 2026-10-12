@@ -128,6 +128,7 @@ func Models() []interface{} {
 		// jobs
 		&model.ScheduleJob{},
 		&model.JobLog{},
+		&model.SchedulerHeartbeat{},
 		// notification
 		&model.Notification{},
 		&model.NotificationRead{},
@@ -143,6 +144,8 @@ func Models() []interface{} {
 		&model.PasswordHistory{},
 		// monitor
 		&model.MonitorSample{},
+		// captcha
+		&model.CaptchaCode{},
 	}
 }
 

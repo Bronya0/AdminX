@@ -42,8 +42,17 @@ type PolicyUpdateInput struct {
 	IsActive      *bool  `json:"is_active"`
 }
 
-// UpdatePolicy 更新密码策略（白名单字段）。
+// UpdatePolicy 更新密码策略（白名单字段 + 范围校验）。
 func (s *PolicyService) UpdatePolicy(in PolicyUpdateInput) (*model.PasswordPolicy, error) {
+	if in.MinLength != nil && (*in.MinLength < 6 || *in.MinLength > 128) {
+		return nil, apperr.New(400, "密码最小长度需在 6~128 之间")
+	}
+	if in.ExpireDays != nil && (*in.ExpireDays < 0 || *in.ExpireDays > 3650) {
+		return nil, apperr.New(400, "密码有效期需在 0~3650 天之间")
+	}
+	if in.HistoryCount != nil && (*in.HistoryCount < 0 || *in.HistoryCount > 100) {
+		return nil, apperr.New(400, "历史密码保留条数需在 0~100 之间")
+	}
 	updates := map[string]interface{}{}
 	if in.MinLength != nil {
 		updates["min_length"] = *in.MinLength

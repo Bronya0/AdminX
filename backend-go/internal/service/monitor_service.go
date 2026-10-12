@@ -279,11 +279,17 @@ func (s *MonitorService) History(rangeStr, intervalStr string) (*History, error)
 }
 
 // recordSample 落一条采样：距上次采样不足 sampleInterval 时跳过；同时更新 IO 速率基准。
+// 缩临界区：只在锁内拷贝 IO 基准（lastIOAt/lastReadB/lastWriteB），
+// Latest()/Create() 等 DB 操作放锁外，避免慢库阻塞所有采集请求。
 func (s *MonitorService) recordSample(res *Resources) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	now := time.Now()
+
+	s.mu.Lock()
+	lastIOAt := s.lastIOAt
+	lastReadB := s.lastReadB
+	lastWriteB := s.lastWriteB
+	s.mu.Unlock()
+
 	last, err := s.repo.Latest()
 	if err == nil && last != nil && now.Sub(last.CreatedAt) < sampleInterval {
 		return nil
@@ -294,16 +300,18 @@ func (s *MonitorService) recordSample(res *Resources) error {
 
 	// 磁盘读写速率：相邻两次累计计数的差 / 间隔
 	var readMBps, writeMBps float64
-	if !s.lastIOAt.IsZero() {
-		elapsed := now.Sub(s.lastIOAt).Seconds()
+	if !lastIOAt.IsZero() {
+		elapsed := now.Sub(lastIOAt).Seconds()
 		if elapsed > 0 {
-			readMBps = counterRateMBps(s.lastReadB, res.DiskIO.ReadBytes, elapsed)
-			writeMBps = counterRateMBps(s.lastWriteB, res.DiskIO.WriteBytes, elapsed)
+			readMBps = counterRateMBps(lastReadB, res.DiskIO.ReadBytes, elapsed)
+			writeMBps = counterRateMBps(lastWriteB, res.DiskIO.WriteBytes, elapsed)
 		}
 	}
+	s.mu.Lock()
 	s.lastIOAt = now
 	s.lastReadB = res.DiskIO.ReadBytes
 	s.lastWriteB = res.DiskIO.WriteBytes
+	s.mu.Unlock()
 
 	return s.repo.Create(&model.MonitorSample{
 		CPUPercent:    res.CPU.Percent,

@@ -146,9 +146,15 @@ apiClient.interceptors.response.use(
           forceLogout('登录已过期，请重新登录')
         }
         break
-      case 403:
-        showErrorOnce('没有权限执行此操作')
+      case 403: {
+        // 优先展示后端 msg；空体 403 多半是跨域/CORS 白名单拦截（gin-contrib/cors
+        // 直接 403 空体），固定文案会掩盖真实原因，需追加提示。
+        const backendMsg = (responseData?.msg || responseData?.detail || '').trim()
+        // 空体 403 多半是跨域/CORS 白名单拦截（gin-contrib/cors 直接 403 空体），
+        // 固定文案会掩盖真实原因，需追加提示（合并为一条 toast）。
+        showErrorOnce(backendMsg || '没有权限执行此操作（响应无错误信息，可能是跨域/白名单问题）')
         break
+      }
       case 404:
         showErrorOnce('请求的资源不存在')
         break

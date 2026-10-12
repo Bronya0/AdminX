@@ -46,8 +46,8 @@
         </a-row>
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="上级菜单" name="parent">
-              <a-tree-select v-model:value="formState.parent" :tree-data="parentTreeData" placeholder="不选则为顶级菜单" allow-clear tree-default-expand-all />
+            <a-form-item label="上级菜单" name="parent_id">
+              <a-tree-select v-model:value="formState.parent_id" :tree-data="parentTreeData" placeholder="新增时空着 = 顶级菜单；编辑时空着 = 保持原上级" tree-default-expand-all />
             </a-form-item>
           </a-col>
           <a-col :span="12"><a-form-item label="启用"><a-switch v-model:checked="formState.is_active" checked-children="是" un-checked-children="否" /></a-form-item></a-col>
@@ -137,9 +137,9 @@ const modalTitle = ref('新增菜单')
 const isEdit = ref(false)
 const currentId = ref('')
 const formRef = ref()
-const formState = reactive({ name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent: undefined as number | undefined })
+const formState = reactive({ name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent_id: undefined as number | undefined })
 const formRules = { name: [{ required: true, message: '请输入菜单名称' }], code: [{ required: true, message: '请输入菜单编码' }] }
-const resetForm = () => { Object.assign(formState, { name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent: undefined }) }
+const resetForm = () => { Object.assign(formState, { name: '', code: '', icon: '', path: '', allowed_paths: '', is_active: true, sort_order: 0, parent_id: undefined }) }
 
 // allowed_paths 的线上格式是字符串数组（对应后端 jsonb 列 + RBAC 的 []string），
 // 不是 JSON 字符串：发 JSON 字符串会被后端拒绑
@@ -168,12 +168,12 @@ const findNode = (nodes: any[], key: string): any | null => {
 }
 
 const handleAdd = () => { isEdit.value = false; modalTitle.value = '新增菜单'; currentId.value = ''; resetForm(); modalVisible.value = true }
-const handleAddChild = (parentKey: number) => { isEdit.value = false; modalTitle.value = '添加子菜单'; currentId.value = ''; resetForm(); formState.parent = parentKey; modalVisible.value = true }
+const handleAddChild = (parentKey: number) => { isEdit.value = false; modalTitle.value = '添加子菜单'; currentId.value = ''; resetForm(); formState.parent_id = parentKey; modalVisible.value = true }
 const handleEdit = (key: string) => {
   const node = findNode(filteredMenuTreeData.value, key)
   if (!node) return
   isEdit.value = true; modalTitle.value = '编辑菜单'; currentId.value = key
-  Object.assign(formState, { name: node.title, code: node.code, icon: node.icon || '', path: node.path || '', allowed_paths: pathsToLines(node.allowed_paths), is_active: node.is_active ?? true, sort_order: node.sort_order ?? 0, parent: undefined })
+  Object.assign(formState, { name: node.title, code: node.code, icon: node.icon || '', path: node.path || '', allowed_paths: pathsToLines(node.allowed_paths), is_active: node.is_active ?? true, sort_order: node.sort_order ?? 0, parent_id: undefined })
   modalVisible.value = true
 }
 const handleDelete = async (key: string) => { try { await menuApi.deleteMenu(key); message.success('删除成功'); loadData() } catch { /* interceptor handles error */ } }
@@ -182,7 +182,8 @@ const handleModalOk = async () => {
     await formRef.value.validate()
     modalLoading.value = true
     const data = { ...formState, allowed_paths: linesToPaths(formState.allowed_paths) }
-    if (!data.parent) delete data.parent
+    // 未选上级就不发 parent_id：后端据此判定「不改动父子关系」（nil = 保持）
+    if (!data.parent_id) delete data.parent_id
     if (isEdit.value) {
       await menuApi.updateMenu(currentId.value, data)
       message.success('更新成功')

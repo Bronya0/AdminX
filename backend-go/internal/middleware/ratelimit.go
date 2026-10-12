@@ -51,7 +51,12 @@ func RateLimit(rdb *redis.Client, scope string, limit Limit) gin.HandlerFunc {
 		var identifier string
 		if scope == "user" {
 			if uid, ok := c.Get("user_id"); ok && uid != nil {
-				identifier = "user:" + uid.(string)
+				// user_id 非字符串时回落 IP 限流：直接断言会在类型漂移时 panic
+				if uidStr, ok := uid.(string); ok && uidStr != "" {
+					identifier = "user:" + uidStr
+				} else {
+					identifier = "ip:" + c.ClientIP()
+				}
 			} else {
 				identifier = "ip:" + c.ClientIP()
 			}

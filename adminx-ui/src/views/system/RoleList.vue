@@ -11,26 +11,6 @@
             @pressEnter="handleSearch"
           />
         </SearchField>
-        <SearchField label="描述">
-          <a-input
-            v-model:value="searchForm.desc"
-            placeholder="描述"
-            allow-clear
-            @pressEnter="handleSearch"
-          />
-        </SearchField>
-        <SearchField label="状态">
-          <a-select
-            v-model:value="searchForm.is_active"
-            placeholder="全部"
-            allow-clear
-            @change="handleSearch"
-          >
-            <a-select-option :value="true">启用</a-select-option>
-            <a-select-option :value="false">禁用</a-select-option>
-          </a-select>
-        </SearchField>
-
         <template #actions>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 查询
@@ -142,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -180,7 +160,7 @@ const pagination = reactive({
   showSizeChanger: true,
   showTotal: (total: number) => `共 ${total} 条`,
 })
-const searchForm = reactive({ search: '', desc: '', is_active: undefined as boolean | undefined })
+const searchForm = reactive({ search: '' })
 
 // 弹窗状态
 const modalVisible = ref(false)
@@ -210,7 +190,7 @@ const selectedMenus = ref<string[]>([])
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await roleApi.getRoles({ page: pagination.current, size: pagination.pageSize, search: searchForm.search, desc: searchForm.desc || undefined, is_active: searchForm.is_active })
+    const res = await roleApi.getRoles({ page: pagination.current, size: pagination.pageSize, search: searchForm.search })
     tableData.value = res.results
     pagination.total = res.count
   } finally {
@@ -262,7 +242,7 @@ const deselectAllMenus = () => { selectedMenus.value = [] }
 
 // 搜索
 const handleSearch = () => { pagination.current = 1; loadData() }
-const resetSearch = () => { searchForm.search = ''; searchForm.desc = ''; searchForm.is_active = undefined; handleSearch() }
+const resetSearch = () => { searchForm.search = ''; handleSearch() }
 const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
@@ -337,10 +317,15 @@ const handleModalOk = async () => {
 const handleModalCancel = () => { modalVisible.value = false; formRef.value?.resetFields() }
 
 onMounted(() => {
-  const search = route.query.search as string | undefined
-  if (search) {
-    searchForm.search = search
-  }
+  if (route.query.search) searchForm.search = route.query.search as string
+  loadData()
+})
+
+// 组件在同路由下复用（如从用户列表点另一个角色标签），query 变化不会重跑 onMounted，
+// 必须以 URL 为唯一事实源跟随变化，否则 URL 换了数据还是旧的
+watch(() => route.query.search, (val) => {
+  searchForm.search = (val as string) || ''
+  pagination.current = 1
   loadData()
 })
 </script>

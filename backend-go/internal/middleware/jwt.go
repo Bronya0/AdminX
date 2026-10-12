@@ -7,6 +7,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -25,13 +26,15 @@ import (
 // 未携带 token 或 token 无效 → 401。
 func JWTAuth(jwtMgr *jwt.Manager, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, _, ok := parseBearerToken(c, jwtMgr)
-		if !ok {
+		claims, _, err := parseBearerToken(c, jwtMgr)
+		if err != nil {
+			response.Fail(c, 401, err.Error())
 			c.Abort()
 			return
 		}
-		user, ok := loadAuthUser(c, db, claims)
-		if !ok {
+		user, code, msg := loadAuthUser(c, db, claims)
+		if code != 0 {
+			response.Fail(c, code, msg)
 			c.Abort()
 			return
 		}
@@ -45,71 +48,67 @@ func JWTAuth(jwtMgr *jwt.Manager, db *gorm.DB) gin.HandlerFunc {
 // 用于 logout 等需要在 access token 过期后仍可调用的端点（凭 refresh token 吊销会话）。
 func JWTSoft(jwtMgr *jwt.Manager, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
-			if claims, _, ok := parseBearerToken(c, jwtMgr); ok {
-				loadAuthUser(c, db, claims)
-			}
+		// 解析/校验失败一律按匿名处理：既不写响应也不写 context，
+		// 否则中间件写的 401 会和 handler 的成功响应拼成两段 JSON。
+		if claims, _, err := parseBearerToken(c, jwtMgr); err == nil {
+			loadAuthUser(c, db, claims)
 		}
 		c.Next()
 	}
 }
 
 // parseBearerToken 解析并校验 Authorization: Bearer <token>。
-// 失败时已写入 401 响应，返回 ok=false。
-func parseBearerToken(c *gin.Context, jwtMgr *jwt.Manager) (*jwt.Claims, string, bool) {
-	fail := func(msg string) (*jwt.Claims, string, bool) {
-		response.Fail(c, 401, msg)
-		return nil, "", false
-	}
+// 只解析、只报错，不写响应：由调用方决定是应答 401 还是按匿名放行。
+func parseBearerToken(c *gin.Context, jwtMgr *jwt.Manager) (*jwt.Claims, string, error) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		return fail("未提供认证令牌")
+		return nil, "", errors.New("未提供认证令牌")
 	}
 
 	// 期望格式: Bearer <token>
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return fail("认证令牌格式错误")
+		return nil, "", errors.New("认证令牌格式错误")
 	}
 
 	tokenString := strings.TrimSpace(parts[1])
 	claims, err := jwtMgr.Parse(tokenString)
 	if err != nil {
-		return fail("认证令牌无效或已过期")
+		return nil, "", errors.New("认证令牌无效或已过期")
 	}
 
 	// 只允许 access token 用于 API 鉴权
 	if claims.GetTokenType() != jwt.TokenTypeAccess {
-		return fail("令牌类型错误，请使用 access token")
+		return nil, "", errors.New("令牌类型错误，请使用 access token")
 	}
-	return claims, tokenString, true
+	return claims, tokenString, nil
 }
 
 // loadAuthUser 查询用户并写入 context（存在性 + is_active + last_logout 校验）。
-// 返回 false 时已写入 401/403 响应。
-func loadAuthUser(c *gin.Context, db *gorm.DB, claims *jwt.Claims) (*model.User, bool) {
+// 同样只返回结果不写响应：code 为 0 表示通过，否则由调用方应答该业务码。
+// 只 Select 鉴权必要列：整行查询会把大字段/关联拖进每次请求的热路径。
+// username 必须在列内：它会写入 gin context 供审计日志取操作者。
+func loadAuthUser(c *gin.Context, db *gorm.DB, claims *jwt.Claims) (*model.User, int, string) {
 	// 查询用户（校验存在性 + is_active）
 	var user model.User
-	if err := db.First(&user, "id = ? AND deleted_at IS NULL", claims.UserID).Error; err != nil {
-		response.Fail(c, 401, "用户不存在或已被删除")
-		return nil, false
+	if err := db.Select("id", "username", "is_active", "is_superuser", "last_logout", "last_activity").
+		First(&user, "id = ? AND deleted_at IS NULL", claims.UserID).Error; err != nil {
+		return nil, 401, "用户不存在或已被删除"
 	}
 	if !user.IsActive {
-		response.Fail(c, 403, "账号已被禁用")
-		return nil, false
+		return nil, 403, "账号已被禁用"
 	}
 
 	// 校验 last_logout（与 Refresh/Introspect/WS 共用同一判定）
 	if jwt.RevokedByLogout(claims.IssuedAt, user.LastLogout) {
-		response.Fail(c, 401, "认证令牌已失效，请重新登录")
-		return nil, false
+		return nil, 401, "认证令牌已失效，请重新登录"
 	}
 
 	// 写入 context，供后续 handler/middleware 使用
 	c.Set("user_id", user.ID)
 	c.Set("username", user.Username)
 	c.Set("is_superuser", user.IsSuperuser)
-	return &user, true
+	return &user, 0, ""
 }
 
 // updateActivity 更新用户最后活动时间（60s 防抖）。

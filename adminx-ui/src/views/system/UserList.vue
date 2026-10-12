@@ -21,17 +21,6 @@
             <a-select-option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</a-select-option>
           </a-select>
         </SearchField>
-        <SearchField label="在线">
-          <a-select
-            v-model:value="searchForm.is_online"
-            placeholder="全部"
-            allow-clear
-            @change="handleSearch"
-          >
-            <a-select-option value="true">在线</a-select-option>
-            <a-select-option value="false">离线</a-select-option>
-          </a-select>
-        </SearchField>
         <SearchField label="状态">
           <a-select
             v-model:value="searchForm.is_active"
@@ -252,7 +241,6 @@ const searchForm = reactive({
   search: '',
   is_active: undefined as boolean | undefined,
   role: undefined as string | undefined,
-  is_online: undefined as string | undefined,
 })
 
 // 角色选项
@@ -298,8 +286,10 @@ const loadFullMenuTree = async () => {
   }
 }
 
+let menuOptionsSeq = 0
 // 菜单首页选项（根据选中角色过滤）
 const loadMenuOptions = async (roles: string[]) => {
+  const seq = ++menuOptionsSeq
   if (!roles.length) {
     menuTreeOptions.value = []
     formState.home_page = ''
@@ -310,6 +300,9 @@ const loadMenuOptions = async (roles: string[]) => {
   }
   try {
     const menus = await roleApi.accessibleMenus(roles)
+    // 请求序号守卫：快速切换角色时只让最后一次回包生效，
+    // 否则慢回包会覆盖新选项，首页下拉与所选角色错位
+    if (seq !== menuOptionsSeq) return
     const allowedPaths = new Set(
       menus
         .filter(m => m.path && m.path !== '/dashboard')
@@ -403,7 +396,6 @@ const loadData = async () => {
       search: searchForm.search,
       is_active: searchForm.is_active,
       role: searchForm.role,
-      is_online: searchForm.is_online,
     })
     tableData.value = res.results
     pagination.total = res.count
@@ -436,7 +428,6 @@ const resetSearch = () => {
   searchForm.search = ''
   searchForm.is_active = undefined
   searchForm.role = undefined
-  searchForm.is_online = undefined
   handleSearch()
 }
 
@@ -504,7 +495,16 @@ const handleModalOk = async () => {
     modalLoading.value = true
 
     if (isEdit.value) {
-      await userApi.updateUser(currentId.value, formState)
+      // 显式构造 payload：编辑绝不能带 password——后端收到非空密码就会改密并吊销该用户全部 token，
+      // 而 formState.password 可能残留着上一次「新增」输入的值（取消弹窗不会清空它）。
+      await userApi.updateUser(currentId.value, {
+        email: formState.email,
+        phone: formState.phone,
+        desc: formState.desc,
+        roles: formState.roles,
+        is_active: formState.is_active,
+        home_page: formState.home_page,
+      })
       message.success('更新成功')
     } else {
       await userApi.createUser(formState)
@@ -534,6 +534,10 @@ const handleResetPassword = (record: User) => {
 }
 
 const handlePasswordOk = async () => {
+  if (!newPassword.value?.trim()) {
+    message.error('请输入新密码')
+    return
+  }
   const policyError = validatePassword(newPassword.value)
   if (policyError) {
     message.error(policyError)

@@ -119,7 +119,7 @@ type Hub struct {
 func NewHub(rdb *redis.Client, logger *slog.Logger) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
-		register:   make(chan *Client),
+		register:   make(chan *Client, 64),
 		unregister: make(chan *Client, 64),
 		broadcast:  make(chan Message, 256),
 		done:       make(chan struct{}),
@@ -199,9 +199,13 @@ func (h *Hub) BroadcastLog(line, level string) {
 	msg := Message{Line: line, Level: level}
 
 	if h.rdb != nil {
-		// 发布到 Redis，所有实例的订阅者都会收到
+		// 发布到 Redis，所有实例的订阅者都会收到。
+		// 2s 超时后降级本地广播：无超时的 Publish 会在 Redis 故障时拖住调用方。
 		data, _ := json.Marshal(msg)
-		if err := h.rdb.Publish(context.Background(), channelLogs, data).Err(); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := h.rdb.Publish(ctx, channelLogs, data).Err()
+		cancel()
+		if err != nil {
 			h.logger.Warn("Redis 发布日志失败，降级本地广播", "error", err)
 			h.tryLocalBroadcast(msg)
 		}

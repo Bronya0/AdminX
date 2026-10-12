@@ -3,24 +3,17 @@
     <!-- 搜索栏 -->
     <a-card class="search-card">
       <SearchBar>
-        <SearchField label="关键字">
-          <a-input
-            v-model:value="searchForm.search"
-            placeholder="操作人/对象/摘要"
-            allow-clear
-            @pressEnter="handleSearch"
-          />
-        </SearchField>
         <SearchField label="操作类型">
           <a-select v-model:value="searchForm.action" placeholder="全部" allow-clear>
             <a-select-option value="create">创建</a-select-option>
             <a-select-option value="update">更新</a-select-option>
             <a-select-option value="delete">删除</a-select-option>
+            <a-select-option value="execute">执行</a-select-option>
           </a-select>
         </SearchField>
         <SearchField label="模型">
           <a-input
-            v-model:value="searchForm.model_name"
+            v-model:value="searchForm.model"
             placeholder="模型名称"
             allow-clear
             @pressEnter="handleSearch"
@@ -85,12 +78,12 @@ const columns = [
 ]
 
 const actionLabel = (action: string) =>
-  ({ create: '创建', update: '更新', delete: '删除' })[action] || action
+  ({ create: '创建', update: '更新', delete: '删除', execute: '执行' })[action] || action
 
 const actionColor = (action: string) =>
-  ({ create: 'green', update: 'blue', delete: 'red' })[action] || 'default'
+  ({ create: 'green', update: 'blue', delete: 'red', execute: 'orange' })[action] || 'default'
 
-const searchForm = ref({ search: '', action: undefined as string | undefined, model_name: '' })
+const searchForm = ref({ action: undefined as string | undefined, model: '' })
 const dateRange = ref<[any, any] | null>(null)
 const tableData = ref<AuditLog[]>([])
 const loading = ref(false)
@@ -103,11 +96,11 @@ const fetchData = async () => {
       page: pagination.value.current,
       size: pagination.value.pageSize,
     }
-    if (searchForm.value.search) params.search = searchForm.value.search
     if (searchForm.value.action) params.action = searchForm.value.action
-    if (searchForm.value.model_name) params.model_name = searchForm.value.model_name
-    if (dateRange.value && dateRange.value[0]) params.created_at__gte = dateRange.value[0].format('YYYY-MM-DD')
-    if (dateRange.value && dateRange.value[1]) params.created_at__lte = dateRange.value[1].format('YYYY-MM-DD') + ' 23:59:59'
+    if (searchForm.value.model) params.model = searchForm.value.model
+    // 时间范围必须是 RFC3339：后端 time.Parse(RFC3339) 失败会静默丢弃该条件
+    if (dateRange.value?.[0]) params.start = dateRange.value[0].startOf('day').toISOString()
+    if (dateRange.value?.[1]) params.end = dateRange.value[1].endOf('day').toISOString()
 
     const res = await auditApi.getAuditLogs(params)
     tableData.value = res.results
@@ -123,7 +116,7 @@ const handleSearch = () => {
 }
 
 const resetSearch = () => {
-  searchForm.value = { search: '', action: undefined, model_name: '' }
+  searchForm.value = { action: undefined, model: '' }
   dateRange.value = null
   pagination.value.current = 1
   fetchData()

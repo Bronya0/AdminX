@@ -6,9 +6,10 @@ import "time"
 type Config struct {
 	ID              int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Key             string    `gorm:"size:255;uniqueIndex;not null" json:"key"`
-	Value           string    `gorm:"type:text;not null;default:''" json:"value"`             // 明文或加密后的值
+	// Value 可能是密文，只能经由 ConfigDTO 对外（加密配置显示为 ********）
+	Value           string    `gorm:"type:text;not null;default:''" json:"-"`             // 明文或加密后的值
 	ValueType       string    `gorm:"size:20;not null;default:'string'" json:"value_type"`    // string/int/bool/json/options
-	EncryptedValue  string    `gorm:"size:1024;not null;default:''" json:"encrypted_value"`   // 独立加密槽（兼容历史）
+	EncryptedValue  string    `gorm:"size:1024;not null;default:''" json:"-"`   // 独立加密槽（兼容历史）
 	IsEncrypted     bool      `gorm:"not null;default:false" json:"is_encrypted"`             // 加密开关
 	Desc            string    `gorm:"size:500;not null;default:''" json:"desc"`
 	Group           string    `gorm:"size:128;not null;default:'default';index:idx_config_group" json:"group"`

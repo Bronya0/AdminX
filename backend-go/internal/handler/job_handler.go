@@ -80,14 +80,14 @@ func (h *JobHandler) Delete(c *gin.Context) {
 	response.NoContent(c)
 }
 
-// RunOnce POST /jobs/:id/run_once/
+// RunOnce POST /jobs/:id/run_once/ — 异步执行，立即返回 logID（调用方轮询 logs 拿结果）。
 func (h *JobHandler) RunOnce(c *gin.Context) {
-	result, err := h.svc.RunOnce(c.Request.Context(), c.Param("id"))
+	logID, err := h.svc.RunOnce(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
-	response.OK(c, gin.H{"result": result})
+	response.OK(c, gin.H{"log_id": logID})
 }
 
 // Status GET /jobs/status/

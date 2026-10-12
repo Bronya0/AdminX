@@ -21,15 +21,17 @@ func NewCaptchaHandler(mgr *captcha.Manager, logger *slog.Logger) *CaptchaHandle
 }
 
 // Generate GET /captcha/captcha/
+// 返回 image 为 data:image/png;base64,... 的完整 data URI（不再返回 SVG：
+// SVG 是文本，答案就写在节点里，抓一次响应即可读出）。
 func (h *CaptchaHandler) Generate(c *gin.Context) {
-	captchaID, svgImg, err := h.mgr.Generate(c.Request.Context())
+	captchaID, image, err := h.mgr.Generate()
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
 	response.OK(c, gin.H{
 		"captcha_id": captchaID,
-		"svg":        svgImg,
+		"image":      image,
 	})
 }
 
@@ -43,7 +45,7 @@ func (h *CaptchaHandler) Verify(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
-	ok, err := h.mgr.Verify(c.Request.Context(), req.CaptchaID, req.CaptchaText)
+	ok, err := h.mgr.Verify(req.CaptchaID, req.CaptchaText)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

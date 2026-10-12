@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -48,13 +49,10 @@ type NodesOverview struct {
 	Nodes       []model.ClusterNode `json:"nodes"`
 }
 
-// NodesOverview 统计节点总数/在线/离线 + 节点列表（节点管理页顶部卡片）。
+// NodesOverview 只统计节点总数/在线/离线（不返回节点行）。
+// Nodes 置空数组保持 JSON 形状兼容（nodes: [] 而非 null），列表请走 ListNodes 分页接口。
 func (s *ClusterService) NodesOverview() (*NodesOverview, error) {
 	counts, err := s.repo.CountNodesByStatus()
-	if err != nil {
-		return nil, apperr.ErrInternal
-	}
-	nodes, err := s.repo.ListAllNodes()
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
@@ -67,7 +65,7 @@ func (s *ClusterService) NodesOverview() (*NodesOverview, error) {
 		Online:      counts["online"],
 		Offline:     counts["offline"],
 		Maintenance: counts["maintenance"],
-		Nodes:       nodes,
+		Nodes:       []model.ClusterNode{},
 	}, nil
 }
 
@@ -237,36 +235,33 @@ func (s *ClusterService) Register(in RegisterInput) (*model.ServiceComponent, er
 	if err != nil {
 		return nil, apperr.ErrInternal
 	}
-	// 已存在，更新
-	existing.Name = in.Name
-	existing.Version = in.Version
-	existing.Host = in.Host
-	existing.Description = in.Description
+	// 已存在：按列更新注册信息 + 心跳时间。
+	// 不能读整行再整行写回：那样会把并发下发的升级/卸载指令一并抹成旧值。
+	cols := map[string]interface{}{
+		"name": in.Name, "version": in.Version, "host": in.Host,
+		"description": in.Description, "last_heartbeat": now,
+	}
 	if in.ExtraInfo != nil {
-		existing.ExtraInfo = mustJSONMap(in.ExtraInfo)
+		cols["extra_info"] = mustJSONMap(in.ExtraInfo)
 	}
-	existing.LastHeartbeat = &now
-	if err := s.repo.UpdateComponent(existing); err != nil {
-		return nil, apperr.ErrInternal
+	if err := s.updateComponentColumns("id = ?", []interface{}{existing.ID}, cols); err != nil {
+		return nil, err
 	}
-	return existing, nil
+	return s.repo.FindComponentByLabel(in.AppLabel)
 }
 
-// Heartbeat 业务组件心跳。
+// Heartbeat 业务组件心跳：只写心跳列，再回读整行组装响应。
+// 不能读整行改完再整行写回：那样会把并发下发的升级/卸载指令抹掉。
 func (s *ClusterService) Heartbeat(appLabel string) (*model.ServiceComponent, error) {
-	c, err := s.repo.FindComponentByLabel(appLabel)
+	err := s.updateComponentColumns("app_label = ?", []interface{}{appLabel},
+		map[string]interface{}{"last_heartbeat": time.Now()})
+	if errors.Is(err, apperr.ErrNotFound) {
+		return nil, apperr.New(404, "组件未注册: "+appLabel)
+	}
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, apperr.New(404, "组件未注册: "+appLabel)
-		}
-		return nil, apperr.ErrInternal
+		return nil, err
 	}
-	now := time.Now()
-	c.LastHeartbeat = &now
-	if err := s.repo.UpdateComponent(c); err != nil {
-		return nil, apperr.ErrInternal
-	}
-	return c, nil
+	return s.repo.FindComponentByLabel(appLabel)
 }
 
 // SetUpgrade 下发升级指令。
@@ -282,14 +277,9 @@ func (s *ClusterService) SetUpgrade(id, version, url, checksum string) error {
 	if !isSHA256Hex(checksum) {
 		return apperr.New(400, "升级指令必须包含 SHA-256 校验和（64 位十六进制）")
 	}
-	var c model.ServiceComponent
-	if err := s.db.First(&c, "id = ?", id).Error; err != nil {
-		return apperr.ErrNotFound
-	}
-	c.UpgradeVersion = version
-	c.UpgradeURL = url
-	c.UpgradeChecksum = checksum
-	return s.repo.UpdateComponent(&c)
+	return s.updateComponentColumns("id = ?", []interface{}{id}, map[string]interface{}{
+		"upgrade_version": version, "upgrade_url": url, "upgrade_checksum": checksum,
+	})
 }
 
 // isSHA256Hex 校验 64 位十六进制 SHA-256 摘要。
@@ -308,24 +298,31 @@ func isSHA256Hex(s string) bool {
 }
 
 func (s *ClusterService) CancelUpgrade(id string) error {
-	var c model.ServiceComponent
-	if err := s.db.First(&c, "id = ?", id).Error; err != nil {
-		return apperr.ErrNotFound
-	}
-	c.UpgradeVersion = ""
-	c.UpgradeURL = ""
-	c.UpgradeChecksum = ""
-	return s.repo.UpdateComponent(&c)
+	return s.updateComponentColumns("id = ?", []interface{}{id}, map[string]interface{}{
+		"upgrade_version": "", "upgrade_url": "", "upgrade_checksum": "",
+	})
 }
 
 func (s *ClusterService) SetUninstall(id string) error {
-	return s.db.Model(&model.ServiceComponent{}).Where("id = ?", id).
-		Update("uninstall_pending", true).Error
+	return s.updateComponentColumns("id = ?", []interface{}{id}, map[string]interface{}{"uninstall_pending": true})
 }
 
 func (s *ClusterService) CancelUninstall(id string) error {
-	return s.db.Model(&model.ServiceComponent{}).Where("id = ?", id).
-		Update("uninstall_pending", false).Error
+	return s.updateComponentColumns("id = ?", []interface{}{id}, map[string]interface{}{"uninstall_pending": false})
+}
+
+// updateComponentColumns 按列更新组件。cols 必须由白名单字段构造：
+// 结构体更新会跳过零值，而清空升级指令这类“改成空串”的操作必须用 map。
+// 没有任何行被更新时返回 ErrNotFound，避免“下发成功但组件不存在”的假象。
+func (s *ClusterService) updateComponentColumns(where string, args []interface{}, cols map[string]interface{}) error {
+	res := s.db.Model(&model.ServiceComponent{}).Where(where, args...).Updates(cols)
+	if res.Error != nil {
+		return apperr.ErrInternal
+	}
+	if res.RowsAffected == 0 {
+		return apperr.ErrNotFound
+	}
+	return nil
 }
 
 // Unregister 注销组件（按 app_label 删除）。

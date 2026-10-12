@@ -49,7 +49,8 @@ func (s *RoleService) AccessibleMenus(roleRefs []string) ([]model.Menu, error) {
 	q := s.db.Distinct("menus.*").
 		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
 		Joins("JOIN roles ON roles.id = role_menus.role_id").
-		Where("menus.is_active = ?", true)
+		Where("menus.is_active = ?", true).
+		Where("roles.is_active = ?", true)
 	switch {
 	case len(ids) > 0 && len(names) > 0:
 		q = q.Where("roles.id IN ? OR roles.name IN ?", ids, names)
@@ -105,22 +106,31 @@ func (s *RoleService) Create(in RoleCreateInput) (*model.Role, error) {
 		Desc:     in.Desc,
 		IsActive: isActive,
 	}
-	if err := s.roleRepo.Create(role); err != nil {
-		return nil, apperr.ErrInternal
-	}
-
-	if len(in.MenuIDs) > 0 {
-		if err := s.roleRepo.AssignMenus(role.ID, in.MenuIDs); err != nil {
-			return nil, apperr.ErrInternal
+	// 建角色与绑菜单包在同一事务内：AssignMenus 失败时整体回滚。
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := s.roleRepo.WithTx(tx)
+		if err := txRepo.Create(role); err != nil {
+			if isDupKey(err) {
+				return apperr.New(409, "角色名已存在")
+			}
+			return apperr.ErrInternal
 		}
+		if len(in.MenuIDs) > 0 {
+			if err := txRepo.AssignMenus(role.ID, in.MenuIDs); err != nil {
+				return apperr.ErrInternal
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return s.roleRepo.FindByID(role.ID)
 }
 
-// UpdateInput 更新角色入参。
+// UpdateInput 更新角色入参。Desc 用指针区分「未传」与「传空串」。
 type RoleUpdateInput struct {
 	Name     string  `json:"name"`
-	Desc     string  `json:"desc"`
+	Desc     *string `json:"desc"`
 	IsActive *bool   `json:"is_active"`
 	MenuIDs  []int64 `json:"menu_ids"`
 }
@@ -134,20 +144,30 @@ func (s *RoleService) Update(id string, in RoleUpdateInput) (*model.Role, error)
 		return nil, apperr.ErrInternal
 	}
 
-	// 系统角色不允许改名
-	if role.IsSystem && in.Name != "" && in.Name != role.Name {
-		return nil, apperr.New(403, "系统内置角色不允许修改名称")
+	// 系统角色不允许改名，也不允许停用：停用 super_admin 会让所有超管当场失去全部权限
+	if role.IsSystem {
+		if in.Name != "" && in.Name != role.Name {
+			return nil, apperr.New(403, "系统内置角色不允许修改名称")
+		}
+		if in.IsActive != nil && !*in.IsActive {
+			return nil, apperr.New(403, "系统内置角色不允许停用")
+		}
 	}
 
 	if in.Name != "" {
 		role.Name = in.Name
 	}
-	role.Desc = in.Desc
+	if in.Desc != nil {
+		role.Desc = *in.Desc
+	}
 	if in.IsActive != nil {
 		role.IsActive = *in.IsActive
 	}
 
 	if err := s.roleRepo.Update(role); err != nil {
+		if isDupKey(err) {
+			return nil, apperr.New(409, "角色名已存在")
+		}
 		return nil, apperr.ErrInternal
 	}
 

@@ -31,8 +31,12 @@ func TestClusterService_NodesOverview(t *testing.T) {
 	if overview.Total != 3 || overview.Online != 2 || overview.Offline != 1 {
 		t.Errorf("统计不对: %+v", overview)
 	}
-	if len(overview.Nodes) != 3 {
-		t.Errorf("概览应带全部节点，实际 %d", len(overview.Nodes))
+	// 概览只返回计数：Nodes 置空数组保持 JSON 形状兼容，列表走 ListNodes 分页接口
+	if overview.Nodes == nil {
+		t.Error("Nodes 应为空数组而非 null（JSON 形状兼容）")
+	}
+	if len(overview.Nodes) != 0 {
+		t.Errorf("概览不应带节点行，实际 %d", len(overview.Nodes))
 	}
 
 	// status 过滤
@@ -47,8 +51,12 @@ func TestClusterService_NodesOverview(t *testing.T) {
 		t.Errorf("按 host 搜索应命中 1 条: count=%d err=%v", count, err)
 	}
 
-	// 单节点查询与不存在
-	node, err := svc.GetNode(overview.Nodes[0].ID)
+	// 单节点查询与不存在（节点 ID 从 ListNodes 取，概览不再带行）
+	nodes, _, err := svc.ListNodes(0, 10, "", "")
+	if err != nil || len(nodes) == 0 {
+		t.Fatalf("ListNodes 失败: %v", err)
+	}
+	node, err := svc.GetNode(nodes[0].ID)
 	if err != nil || node.Name == "" {
 		t.Errorf("GetNode 失败: %v", err)
 	}

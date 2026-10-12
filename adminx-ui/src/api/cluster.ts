@@ -19,7 +19,7 @@ export const clusterApi = {
 
 // 业务组件 API
 export const componentApi = {
-  list: (params?: { search?: string }): Promise<PaginatedResponse<ServiceComponent>> =>
+  list: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<ServiceComponent>> =>
     request.get('/cluster/components/', { params }),
   get: (id: string): Promise<ServiceComponent> =>
     request.get(`/cluster/components/${id}/`),

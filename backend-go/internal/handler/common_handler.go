@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,21 +40,53 @@ func NewCommonHandler(
 // Dashboard GET /common/dashboard/stats/ — 仪表盘统计（键名对齐前端 api/dashboard.ts 的 DashboardStats）。
 func (h *CommonHandler) Dashboard(c *gin.Context) {
 	var userCount, roleCount, menuCount int64
-	h.db.Model(&model.User{}).Where("deleted_at IS NULL").Count(&userCount)
-	h.db.Model(&model.Role{}).Count(&roleCount)
-	h.db.Model(&model.Menu{}).Where("is_active = ?", true).Count(&menuCount)
+	var userErr, roleErr, menuErr error
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		userErr = h.db.Model(&model.User{}).Where("deleted_at IS NULL").Count(&userCount).Error
+	}()
+	go func() {
+		defer wg.Done()
+		roleErr = h.db.Model(&model.Role{}).Count(&roleCount).Error
+	}()
+	go func() {
+		defer wg.Done()
+		menuErr = h.db.Model(&model.Menu{}).Where("is_active = ?", true).Count(&menuCount).Error
+	}()
+	wg.Wait()
+	if userErr != nil || roleErr != nil || menuErr != nil {
+		h.logger.ErrorContext(c.Request.Context(), "仪表盘基础统计失败",
+			"user_err", userErr, "role_err", roleErr, "menu_err", menuErr)
+		response.Fail(c, 500, "仪表盘统计失败")
+		return
+	}
 
-	// 节点按状态统计（前端顶部三张卡：在线/离线/维护中）
-	nodeCounts := make(map[string]int64, 3)
-	for _, status := range []string{"online", "offline", "maintenance"} {
-		var cnt int64
-		h.db.Model(&model.ClusterNode{}).Where("status = ?", status).Count(&cnt)
-		nodeCounts[status] = cnt
+	// 节点按状态统计：一次 GROUP BY 取全量，不逐状态查库
+	nodeCounts := map[string]int64{"online": 0, "offline": 0, "maintenance": 0}
+	type statusRow struct {
+		Status string
+		Total  int64
+	}
+	var rows []statusRow
+	if err := h.db.Model(&model.ClusterNode{}).
+		Select("status, count(*) AS total").Group("status").Scan(&rows).Error; err != nil {
+		h.logger.ErrorContext(c.Request.Context(), "仪表盘节点统计失败", "error", err)
+		response.Fail(c, 500, "仪表盘统计失败")
+		return
+	}
+	for _, r := range rows {
+		nodeCounts[r.Status] = r.Total
 	}
 
 	// 最近登录日志（前端「最近登录」表格：username / ip / success / message / created_at）
 	var recentLogs []model.UserLoginLog
-	h.db.Order("created_at DESC").Limit(10).Find(&recentLogs)
+	if err := h.db.Order("created_at DESC").Limit(10).Find(&recentLogs).Error; err != nil {
+		h.logger.ErrorContext(c.Request.Context(), "仪表盘登录日志查询失败", "error", err)
+		response.Fail(c, 500, "仪表盘统计失败")
+		return
+	}
 
 	// 实时资源（同时补一条历史采样，供资源趋势图）
 	res := h.monitor.CollectResources()

@@ -11,32 +11,15 @@
       @select="handleMenuClick"
       style="flex: 1; min-width: 0;"
     >
-      <template v-for="item in menus" :key="item.key">
-        <a-sub-menu v-if="item.children && item.children.length" :key="item.key">
-          <template #icon v-if="item.icon">
-            <component :is="getIcon(item.icon)" />
-          </template>
-          <template #title>{{ item.title }}</template>
-          <a-menu-item v-for="child in item.children" :key="child.key">
-            <template #icon v-if="child.icon">
-              <component :is="getIcon(child.icon)" />
-            </template>
-            {{ child.title }}
-          </a-menu-item>
-        </a-sub-menu>
-        <a-menu-item v-else :key="item.key">
-          <template #icon v-if="item.icon">
-            <component :is="getIcon(item.icon)" />
-          </template>
-          {{ item.title }}
-        </a-menu-item>
-      </template>
+      <!-- 递归渲染（复用 SidebarMenuItem，与侧栏同一套无限层级逻辑；此前只渲染两层） -->
+      <SidebarMenuItem v-for="item in menus" :key="item.key" :item="item" :getIcon="getIcon" />
     </a-menu>
   </div>
 </template>
 
 <script setup lang="ts">
 import { DashboardOutlined } from '@ant-design/icons-vue'
+import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import { resolveIcon } from '@/utils/iconResolver'
 import { useUserStore } from '@/stores/user'
 import type { SidebarItem } from '@/types'

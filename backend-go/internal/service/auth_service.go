@@ -81,6 +81,11 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 	user, err := s.userRepo.FindByUsername(username)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
+			// 用户不存在同样计入失败次数：否则「存在但连错」返回 423、「不存在」返回 401，
+			// 这个差异足以枚举出有效用户名
+			if s.loginLockEnabled {
+				_ = s.lockRepo.IncrementFailed(username, s.maxAttempts)
+			}
 			s.recordLoginFailure(nil, username, ip, userAgent, "用户名或密码错误")
 			return nil, apperr.New(401, "用户名或密码错误")
 		}
@@ -213,12 +218,13 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*Refres
 		return nil, apperr.New(401, "refresh token 已失效，请重新登录")
 	}
 
-	// 原子消费（防并发重放）：SETNX 成功才算首次使用；重复使用/已注销的 token 拒绝
+	// 原子消费（防并发重放）：SETNX 成功才算首次使用；重复使用/已注销的 token 拒绝。
+	// Redis 出错时 fail-closed（503）：降级放行会让“已注销/已重放”的 refresh 在 Redis 故障期
+	// 无限续命，故障窗口签发的 access 全部不可追认吊销。
 	consumed, err := s.jwtMgr.ConsumeRefreshToken(ctx, refreshToken)
 	if err != nil {
-		// Redis 不可用时降级放行（保持可用性，与黑名单检查原行为一致）
-		s.logger.WarnContext(ctx, "消费 refresh token 失败，降级放行", "error", err)
-		consumed = true
+		s.logger.ErrorContext(ctx, "消费 refresh token 失败，拒绝刷新", "error", err)
+		return nil, apperr.New(503, "服务暂不可用，请稍后重试")
 	}
 	if !consumed {
 		return nil, apperr.New(401, "refresh token 已被使用或吊销")

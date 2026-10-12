@@ -7,5 +7,15 @@
 [jwt] 2026-09-28 真：iat 精度为秒，比 last_logout 前须 Truncate(time.Second)。@jwt.go
 [tool] 2026-09-28 真：本仓库 gofmt 未全量清洁，勿跑 gofmt -w .（大量无关改动）。
 [gin] 2026-09-28 真：c.FormFile 会把整个 body 先落临时盘，大文件上传须用 MultipartReader。@file_handler.go
-[rbac] 2026-09-28 小心：菜单 path 为空时其 allowed_paths 不参与授权。@middleware/rbac.go
+[rbac] 2026-10-12 高危：权限规则不做进程内缓存，停用角色/改菜单必须即时生效，TTL 缓存=30s 越权窗口。@middleware/rbac.go
+[captcha] 2026-10-12 高危：验证码不能用 SVG 输出（文本格式，答案明文在节点里，抓一次响应即可读出），必须出 PNG；答案也要 crypto/rand，库内 RandText 是 math/rand。@internal/captcha
 [job] 2026-09-28 真：trigger_config 解析/校验只有 internal/trigger 一处，新增解析必须接它。@internal/trigger
+[cors] 2026-10-12 小心：POST 必带 Origin，不在白名单即被 gin-contrib/cors 空体 403，前端显示“没有权限”，掩盖真实错误。@configs/config.example.yaml
+[gin] 2026-10-12 真：c.JSON 不防重复写，中间件复用会写响应的解析函数会拼出两段 JSON（软鉴权只能解析、不能应答）。@middleware/jwt.go
+[gorm] 2026-10-12 真：读整行改完再 Save 会覆盖并发更新（心跳抹掉升级指令）；单字段更新一律按列 Update。@cluster_service.go
+[前端] 2026-10-12 小心：筛选控件必须对应后端真实 query 参数，gin 丢弃未知字段=静默查全量；后端不支持的控件要删掉。@adminx-ui/src/views
+[前端] 2026-10-12 高危：编辑弹窗提交整个表单对象会带上新增流程残留的 password → 后端改密并吊销该用户全部 token。@views/system/UserList.vue
+[前端] 2026-10-12 中危：派生状态只在某个事件回调里刷新（MIX 选中一级菜单只在路由变化时写），触发条件不成立即静默失效；一律用 computed 推导。@AdminLayout.vue
+[前端] 2026-10-12 中危：主区放进不同 v-if 分支会让 <router-view> 被卸载重建，页面 onMounted 重拉服务端状态覆盖未保存的编辑（点混合布局像没反应）。@AdminLayout.vue
+[sqlite] 2026-10-13 中危：请求路径上新增写库（清理/采样）在单写者下撞第二进程会 database is locked 拖 5s 并 500，家务写须限频且失败不致命。@internal/captcha
+[audit] 2026-10-13 高危：写端点漏审计是静默的（改配置/执行 shell 任务无痕）；新增写端点必须在 router 用 audited() 声明。@internal/router/router.go

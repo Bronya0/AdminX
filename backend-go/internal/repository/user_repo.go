@@ -17,6 +17,17 @@ type UserRepo struct {
 
 func NewUserRepo(db *gorm.DB) *UserRepo { return &UserRepo{db: db} }
 
+// WithTx 返回绑定到事务 tx 的新 Repo（读/写均走同一事务）。
+func (r *UserRepo) WithTx(tx *gorm.DB) *UserRepo { return &UserRepo{db: tx} }
+
+// UpdateColumns 按列更新用户（只写 cols 白名单列，不触碰其他并发单列）。
+func (r *UserRepo) UpdateColumns(id string, cols map[string]interface{}) error {
+	if len(cols) == 0 {
+		return nil
+	}
+	return r.db.Model(&model.User{}).Where("id = ?", id).Updates(cols).Error
+}
+
 // FindByUsername 按用户名查询（含角色）。
 func (r *UserRepo) FindByUsername(username string) (*model.User, error) {
 	var u model.User
@@ -86,18 +97,19 @@ func (r *UserRepo) Update(u *model.User) error {
 	return r.db.Save(u).Error
 }
 
-// SaveAndMaybeRevoke 保存用户；revokeTokens 为真时在同一事务内更新 last_logout。
-// 管理员重置密码必须吊销该用户既有 token，且必须与密码写入同事务，避免只改一半
-// （先写密码再单独吊销：中间失败会留下"密码已换、旧 token 仍可用"的状态）。
-func (r *UserRepo) SaveAndMaybeRevoke(u *model.User, revokeTokens bool) error {
+// SaveAndMaybeRevoke 按列更新用户；revokeTokens 为真时在同一事务内更新 last_logout。
+// 只写 cols 白名单列，不做整行 Save：整行写回会覆盖 last_activity/last_login 等并发单列更新。
+func (r *UserRepo) SaveAndMaybeRevoke(id string, cols map[string]interface{}, revokeTokens bool) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(u).Error; err != nil {
-			return err
+		if len(cols) > 0 {
+			if err := tx.Model(&model.User{}).Where("id = ?", id).Updates(cols).Error; err != nil {
+				return err
+			}
 		}
 		if !revokeTokens {
 			return nil
 		}
-		return tx.Model(&model.User{}).Where("id = ?", u.ID).
+		return tx.Model(&model.User{}).Where("id = ?", id).
 			Update("last_logout", time.Now()).Error
 	})
 }

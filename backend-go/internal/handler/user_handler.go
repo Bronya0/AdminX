@@ -118,8 +118,8 @@ func (h *UserHandler) Update(c *gin.Context) {
 			return
 		}
 	}
-	// 变更前快照（用于审计 old/new/diff；失败不影响主流程）
-	oldUser, _ := h.svc.GetByID(id)
+	// 变更前快照复用首次查询结果：同一次请求不再重复查库（原先查同一用户 3 次）。
+	oldUser := target
 	user, err := h.svc.Update(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)

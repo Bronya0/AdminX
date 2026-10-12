@@ -7,164 +7,88 @@
       '--admin-header-height': headerHeight + 'px',
     }"
   >
-    <!-- SIDE layout: sidebar only -->
-    <SideBar
-      v-if="layout === 'side'"
-      :menus="sidebarMenus"
-      :navTheme="userStore.navSide.menuTheme"
-      :collapsed="collapsed"
-      :selectedKeys="selectedKeys"
-      :openKeys="openKeys"
-      :showLogo="userStore.theme.showLogo"
-      :showVersion="userStore.theme.showVersion !== false"
-      @select="handleMenuClick"
-      @update:openKeys="openKeys = $event"
-    />
-
-    <!-- TOP layout: top nav only -->
+    <!-- 顶部导航（top / mix）：side 布局没有这一行 -->
     <TopNav
-      v-if="layout === 'top'"
-      :menus="sidebarMenus"
+      v-if="layout !== 'side'"
+      :menus="layout === 'mix' ? topLevelMenus : sidebarMenus"
       :navTheme="userStore.navTop.menuTheme"
-      :selectedKeys="selectedKeys"
+      :selectedKeys="layout === 'mix' ? [selectedTopKey] : selectedKeys"
+      :isMix="layout === 'mix'"
       :showLogo="userStore.theme.showLogo"
-      @select="handleMenuClick"
+      @select="handleTopNavSelect"
     />
 
-    <!-- MIX layout: top nav + sidebar -->
-    <template v-if="layout === 'mix'">
-      <TopNav
-        :menus="topLevelMenus"
-        :navTheme="userStore.navTop.menuTheme"
-        :selectedKeys="[selectedTopKey]"
-        :isMix="true"
-        :showLogo="userStore.theme.showLogo"
-        @select="handleTopMenuClick"
+    <!-- 侧栏 + 主区：三种布局共用同一棵子树。
+         若把主区放进不同的 v-if 分支，切布局会卸载并重建 <router-view>：
+         页面状态丢失，页面 onMounted 里的 fetchTheme 还会把未保存的主题预览覆盖回服务端值，
+         表现就是「点混合布局没反应」。 -->
+    <div class="layout-body">
+      <SideBar
+        v-if="layout === 'side' || (layout === 'mix' && currentChildMenus.length > 0)"
+        :menus="layout === 'mix' ? currentChildMenus : sidebarMenus"
+        :navTheme="userStore.navSide.menuTheme"
+        :collapsed="collapsed"
+        :selectedKeys="selectedKeys"
+        :openKeys="openKeys"
+        :showLogo="layout === 'side' && userStore.theme.showLogo"
+        :showVersion="userStore.theme.showVersion !== false"
+        @select="handleMenuClick"
+        @update:openKeys="openKeys = $event"
       />
-      <div class="mix-body">
-        <SideBar
-          v-if="currentChildMenus.length"
-          :menus="currentChildMenus"
-          :navTheme="userStore.navSide.menuTheme"
-          :collapsed="collapsed"
-          :selectedKeys="selectedKeys"
-          :openKeys="openKeys"
-          :showLogo="false"
-          :showVersion="userStore.theme.showVersion !== false"
-          @select="handleMenuClick"
-          @update:openKeys="openKeys = $event"
-        />
-        <!-- 主区域（MIX 模式放在 mix-body 内） -->
-        <div class="admin-main" :class="{ collapsed }">
-          <div class="admin-header">
-            <div class="header-left">
-              <a-button type="text" @click="toggleCollapsed">
-                <MenuFoldOutlined v-if="!collapsed" />
-                <MenuUnfoldOutlined v-else />
-              </a-button>
-              <breadcrumb-nav v-if="showBreadcrumb" />
-            </div>
-            <div class="header-right">
-              <a-space>
-                <a-button
-                  v-if="canConfigCenter"
-                  class="header-icon-btn"
-                  type="text"
-                  aria-label="配置中心"
-                  @click="goToConfigCenter"
-                >
-                  <SettingOutlined style="font-size: 18px;" />
-                </a-button>
-                <a-button
-                  class="header-icon-btn"
-                  type="text"
-                  aria-label="通知中心"
-                  @click="goToNotification"
-                >
-                  <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
-                    <BellOutlined style="font-size: 18px;" />
-                  </a-badge>
-                </a-button>
-                <a-dropdown>
-                  <a-space style="cursor: pointer; display: inline-flex; align-items: center;">
-                    <a-avatar :size="32">
-                      <template #icon><UserOutlined /></template>
-                    </a-avatar>
-                    <span style="font-size: 14px; color: #333;">{{ username }}</span>
-                    <span v-if="userRoles" style="font-size: 12px; color: #999; margin-right: 0;">({{ userRoles }})</span>
-                    <DownOutlined style="font-size: 12px; color: #999;" />
-                  </a-space>
-                  <template #overlay>
-                    <a-menu>
-                      <a-menu-item @click="handleLogout">
-                        <LogoutOutlined /> 退出登录
-                      </a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
-              </a-space>
-            </div>
-          </div>
-          <div class="admin-content">
-            <router-view />
-          </div>
-        </div>
-      </div>
-    </template>
 
-    <!-- 主区域（SIDE / TOP 布局） -->
-    <div v-else class="admin-main" :class="{ collapsed: layout !== 'top' && collapsed }">
-      <div class="admin-header">
-        <div class="header-left">
-          <a-button v-if="layout !== 'top'" type="text" @click="toggleCollapsed">
-            <MenuFoldOutlined v-if="!collapsed" />
-            <MenuUnfoldOutlined v-else />
-          </a-button>
-          <breadcrumb-nav v-if="showBreadcrumb" />
-        </div>
-        <div class="header-right">
-          <a-space>
-            <a-button
-              v-if="canConfigCenter"
-              class="header-icon-btn"
-              type="text"
-              aria-label="配置中心"
-              @click="goToConfigCenter"
-            >
-              <SettingOutlined style="font-size: 18px;" />
+      <div class="admin-main" :class="{ collapsed: layout !== 'top' && collapsed }">
+        <div class="admin-header">
+          <div class="header-left">
+            <a-button v-if="layout !== 'top'" type="text" @click="toggleCollapsed">
+              <MenuFoldOutlined v-if="!collapsed" />
+              <MenuUnfoldOutlined v-else />
             </a-button>
-            <a-button
-              class="header-icon-btn"
-              type="text"
-              aria-label="通知中心"
-              @click="goToNotification"
-            >
-              <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
-                <BellOutlined style="font-size: 18px;" />
-              </a-badge>
-            </a-button>
-            <a-dropdown>
-              <a-space style="cursor: pointer; display: inline-flex; align-items: center;">
-                <a-avatar :size="32">
-                  <template #icon><UserOutlined /></template>
-                </a-avatar>
-                <span style="font-size: 14px; color: #333;">{{ username }}</span>
-                <span v-if="userRoles" style="font-size: 12px; color: #999; margin-right: 0;">({{ userRoles }})</span>
-                <DownOutlined style="font-size: 12px; color: #999;" />
-              </a-space>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item @click="handleLogout">
-                    <LogoutOutlined /> 退出登录
-                  </a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
-          </a-space>
+            <breadcrumb-nav v-if="showBreadcrumb" />
+          </div>
+          <div class="header-right">
+            <a-space>
+              <a-button
+                v-if="canConfigCenter"
+                class="header-icon-btn"
+                type="text"
+                aria-label="配置中心"
+                @click="goToConfigCenter"
+              >
+                <SettingOutlined style="font-size: 18px;" />
+              </a-button>
+              <a-button
+                class="header-icon-btn"
+                type="text"
+                aria-label="通知中心"
+                @click="goToNotification"
+              >
+                <a-badge :count="unreadCount" :overflow-count="99" :offset="[2, -2]">
+                  <BellOutlined style="font-size: 18px;" />
+                </a-badge>
+              </a-button>
+              <a-dropdown>
+                <a-space style="cursor: pointer; display: inline-flex; align-items: center;">
+                  <a-avatar :size="32">
+                    <template #icon><UserOutlined /></template>
+                  </a-avatar>
+                  <span style="font-size: 14px; color: #333;">{{ username }}</span>
+                  <span v-if="userRoles" style="font-size: 12px; color: #999; margin-right: 0;">({{ userRoles }})</span>
+                  <DownOutlined style="font-size: 12px; color: #999;" />
+                </a-space>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item @click="handleLogout">
+                      <LogoutOutlined /> 退出登录
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </a-space>
+          </div>
         </div>
-      </div>
-      <div class="admin-content">
-        <router-view />
+        <div class="admin-content">
+          <router-view />
+        </div>
       </div>
     </div>
 
@@ -238,7 +162,14 @@ const userRoles = computed(() => userStore.user?.role_names?.join(', ') || '')
 const unreadCount = ref(0)
 let unreadPollTimer: ReturnType<typeof setInterval> | null = null
 
+// 进入通知页后跳过一次布局轮询：通知页自己会拉未读数，避免重复请求
+let skipUnreadOnce = false
+
 const fetchUnreadCount = async () => {
+  if (skipUnreadOnce) {
+    skipUnreadOnce = false
+    return
+  }
   try {
     const res = await notificationApi.unreadCount()
     unreadCount.value = res.count
@@ -269,8 +200,16 @@ const topLevelMenus = computed(() =>
   sidebarMenus.value.map(m => ({ ...m, children: undefined }))
 )
 
-// MIX 布局：当前选中的一级菜单的子菜单
-const selectedTopKey = ref('')
+// MIX 布局：当前选中的一级菜单。菜单 key 就是菜单 path，所以以「当前路由」为事实源推导 ——
+// 这样切换布局、刷新页面都能立刻定位到所属一级菜单，不再依赖「路由变化」这个时机。
+// 点击一级菜单时先写一份 override：外链 / 未发布页面的点击不改变路由，靠它立即换掉左侧子菜单。
+const clickedTopKey = ref('')
+const selectedTopKey = computed(() => {
+  const keys = topLevelMenus.value.map(m => m.key)
+  if (clickedTopKey.value && keys.includes(clickedTopKey.value)) return clickedTopKey.value
+  const topKey = '/' + (route.path.split('/').filter(Boolean)[0] || '')
+  return keys.includes(topKey) ? topKey : ''
+})
 const currentChildMenus = computed(() => {
   if (!selectedTopKey.value) return []
   const parent = sidebarMenus.value.find(m => m.key === selectedTopKey.value)
@@ -283,14 +222,11 @@ watch(
   (path) => {
     selectedKeys.value = [path]
 
-    // 更新 MIX layout 的选中顶级菜单
-    if (layout.value === 'mix') {
-      const parts = path.split('/').filter(Boolean)
-      if (parts.length >= 1) {
-        const topKey = '/' + parts[0]
-        selectedTopKey.value = topKey
-      }
-    }
+    // 进入通知页时标记跳过下一次布局轮询（通知页自会拉取未读数）
+    if (path === '/system/notification') skipUnreadOnce = true
+
+    // 路由变了就以路由为准：清掉点击一级菜单时写的 override（见 selectedTopKey）
+    clickedTopKey.value = ''
 
     // 自动展开父菜单
     const parentPath = path.split('/').slice(0, 2).join('/')
@@ -397,7 +333,7 @@ const handleMenuClick = (key: string) => {
 
 // MIX 布局：点击顶级菜单 -> 跳转到第一个子菜单
 const handleTopMenuClick = (key: string) => {
-  selectedTopKey.value = key
+  clickedTopKey.value = key
   const parent = sidebarMenus.value.find(m => m.key === key)
   const targetItem = parent?.children?.[0] ?? parent
   if (!targetItem) return
@@ -408,7 +344,15 @@ const handleTopMenuClick = (key: string) => {
   const routeExists = router.getRoutes().some(r => r.path === targetItem.key)
   if (routeExists) {
     router.push(targetItem.key)
+  } else {
+    message.warning('该菜单尚未发布前端页面')
   }
+}
+
+// 顶栏点击：mix 的顶栏是一级菜单（选中后跳首个二级菜单），top 的顶栏就是完整菜单树
+const handleTopNavSelect = (key: string) => {
+  if (layout.value === 'mix') handleTopMenuClick(key)
+  else handleMenuClick(key)
 }
 
 const goToNotification = () => {
@@ -439,25 +383,19 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 三种布局统一：外层纵向（顶栏在上，下面一行），行内放侧栏 + 主区。
+   主区不放进 v-if 分支，切布局才不会重建当前页面。 */
 .admin-wrapper {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
 
-/* TOP layout：纵向排列 */
-.admin-wrapper.top {
-  flex-direction: column;
-}
-
-/* MIX layout：顶部导航 + 下方 sidebar+content 横向 */
-.admin-wrapper.mix {
-  flex-direction: column;
-}
-
-.mix-body {
+.layout-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

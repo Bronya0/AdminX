@@ -2,8 +2,11 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 // datatypesJSON 是 datatypes.JSON 的别名，简化 service 层引用。
@@ -25,4 +28,17 @@ func mustJSON(items []string) datatypes.JSON {
 		return datatypes.JSON([]byte("[]"))
 	}
 	return datatypes.JSON(b)
+}
+
+// isDupKey 判断是否为唯一冲突错误（sqlite/postgres 方言无关）：
+// gorm.TranslateError 已把 sqlite 转为 gorm.ErrDuplicatedKey；PG 侧按错误文本兜底。
+func isDupKey(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique")
 }

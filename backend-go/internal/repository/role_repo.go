@@ -17,6 +17,9 @@ type RoleRepo struct {
 
 func NewRoleRepo(db *gorm.DB) *RoleRepo { return &RoleRepo{db: db} }
 
+// WithTx 返回绑定到事务 tx 的新 Repo。
+func (r *RoleRepo) WithTx(tx *gorm.DB) *RoleRepo { return &RoleRepo{db: tx} }
+
 func (r *RoleRepo) FindByID(id string) (*model.Role, error) {
 	var role model.Role
 	err := r.db.Preload("Menus").First(&role, "id = ?", id).Error

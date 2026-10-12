@@ -88,10 +88,10 @@
                 {{ record.last_heartbeat ? formatDateTime(record.last_heartbeat) : '—' }}
               </template>
               <template v-if="column.key === 'pending_command'">
-                <a-tag v-if="record.pending_command === 'upgrade'" color="orange">
+                <a-tag v-if="pendingCommand(record) === 'upgrade'" color="orange">
                   升级 → {{ record.upgrade_version }}
                 </a-tag>
-                <a-tag v-else-if="record.pending_command === 'uninstall'" color="red">
+                <a-tag v-else-if="pendingCommand(record) === 'uninstall'" color="red">
                   待卸载
                 </a-tag>
                 <span v-else class="text-muted">—</span>
@@ -101,7 +101,7 @@
                   <a-button
                     size="small"
                     type="link"
-                    :disabled="record.pending_command === 'uninstall'"
+                    :disabled="pendingCommand(record) === 'uninstall'"
                     @click="openUpgradeModal(record)"
                   >
                     升级
@@ -111,19 +111,19 @@
                     <template #overlay>
                       <a-menu>
                         <a-menu-item
-                          v-if="record.pending_command === 'upgrade'"
+                          v-if="pendingCommand(record) === 'upgrade'"
                           @click="cancelUpgrade(record)"
                         >
                           取消升级
                         </a-menu-item>
                         <a-menu-item
-                          v-if="record.pending_command !== 'uninstall'"
+                          v-if="pendingCommand(record) !== 'uninstall'"
                           @click="handleUninstall(record)"
                         >
                           卸载
                         </a-menu-item>
                         <a-menu-item
-                          v-if="record.pending_command === 'uninstall'"
+                          v-if="pendingCommand(record) === 'uninstall'"
                           @click="cancelUninstall(record)"
                         >
                           取消卸载
@@ -220,7 +220,13 @@ const bizPagination = reactive({ current: 1, pageSize: 20, total: 0, showSizeCha
 
 const bizOnline = computed(() => bizComponents.value.filter(c => c.status === 'online').length)
 const bizOffline = computed(() => bizComponents.value.filter(c => c.status !== 'online').length)
-const pendingCommandCount = computed(() => bizComponents.value.filter(c => c.pending_command).length)
+// 后端只给原始字段（uninstall_pending / upgrade_version + upgrade_url），
+// 「待指令」是它们的派生值：升级指令必须 version + url 齐全，与后端下发条件一致。
+const pendingCommand = (c: ServiceComponent): 'upgrade' | 'uninstall' | null => {
+  if (c.uninstall_pending) return 'uninstall'
+  return c.upgrade_version && c.upgrade_url ? 'upgrade' : null
+}
+const pendingCommandCount = computed(() => bizComponents.value.filter(c => pendingCommand(c)).length)
 
 const bizColumns = [
   { title: '组件名称', dataIndex: 'name', key: 'name' },
@@ -247,7 +253,7 @@ const loadSys = async () => {
 const loadBiz = async () => {
   bizLoading.value = true
   try {
-    const res = await componentApi.list({ search: bizSearch.value || undefined })
+    const res = await componentApi.list({ search: bizSearch.value || undefined, page: bizPagination.current, size: bizPagination.pageSize })
     bizComponents.value = res.results ?? (res as any)
     bizPagination.total = res.count ?? bizComponents.value.length
   } catch {

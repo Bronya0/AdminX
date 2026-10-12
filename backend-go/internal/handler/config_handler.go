@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -59,7 +60,7 @@ func (h *ConfigHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	response.Created(c, cfg)
+	response.Created(c, service.ToConfigDTO(cfg))
 }
 
 func (h *ConfigHandler) Update(c *gin.Context) {
@@ -78,7 +79,7 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	response.OK(c, cfg)
+	response.OK(c, service.ToConfigDTO(cfg))
 }
 
 func (h *ConfigHandler) Delete(c *gin.Context) {
@@ -146,7 +147,9 @@ func (h *ConfigHandler) Export(c *gin.Context) {
 }
 
 // Import POST /config/import/ — 按 key 覆盖式导入字典配置。
+// 先用 MaxBytesReader 限流 2MB：GetRawData 无上限，大包会把内存打爆。
 func (h *ConfigHandler) Import(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
 	raw, err := c.GetRawData()
 	if err != nil {
 		response.Fail(c, 400, "读取请求体失败")

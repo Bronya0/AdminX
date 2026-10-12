@@ -314,17 +314,17 @@ const formatTime = (time: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    // 加载概览
-    const overviewRes = await clusterApi.getOverview()
+    // 概览与列表无依赖，并行取
+    const [overviewRes, res] = await Promise.all([
+      clusterApi.getOverview(),
+      clusterApi.getNodes({
+        page: pagination.current,
+        size: pagination.pageSize,
+        search: searchForm.search,
+        status: searchForm.status,
+      }),
+    ])
     Object.assign(overview, overviewRes)
-
-    // 加载列表
-    const res = await clusterApi.getNodes({
-      page: pagination.current,
-      size: pagination.pageSize,
-      search: searchForm.search,
-      status: searchForm.status,
-    })
     tableData.value = res.results
     pagination.total = res.count
   } finally {

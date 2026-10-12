@@ -21,6 +21,8 @@ const (
 	siteKeyLoginBg     = "site.login_bg_image"
 	siteKeyFavicon     = "site.favicon"
 	siteKeyAppVersion  = "site.app_version"
+	// 登录验证码开关：默认开启（防爆破基线），站点设置页可运行时关闭。
+	siteKeyLoginCaptcha = "site.login_captcha_required"
 
 	// maxIdleTimeoutMinutes 空闲超时上限（24 小时；0 = 不超时）。
 	maxIdleTimeoutMinutes = 1440
@@ -36,6 +38,8 @@ type SiteInfo struct {
 	LoginBgImage   string `json:"login_bg_image"`
 	AppVersion     string `json:"app_version"`
 	Favicon        string `json:"favicon"`
+	// LoginCaptchaRequired 登录是否强制验证码（公共端点返回，登录页据此展示）。
+	LoginCaptchaRequired bool `json:"login_captcha_required"`
 }
 
 // SiteInfoUpdateInput 站点信息更新入参（指针字段：nil = 不修改）。
@@ -48,6 +52,8 @@ type SiteInfoUpdateInput struct {
 	LoginBgImage   *string `json:"login_bg_image"`
 	AppVersion     *string `json:"app_version"`
 	Favicon        *string `json:"favicon"`
+	// LoginCaptchaRequired nil = 不修改。
+	LoginCaptchaRequired *bool `json:"login_captcha_required"`
 }
 
 // SiteInfoService 站点信息（基于配置中心，读写都走 ConfigService 以复用缓存与类型解析）。
@@ -66,6 +72,8 @@ const (
 	defaultSiteThemeColor  = "#1677ff"
 	defaultSiteIdleTimeout = 30
 	defaultSiteAppVersion  = "1.0.0"
+	// 登录验证码默认开启：防爆破基线，关闭需在站点设置页显式操作。
+	defaultLoginCaptchaRequired = true
 )
 
 // Get 读取站点信息（缺失字段回落默认值）。
@@ -83,10 +91,22 @@ func (s *SiteInfoService) Get(ctx context.Context) (*SiteInfo, error) {
 		LoginBgImage:   configString(values, siteKeyLoginBg, ""),
 		Favicon:        configString(values, siteKeyFavicon, ""),
 		AppVersion:     configString(values, siteKeyAppVersion, defaultSiteAppVersion),
+		LoginCaptchaRequired: configBool(values, siteKeyLoginCaptcha, defaultLoginCaptchaRequired),
 	}, nil
 }
 
-// Update 保存站点信息：只写入本次传入的字段（其余保持不变），返回保存后的完整值。
+// IsLoginCaptchaRequired 登录是否强制验证码（登录 handler 每次实时读，改开关即时生效）。
+// 读取失败按开启处理（fail-closed）：配置故障不能变成绕过验证码的窗口。
+func (s *SiteInfoService) IsLoginCaptchaRequired(ctx context.Context) bool {
+	info, err := s.Get(ctx)
+	if err != nil {
+		return true
+	}
+	return info.LoginCaptchaRequired
+}
+
+// Update 保存站点信息：先全量校验，再单事务一次写入（SetValues），返回保存后的完整值。
+// 不逐条 SetValue：后写字段校验失败会留下半份配置。
 func (s *SiteInfoService) Update(ctx context.Context, in SiteInfoUpdateInput) (*SiteInfo, error) {
 	// 站点名称为空会让登录页/侧边栏标题变空，明确拒绝
 	if in.SiteName != nil {
@@ -95,6 +115,14 @@ func (s *SiteInfoService) Update(ctx context.Context, in SiteInfoUpdateInput) (*
 			return nil, apperr.New(400, "站点名称不能为空")
 		}
 		in.SiteName = &name
+	}
+
+	// 校验必须全部做完再落库：边写边校验时，后面的字段校验失败会留下半份配置
+	if in.IdleTimeout != nil {
+		timeout := *in.IdleTimeout
+		if timeout < 0 || timeout > maxIdleTimeoutMinutes {
+			return nil, apperr.New(400, "会话空闲超时需在 0~1440 分钟之间（0 = 不超时）")
+		}
 	}
 
 	stringFields := []struct {
@@ -110,22 +138,24 @@ func (s *SiteInfoService) Update(ctx context.Context, in SiteInfoUpdateInput) (*
 		{siteKeyFavicon, "浏览器标签图标 URL", in.Favicon},
 		{siteKeyAppVersion, "站点版本号", in.AppVersion},
 	}
+	kvs := map[string]ConfigValue{}
 	for _, f := range stringFields {
 		if f.value == nil {
 			continue
 		}
-		if err := s.cfg.SetValue(f.key, *f.value, "string", f.desc, siteConfigGroup); err != nil {
-			return nil, err
-		}
+		kvs[f.key] = ConfigValue{Value: *f.value, ValueType: "string", Desc: f.desc, Group: siteConfigGroup}
 	}
 
 	if in.IdleTimeout != nil {
-		timeout := *in.IdleTimeout
-		if timeout < 0 || timeout > maxIdleTimeoutMinutes {
-			return nil, apperr.New(400, "会话空闲超时需在 0~1440 分钟之间（0 = 不超时）")
-		}
-		if err := s.cfg.SetValue(siteKeyIdleTimeout, strconv.Itoa(timeout), "int",
-			"会话空闲超时（分钟，0=不超时）", siteConfigGroup); err != nil {
+		kvs[siteKeyIdleTimeout] = ConfigValue{Value: strconv.Itoa(*in.IdleTimeout), ValueType: "int",
+			Desc: "会话空闲超时（分钟，0=不超时）", Group: siteConfigGroup}
+	}
+	if in.LoginCaptchaRequired != nil {
+		kvs[siteKeyLoginCaptcha] = ConfigValue{Value: strconv.FormatBool(*in.LoginCaptchaRequired), ValueType: "bool",
+			Desc: "登录是否强制验证码", Group: siteConfigGroup}
+	}
+	if len(kvs) > 0 {
+		if err := s.cfg.SetValues(ctx, kvs); err != nil {
 			return nil, err
 		}
 	}
@@ -162,6 +192,26 @@ func configInt(values map[string]interface{}, key string, fallback int) int {
 	case string:
 		if parsed, err := strconv.Atoi(n); err == nil {
 			return parsed
+		}
+	}
+	return fallback
+}
+
+// configBool 取 bool 配置（兼容 JSON 解码的 bool 与字符串写法）。
+func configBool(values map[string]interface{}, key string, fallback bool) bool {
+	v, ok := values[key]
+	if !ok {
+		return fallback
+	}
+	switch b := v.(type) {
+	case bool:
+		return b
+	case string:
+		switch strings.ToLower(strings.TrimSpace(b)) {
+		case "true", "1", "yes", "on":
+			return true
+		case "false", "0", "no", "off":
+			return false
 		}
 	}
 	return fallback

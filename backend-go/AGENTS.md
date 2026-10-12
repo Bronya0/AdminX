@@ -138,12 +138,13 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - **Refresh 必须校验 last_logout**（与 JWTAuth 同标准），否则登出二次失效被绕过；WS 日志流也走同一判定（`jwt.RevokedByLogout`）
 - **jobs 写操作 / run_once / set_upgrade / menu 写（create+update+delete+register） / policy 写** 挂在 router 的 admin 组（JWT+RBAC+RequireSuperuser），新增高危端点一律进该组
 - **组件端点**（/cluster/components/*）依赖 `security.component_secret`（X-Component-Token，恒时比较）；生产必须配置
-- **登录**：`security.login_captcha_required` 开启后强制验证码（一次性、Redis 存储）；登录锁定常开（不随 mode）
+- **登录**：验证码开关存配置中心 `site.login_captcha_required`（默认开启；站点设置页可改，登录时实时读，SetValues 清缓存所以即时生效）；验证码一次性，答案优先存 Redis、未配置 Redis 时降级到 `captcha_codes` 表（本地调试无需 Redis；两者都没有才 fail-closed）；登录锁定常开（不随 mode）
 - **service 层禁止 map 直通 GORM Updates**（mass assignment），一律白名单 struct
 - **改密成功会更新 last_logout 吊销全部旧 token**；创建/重置密码走 `validatePasswordPolicy`；**管理员重置用户密码同样吊销该用户旧 token**（`UserRepo.SaveAndMaybeRevoke`，与密码写入同事务）
 - **通知已读按用户隔离**：真值在 `notification_reads`，`notifications.is_read` 只是按当前用户计算出的响应字段，不要当列读写
 - **超管账号不可被普通管理员改动/删除**（改密、禁用、删除一律 403）
 - **LIKE 搜索词必须过 `repository.EscapeLike`**
+- **写端点必须挂审计**：新增/改动的写端点（POST/PUT/PATCH/DELETE）在 router 用 `audited(action, model)` 声明，成功（code 200/201/204）时由 `middleware.Audited` 统一落库；用户/角色/菜单的写操作由 handler 自带 old/new 快照记录，**不要**再挂（一次操作会写两条）。动作词表见 `middleware.Audit*`，改词表要同步前端审计页的操作类型下拉
 
 ## 已知技术债
 

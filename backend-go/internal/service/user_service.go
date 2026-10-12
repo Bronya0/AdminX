@@ -52,6 +52,7 @@ type CreateInput struct {
 }
 
 // Create 创建用户（含密码哈希 + 角色关联）。
+// 建用户与绑角色包在同一事务内：AssignRoles 失败时整体回滚，避免留下无角色的半份用户。
 func (s *UserService) Create(in CreateInput) (*model.User, error) {
 	// 检查用户名唯一（含软删除账号：username 唯一索引不区分软删除，
 	// 只查未删除记录会在 INSERT 时撞索引、接口报 500）
@@ -87,15 +88,24 @@ func (s *UserService) Create(in CreateInput) (*model.User, error) {
 		IsSuperuser: in.IsSuperuser,
 	}
 
-	if err := s.userRepo.Create(user); err != nil {
-		return nil, apperr.ErrInternal
-	}
-
-	// 角色关联
-	if len(in.Roles) > 0 {
-		if err := s.userRepo.AssignRoles(user.ID, in.Roles); err != nil {
-			return nil, apperr.ErrInternal
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := s.userRepo.WithTx(tx)
+		if err := txRepo.Create(user); err != nil {
+			if isDupKey(err) {
+				return apperr.New(409, "用户名已存在")
+			}
+			return apperr.ErrInternal
 		}
+
+		// 角色关联（同事务：失败整体回滚）
+		if len(in.Roles) > 0 {
+			if err := txRepo.AssignRoles(user.ID, in.Roles); err != nil {
+				return apperr.ErrInternal
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	// 重新加载（含角色）
@@ -125,26 +135,29 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 		return nil, apperr.ErrInternal
 	}
 
+	// 收集本次变更列（只更新传了的字段）。
+	// 不做“读整行改完再 Save 全行”：Save 会把 last_activity/last_login 等并发单列更新覆盖回去。
+	cols := map[string]interface{}{}
 	if in.Email != nil {
-		user.Email = *in.Email
+		cols["email"] = *in.Email
 	}
 	if in.Phone != nil {
-		user.Phone = *in.Phone
+		cols["phone"] = *in.Phone
 	}
 	if in.Avatar != nil {
-		user.Avatar = *in.Avatar
+		cols["avatar"] = *in.Avatar
 	}
 	if in.Desc != nil {
-		user.Desc = *in.Desc
+		cols["desc"] = *in.Desc
 	}
 	if in.HomePage != nil {
-		user.HomePage = *in.HomePage
+		cols["home_page"] = *in.HomePage
 	}
 	if in.IsActive != nil {
-		user.IsActive = *in.IsActive
+		cols["is_active"] = *in.IsActive
 	}
 	if in.IsSuperuser != nil {
-		user.IsSuperuser = *in.IsSuperuser
+		cols["is_superuser"] = *in.IsSuperuser
 	}
 
 	// 密码更新（重置密码同样受策略约束）
@@ -157,13 +170,14 @@ func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
 		if err != nil {
 			return nil, apperr.ErrInternal
 		}
-		user.Password = hashed
+		cols["password"] = hashed
 		passwordChanged = true
 	}
 
 	// 重置密码即吊销该用户全部旧 token（与 policy 改密同标准）：
 	// 否则被盗 token 在管理员重置密码后仍可继续使用。
-	if err := s.userRepo.SaveAndMaybeRevoke(user, passwordChanged); err != nil {
+	// 密码写入与 last_logout 更新同事务，避免只改一半。
+	if err := s.userRepo.SaveAndMaybeRevoke(user.ID, cols, passwordChanged); err != nil {
 		return nil, apperr.ErrInternal
 	}
 

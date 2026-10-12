@@ -9,7 +9,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-	"gorm.io/datatypes"
 
 	apperr "adminx/pkg/errors"
 	"adminx/pkg/crypto"
@@ -33,7 +32,9 @@ type ConfigDTO struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-func toConfigDTO(c *model.Config) ConfigDTO {
+// ToConfigDTO 转换配置为响应 DTO（加密值只显示 ********）。
+// 写操作也返回它：模型一旦被直接序列化就会漏出密文列。
+func ToConfigDTO(c *model.Config) ConfigDTO {
 	dto := ConfigDTO{
 		ID: c.ID, Key: c.Key, ValueType: c.ValueType,
 		IsEncrypted: c.IsEncrypted, Desc: c.Desc, Group: c.Group,
@@ -52,7 +53,7 @@ func toConfigDTO(c *model.Config) ConfigDTO {
 func toConfigDTOs(cfgs []model.Config) []ConfigDTO {
 	dtos := make([]ConfigDTO, len(cfgs))
 	for i := range cfgs {
-		dtos[i] = toConfigDTO(&cfgs[i])
+		dtos[i] = ToConfigDTO(&cfgs[i])
 	}
 	return dtos
 }
@@ -99,8 +100,19 @@ func (s *ConfigService) GetByID(id int64) (*ConfigDTO, error) {
 		}
 		return nil, apperr.ErrInternal
 	}
-	dto := toConfigDTO(c)
+	dto := ToConfigDTO(c)
 	return &dto, nil
+}
+
+// assertGroupWritable 拒绝通过通用配置接口改写由专用服务维护的分组（见 serviceOwnedGroups）。
+// 这些分组的整份值有各自的 schema 与校验，被写成“合法 JSON 但非法布局”会让前端整站白屏。
+func assertGroupWritable(groups ...string) error {
+	for _, g := range groups {
+		if label, owned := serviceOwnedGroups[g]; owned {
+			return apperr.New(400, "分组 "+g+" 由"+label+"维护，请在对应设置页修改")
+		}
+	}
+	return nil
 }
 
 // CreateInput 创建配置入参。
@@ -122,6 +134,9 @@ func (s *ConfigService) Create(in ConfigCreateInput) (*model.Config, error) {
 	group := in.Group
 	if group == "" {
 		group = "default"
+	}
+	if err := assertGroupWritable(group); err != nil {
+		return nil, err
 	}
 	isActive := true
 	if in.IsActive != nil {
@@ -157,13 +172,14 @@ func (s *ConfigService) Create(in ConfigCreateInput) (*model.Config, error) {
 	return cfg, nil
 }
 
-// UpdateInput 更新配置入参。
+// UpdateInput 更新配置入参。Desc 用指针区分「未传」（保持原值）与「传空串」（清空）：
+// 非指针字段被无条件赋值时，只改 is_active 的 PATCH 会把描述一并清掉。
 type ConfigUpdateInput struct {
-	Value       string `json:"value"`
-	ValueType   string `json:"value_type"`
-	Desc        string `json:"desc"`
-	Group       string `json:"group"`
-	IsActive    *bool  `json:"is_active"`
+	Value     string  `json:"value"`
+	ValueType string  `json:"value_type"`
+	Desc      *string `json:"desc"`
+	Group     string  `json:"group"`
+	IsActive  *bool   `json:"is_active"`
 }
 
 func (s *ConfigService) Update(id int64, in ConfigUpdateInput) (*model.Config, error) {
@@ -176,6 +192,10 @@ func (s *ConfigService) Update(id int64, in ConfigUpdateInput) (*model.Config, e
 	}
 
 	oldKey, oldGroup := cfg.Key, cfg.Group
+	// 新旧分组都要判：把分组改走同样会让专用服务读不到自己的配置
+	if err := assertGroupWritable(oldGroup, in.Group); err != nil {
+		return nil, err
+	}
 
 	// 加密配置：加密后不允许改回明文
 	if cfg.IsEncrypted && in.Value != "" {
@@ -194,7 +214,9 @@ func (s *ConfigService) Update(id int64, in ConfigUpdateInput) (*model.Config, e
 	if in.ValueType != "" {
 		cfg.ValueType = in.ValueType
 	}
-	cfg.Desc = in.Desc
+	if in.Desc != nil {
+		cfg.Desc = *in.Desc
+	}
 	if in.Group != "" {
 		cfg.Group = in.Group
 	}
@@ -217,6 +239,9 @@ func (s *ConfigService) Delete(id int64) error {
 	cfg, err := s.repo.FindByID(id)
 	if err != nil {
 		return apperr.ErrNotFound
+	}
+	if err := assertGroupWritable(cfg.Group); err != nil {
+		return err
 	}
 	if err := s.repo.Delete(id); err != nil {
 		return apperr.ErrInternal
@@ -267,6 +292,85 @@ func (s *ConfigService) SetValue(key, value, valueType, desc, group string) erro
 	s.invalidateCache(cfg.Key, cfg.Group)
 	if oldGroup != cfg.Group {
 		s.invalidateCache(cfg.Key, oldGroup)
+	}
+	return nil
+}
+
+// ConfigValue 待写入的一条键值（含元信息）。
+type ConfigValue struct {
+	Value     string
+	ValueType string
+	Desc      string
+	Group     string
+}
+
+// SetValues 单事务批量写入多条明文配置（不存在则创建，存在则覆盖）。
+// 用于站点信息这类“一次改多个 key”的场景：逐条 SetValue 时中途失败会留下半份配置。
+func (s *ConfigService) SetValues(ctx context.Context, kvs map[string]ConfigValue) error {
+	if len(kvs) == 0 {
+		return nil
+	}
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repo := repository.NewConfigRepo(tx)
+		for key, kv := range kvs {
+			valueType := kv.ValueType
+			if valueType == "" {
+				valueType = "string"
+			}
+			group := kv.Group
+			if group == "" {
+				group = "default"
+			}
+			cfg, err := repo.FindAnyByKey(key)
+			if err != nil {
+				if err != gorm.ErrRecordNotFound {
+					return apperr.ErrInternal
+				}
+				created := &model.Config{
+					Key: key, Value: kv.Value, ValueType: valueType,
+					Desc: kv.Desc, Group: group, IsActive: true,
+				}
+				if err := repo.Create(created); err != nil {
+					return apperr.ErrInternal
+				}
+				continue
+			}
+			if cfg.IsEncrypted {
+				return apperr.New(400, "加密配置不支持按键覆盖写入")
+			}
+			cfg.Value = kv.Value
+			cfg.ValueType = valueType
+			cfg.Desc = kv.Desc
+			cfg.Group = group
+			cfg.IsActive = true
+			if err := repo.Update(cfg); err != nil {
+				return apperr.ErrInternal
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	for key, kv := range kvs {
+		group := kv.Group
+		if group == "" {
+			group = "default"
+		}
+		s.invalidateCache(key, group)
+	}
+	// 批量写入可能跨分组：顺带清掉整组缓存（分组 key 变更同样失效）
+	seenGroups := map[string]bool{}
+	for _, kv := range kvs {
+		group := kv.Group
+		if group == "" {
+			group = "default"
+		}
+		if !seenGroups[group] {
+			seenGroups[group] = true
+			if s.rdb != nil {
+				_ = s.rdb.Del(ctx, configGroupPrefix+group).Err()
+			}
+		}
 	}
 	return nil
 }
@@ -397,24 +501,6 @@ func (s *ConfigService) invalidateCache(key, group string) {
 	ctx := context.Background()
 	_ = s.rdb.Del(ctx, configCachePrefix+key).Err()
 	_ = s.rdb.Del(ctx, configGroupPrefix+group).Err()
-}
-
-// ── 审计辅助 ──
-
-// RecordAudit 记录审计日志（service 层显式调用，不依赖 signal）。
-func (s *ConfigService) RecordAudit(repo *repository.AuditRepo, action, modelName, objectID, objectRepr, operator, ip string, oldVals, newVals datatypes.JSON, diff string) {
-	log := &model.AuditLog{
-		Action:      action,
-		ModelName:   modelName,
-		ObjectID:    objectID,
-		ObjectRepr:  objectRepr,
-		Operator:    operator,
-		OperatorIP:  ip,
-		OldValues:   oldVals,
-		NewValues:   newVals,
-		DiffSummary: truncate(diff, 500),
-	}
-	_ = repo.Create(log)
 }
 
 // ── 辅助函数 ──

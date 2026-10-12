@@ -185,6 +185,12 @@ router.beforeEach(async (to, from) => {
     if (target !== to.path) return target
   }
 
+  // 未知内部 path 统一 fallback 到 NotFound 友好提示页：
+  // 后端菜单已发布但前端无对应路由时，给出“未发布”提示而非空白/乱跳
+  if (to.name === 'not-found' && /^\/(system|audit|dashboard|iframe)/.test(to.path)) {
+    message.warning('该菜单尚未发布前端页面')
+  }
+
   return true
 })
 

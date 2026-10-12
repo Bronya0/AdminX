@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -105,8 +106,12 @@ func (s *NotificationService) MarkAllRead(userID string) error {
 
 // ── Webhook 管理 ──
 
-func (s *NotificationService) ListWebhooks(offset, limit int) ([]model.WebhookConfig, int64, error) {
-	return s.repo.ListWebhooks(offset, limit)
+func (s *NotificationService) ListWebhooks(offset, limit int) ([]model.WebhookConfigDTO, int64, error) {
+	items, count, err := s.repo.ListWebhooks(offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	return model.ToWebhookConfigDTOList(items), count, nil
 }
 
 // WebhookInput webhook 创建/更新入参（白名单字段，杜绝 map 直通 Updates 的任意列写入）。
@@ -118,7 +123,7 @@ type WebhookInput struct {
 	IsActive *bool  `json:"is_active"`
 }
 
-func (s *NotificationService) CreateWebhook(in WebhookInput) (*model.WebhookConfig, error) {
+func (s *NotificationService) CreateWebhook(in WebhookInput) (*model.WebhookConfigDTO, error) {
 	if !validWebhookURL(in.URL) {
 		return nil, apperr.New(400, "webhook URL 非法")
 	}
@@ -140,10 +145,11 @@ func (s *NotificationService) CreateWebhook(in WebhookInput) (*model.WebhookConf
 	if err := s.repo.CreateWebhook(w); err != nil {
 		return nil, apperr.ErrInternal
 	}
-	return w, nil
+	dto := model.ToWebhookConfigDTO(w)
+	return &dto, nil
 }
 
-func (s *NotificationService) UpdateWebhook(id string, in WebhookInput) (*model.WebhookConfig, error) {
+func (s *NotificationService) UpdateWebhook(id string, in WebhookInput) (*model.WebhookConfigDTO, error) {
 	if in.URL != "" && !validWebhookURL(in.URL) {
 		return nil, apperr.New(400, "webhook URL 非法")
 	}
@@ -172,7 +178,8 @@ func (s *NotificationService) UpdateWebhook(id string, in WebhookInput) (*model.
 	if err := s.db.First(&w, "id = ?", id).Error; err != nil {
 		return nil, apperr.ErrNotFound
 	}
-	return &w, nil
+	dto := model.ToWebhookConfigDTO(&w)
+	return &dto, nil
 }
 
 func (s *NotificationService) DeleteWebhook(id string) error {
@@ -187,6 +194,7 @@ func (s *NotificationService) ListWebhookLogs(offset, limit int, webhookID strin
 
 // dispatchWebhooks 向所有匹配的活跃 webhook 发送通知。
 // 在独立 goroutine 中运行，内部 recover 防止 panic 杀死进程。
+// 有界 worker（最多 5 并发）：不每通知无限制起 goroutine，避免 webhook 堆积打爆 goroutine/连接数。
 func (s *NotificationService) dispatchWebhooks(ctx context.Context, n *model.Notification) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -198,13 +206,23 @@ func (s *NotificationService) dispatchWebhooks(ctx context.Context, n *model.Not
 		s.log.Error("查询活跃 webhook 失败", "error", err)
 		return
 	}
+	const maxWebhookWorkers = 5
+	sem := make(chan struct{}, maxWebhookWorkers)
+	var wg sync.WaitGroup
 	for i := range configs {
 		cfg := &configs[i]
 		if !matchEvent(cfg.Events, n.NotificationType) {
 			continue
 		}
-		s.sendWebhook(ctx, cfg, n)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			s.sendWebhook(ctx, cfg, n)
+		}()
 	}
+	wg.Wait()
 }
 
 // sendWebhook 发送单个 webhook（HMAC-SHA256 签名。

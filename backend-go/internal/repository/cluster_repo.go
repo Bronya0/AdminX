@@ -41,13 +41,6 @@ func (r *ClusterRepo) FindNodeByID(id string) (*model.ClusterNode, error) {
 	return &n, err
 }
 
-// ListAllNodes 查询全部节点（概览用）。
-func (r *ClusterRepo) ListAllNodes() ([]model.ClusterNode, error) {
-	var nodes []model.ClusterNode
-	err := r.db.Order("name ASC").Find(&nodes).Error
-	return nodes, err
-}
-
 // CountNodesByStatus 按状态统计节点数（键为 status，值条数）。
 func (r *ClusterRepo) CountNodesByStatus() (map[string]int64, error) {
 	var rows []struct {
@@ -106,10 +99,6 @@ func (r *ClusterRepo) FindComponentByID(id string) (*model.ServiceComponent, err
 
 func (r *ClusterRepo) CreateComponent(c *model.ServiceComponent) error {
 	return r.db.Create(c).Error
-}
-
-func (r *ClusterRepo) UpdateComponent(c *model.ServiceComponent) error {
-	return r.db.Save(c).Error
 }
 
 func (r *ClusterRepo) DeleteComponent(id string) error {

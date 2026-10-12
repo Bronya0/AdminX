@@ -17,6 +17,7 @@ import (
 	"adminx/internal/handler"
 	"adminx/internal/jwt"
 	appmw "adminx/internal/middleware"
+	"adminx/internal/service"
 	"adminx/pkg/response"
 )
 
@@ -25,6 +26,9 @@ type Deps struct {
 	Config *config.Config
 	DB     *gorm.DB
 	Redis  *redis.Client
+
+	// AuditSvc 声明式审计写入（见 middleware.Audited）
+	AuditSvc *service.AuditService
 
 	// 所有 handler
 	AuthH   *handler.AuthHandler
@@ -78,6 +82,16 @@ func New(deps *Deps) *gin.Engine {
 	base := deps.Config.Server.BasePath
 	api := r.Group(base + "/api/v1")
 
+	// 声明式审计：写端点在路由表上标注审计动作与模型，成功时由中间件统一落库
+	// （见 middleware.Audited）。用户/角色/菜单的写操作不挂它——那三处 handler
+	// 自己记录且带 old/new 快照，挂了会一次操作写两条。
+	audited := func(action, model string) gin.HandlerFunc {
+		if deps.AuditSvc == nil {
+			return func(c *gin.Context) { c.Next() }
+		}
+		return appmw.Audited(deps.AuditSvc, action, model)
+	}
+
 	// ── 公共端点（无鉴权）──
 	public := api.Group("")
 	{
@@ -89,9 +103,10 @@ func New(deps *Deps) *gin.Engine {
 		public.GET("/common/site-info/", deps.MonH.SiteInfo)
 		// 全局主题：登录页也要先应用主题，无鉴权（仅外观配置，不含敏感信息）
 		public.GET("/common/theme/", deps.ThemeH.Get)
-		// captcha（无鉴权）
-		public.GET("/captcha/captcha/", deps.CapH.Generate)
-		public.POST("/captcha/captcha/verify/", deps.CapH.Verify)
+		// captcha（无鉴权，限流：每次生成都会写一个 Redis key，不能无限刷）
+		captchaMW := appmw.RateLimit(deps.Redis, "captcha", appmw.Limit{Requests: 60, Window: time.Minute})
+		public.GET("/captcha/captcha/", captchaMW, deps.CapH.Generate)
+		public.POST("/captcha/captcha/verify/", captchaMW, deps.CapH.Verify)
 
 		// cluster 业务组件注册/心跳（限流防滥用 + 可选共享密钥）
 		// 配置 security.component_secret 后，业务组件须携带 X-Component-Token 头；
@@ -133,7 +148,7 @@ func New(deps *Deps) *gin.Engine {
 	me.Use(jwtMW())
 	{
 		me.GET("/accounts/users/me/", deps.AuthH.Me)
-		me.PATCH("/accounts/users/me/", deps.AuthH.UpdateMe)
+		me.PATCH("/accounts/users/me/", audited(appmw.AuditUpdate, "User"), deps.AuthH.UpdateMe)
 		me.GET("/menu/user_tree/", deps.MenuH.UserTree)
 		me.GET("/accounts/roles/all/", deps.RoleH.All)
 		me.GET("/notification/messages/", deps.NotifH.List)
@@ -143,7 +158,7 @@ func New(deps *Deps) *gin.Engine {
 		me.GET("/policy/change-password-view/", func(c *gin.Context) {
 			response.OK(c, gin.H{"note": "POST /policy/change-password/"})
 		})
-		me.POST("/policy/change-password/", deps.PolicyH.ChangePassword)
+		me.POST("/policy/change-password/", audited(appmw.AuditUpdate, "User"), deps.PolicyH.ChangePassword)
 		// 密码策略读取：改密弹窗/用户管理表单都需要按策略做前端校验（策略本身非敏感）
 		me.GET("/policy/policy/", deps.PolicyH.GetPolicy)
 	}
@@ -195,20 +210,20 @@ func New(deps *Deps) *gin.Engine {
 		// 配置中心
 		rbac.GET("/config/", deps.CfgH.List)
 		rbac.GET("/config/:id/", deps.CfgH.Get)
-		rbac.POST("/config/", deps.CfgH.Create)
-		rbac.PUT("/config/:id/", deps.CfgH.Update)
-		rbac.PATCH("/config/:id/", deps.CfgH.Update)
-		rbac.DELETE("/config/:id/", deps.CfgH.Delete)
+		rbac.POST("/config/", audited(appmw.AuditCreate, "Config"), deps.CfgH.Create)
+		rbac.PUT("/config/:id/", audited(appmw.AuditUpdate, "Config"), deps.CfgH.Update)
+		rbac.PATCH("/config/:id/", audited(appmw.AuditUpdate, "Config"), deps.CfgH.Update)
+		rbac.DELETE("/config/:id/", audited(appmw.AuditDelete, "Config"), deps.CfgH.Delete)
 		rbac.GET("/config/groups/", deps.CfgH.Groups)
 		rbac.GET("/config/export/", deps.CfgH.Export)
-		rbac.POST("/config/import/", deps.CfgH.Import)
+		rbac.POST("/config/import/", audited(appmw.AuditUpdate, "Config"), deps.CfgH.Import)
 		// 站点信息写入：与配置中心同级别（由菜单 allowed_paths 控制），
 		// 默认绑定在 system-config 菜单上（见 init-data 种子）
-		rbac.POST("/common/site-info/", deps.MonH.UpdateSiteInfo)
+		rbac.POST("/common/site-info/", audited(appmw.AuditUpdate, "SiteInfo"), deps.MonH.UpdateSiteInfo)
 		// 主题设置写入与导入导出：同样由 system-config 菜单的 allowed_paths 控制
 		rbac.GET("/common/theme/export/", deps.ThemeH.Export)
-		rbac.POST("/common/theme/", deps.ThemeH.Update)
-		rbac.POST("/common/theme/import/", deps.ThemeH.Import)
+		rbac.POST("/common/theme/", audited(appmw.AuditUpdate, "Theme"), deps.ThemeH.Update)
+		rbac.POST("/common/theme/import/", audited(appmw.AuditUpdate, "Theme"), deps.ThemeH.Import)
 
 		// 审计
 		rbac.GET("/audit/", deps.AuditH.List)
@@ -221,30 +236,30 @@ func New(deps *Deps) *gin.Engine {
 		rbac.GET("/jobs/logs/", deps.JobH.Logs)
 		// 通知 webhook 管理
 		rbac.GET("/notification/webhooks/", deps.NotifH.ListWebhooks)
-		rbac.POST("/notification/webhooks/", deps.NotifH.CreateWebhook)
-		rbac.PUT("/notification/webhooks/:id/", deps.NotifH.UpdateWebhook)
-		rbac.PATCH("/notification/webhooks/:id/", deps.NotifH.UpdateWebhook)
-		rbac.DELETE("/notification/webhooks/:id/", deps.NotifH.DeleteWebhook)
+		rbac.POST("/notification/webhooks/", audited(appmw.AuditCreate, "Webhook"), deps.NotifH.CreateWebhook)
+		rbac.PUT("/notification/webhooks/:id/", audited(appmw.AuditUpdate, "Webhook"), deps.NotifH.UpdateWebhook)
+		rbac.PATCH("/notification/webhooks/:id/", audited(appmw.AuditUpdate, "Webhook"), deps.NotifH.UpdateWebhook)
+		rbac.DELETE("/notification/webhooks/:id/", audited(appmw.AuditDelete, "Webhook"), deps.NotifH.DeleteWebhook)
 		rbac.GET("/notification/webhook-logs/", deps.NotifH.WebhookLogs)
 
 		// 集群节点管理（节点 CRUD 归 RBAC；组件升级指令归超管）
 		rbac.GET("/cluster/nodes/", deps.ClsH.ListNodes)
 		rbac.GET("/cluster/nodes/overview/", deps.ClsH.NodesOverview)
 		rbac.GET("/cluster/nodes/:id/", deps.ClsH.GetNode)
-		rbac.POST("/cluster/nodes/", deps.ClsH.CreateNode)
-		rbac.PUT("/cluster/nodes/:id/", deps.ClsH.UpdateNode)
-		rbac.PATCH("/cluster/nodes/:id/", deps.ClsH.UpdateNode)
-		rbac.DELETE("/cluster/nodes/:id/", deps.ClsH.DeleteNode)
+		rbac.POST("/cluster/nodes/", audited(appmw.AuditCreate, "ClusterNode"), deps.ClsH.CreateNode)
+		rbac.PUT("/cluster/nodes/:id/", audited(appmw.AuditUpdate, "ClusterNode"), deps.ClsH.UpdateNode)
+		rbac.PATCH("/cluster/nodes/:id/", audited(appmw.AuditUpdate, "ClusterNode"), deps.ClsH.UpdateNode)
+		rbac.DELETE("/cluster/nodes/:id/", audited(appmw.AuditDelete, "ClusterNode"), deps.ClsH.DeleteNode)
 		rbac.GET("/cluster/components/", deps.ClsH.ListComponents)
 		rbac.GET("/cluster/components/:id/", deps.ClsH.GetComponent)
 
 		// 文件中心
 		// 上传/下载/删除都按 uploaded_by 做归属隔离（非超管只能动自己的文件），
 		// 权限由 system:file 菜单的 /api/v1/files/* 控制
-		rbac.POST("/files/upload/", deps.FileH.Upload)
+		rbac.POST("/files/upload/", audited(appmw.AuditCreate, "File"), deps.FileH.Upload)
 		rbac.GET("/files/records/", deps.FileH.Records)
 		rbac.GET("/files/records/:id/download/", deps.FileH.Download)
-		rbac.DELETE("/files/records/:id/", deps.FileH.Delete)
+		rbac.DELETE("/files/records/:id/", audited(appmw.AuditDelete, "File"), deps.FileH.Delete)
 
 		// 系统监控
 		rbac.GET("/monitor/resources/", deps.MonH.Monitor)
@@ -272,28 +287,30 @@ func New(deps *Deps) *gin.Engine {
 		// 用户/角色全量管理保持 RBAC 即可（超管门槛会造成多管理员无法分工），
 		// 但以下端点必须收口：
 		admin.POST("/menu/", deps.MenuH.Create)
-		admin.POST("/menu/register/", deps.MenuH.Register)
+		// register 按 code upsert（可能新建也可能覆盖），统一记 update；
+		// 菜单的 create/update/delete 由 MenuHandler 自带快照记录，不在这里挂。
+		admin.POST("/menu/register/", audited(appmw.AuditUpdate, "Menu"), deps.MenuH.Register)
 		admin.PUT("/menu/:id/", deps.MenuH.Update)
 		admin.PATCH("/menu/:id/", deps.MenuH.Update)
 		admin.DELETE("/menu/:id/", deps.MenuH.Delete)
 
-		admin.POST("/jobs/", deps.JobH.Create)
-		admin.PUT("/jobs/:id/", deps.JobH.Update)
-		admin.PATCH("/jobs/:id/", deps.JobH.Update)
-		admin.DELETE("/jobs/:id/", deps.JobH.Delete)
-		admin.POST("/jobs/:id/run_once/", deps.JobH.RunOnce)
-		admin.POST("/jobs/reload/", deps.JobH.Reload)
+		admin.POST("/jobs/", audited(appmw.AuditCreate, "Job"), deps.JobH.Create)
+		admin.PUT("/jobs/:id/", audited(appmw.AuditUpdate, "Job"), deps.JobH.Update)
+		admin.PATCH("/jobs/:id/", audited(appmw.AuditUpdate, "Job"), deps.JobH.Update)
+		admin.DELETE("/jobs/:id/", audited(appmw.AuditDelete, "Job"), deps.JobH.Delete)
+		admin.POST("/jobs/:id/run_once/", audited(appmw.AuditExecute, "Job"), deps.JobH.RunOnce)
+		admin.POST("/jobs/reload/", audited(appmw.AuditExecute, "Job"), deps.JobH.Reload)
 
-		admin.POST("/cluster/components/:id/set_upgrade/", deps.ClsH.SetUpgrade)
-		admin.POST("/cluster/components/:id/cancel_upgrade/", deps.ClsH.CancelUpgrade)
-		admin.POST("/cluster/components/:id/confirm_upgrade/", deps.ClsH.ConfirmUpgrade)
-		admin.POST("/cluster/components/:id/set_uninstall/", deps.ClsH.SetUninstall)
-		admin.POST("/cluster/components/:id/cancel_uninstall/", deps.ClsH.CancelUninstall)
+		admin.POST("/cluster/components/:id/set_upgrade/", audited(appmw.AuditExecute, "Component"), deps.ClsH.SetUpgrade)
+		admin.POST("/cluster/components/:id/cancel_upgrade/", audited(appmw.AuditExecute, "Component"), deps.ClsH.CancelUpgrade)
+		admin.POST("/cluster/components/:id/confirm_upgrade/", audited(appmw.AuditExecute, "Component"), deps.ClsH.ConfirmUpgrade)
+		admin.POST("/cluster/components/:id/set_uninstall/", audited(appmw.AuditExecute, "Component"), deps.ClsH.SetUninstall)
+		admin.POST("/cluster/components/:id/cancel_uninstall/", audited(appmw.AuditExecute, "Component"), deps.ClsH.CancelUninstall)
 		// 删除组件注册记录（与升级/卸载指令同级别，避免“有菜单权限即可下线业务组件”）
-		admin.DELETE("/cluster/components/:id/", deps.ClsH.DeleteComponent)
+		admin.DELETE("/cluster/components/:id/", audited(appmw.AuditDelete, "Component"), deps.ClsH.DeleteComponent)
 
-		admin.PUT("/policy/policy/", deps.PolicyH.UpdatePolicy)
-		admin.PATCH("/policy/policy/", deps.PolicyH.UpdatePolicy)
+		admin.PUT("/policy/policy/", audited(appmw.AuditUpdate, "PasswordPolicy"), deps.PolicyH.UpdatePolicy)
+		admin.PATCH("/policy/policy/", audited(appmw.AuditUpdate, "PasswordPolicy"), deps.PolicyH.UpdatePolicy)
 	}
 
 	// ── WebSocket（无 REST 鉴权，连接时可选校验 token）──
