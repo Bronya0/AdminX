@@ -46,7 +46,7 @@ export const userApi = {
   getUsers: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; role?: string }): Promise<PaginatedResponse<User>> =>
     request.get('/accounts/users/', { params }),
 
-  getRoleOptions: (): Promise<{ name: string }[]> =>
+  getRoleOptions: (): Promise<{ name: string; display_name?: string }[]> =>
     request.get('/accounts/users/roles/'),
 
   getUser: (id: string): Promise<User> =>
@@ -60,6 +60,10 @@ export const userApi = {
 
   deleteUser: (id: string): Promise<void> =>
     request.delete(`/accounts/users/${id}/`),
+
+  // 强制下线：后端写 last_logout，该用户已签发的 token 立即失效
+  forceLogout: (id: string): Promise<void> =>
+    request.post(`/accounts/users/${id}/logout/`),
 }
 
 export const roleApi = {
@@ -73,10 +77,10 @@ export const roleApi = {
   getRole: (id: string): Promise<Role> =>
     request.get(`/accounts/roles/${id}/`),
 
-  createRole: (data: Partial<Role>): Promise<Role> =>
+  createRole: (data: Partial<Role> & { menu_ids?: number[] }): Promise<Role> =>
     request.post('/accounts/roles/', data),
 
-  updateRole: (id: string, data: Partial<Role>): Promise<Role> =>
+  updateRole: (id: string, data: Partial<Role> & { menu_ids?: number[] }): Promise<Role> =>
     request.patch(`/accounts/roles/${id}/`, data),
 
   deleteRole: (id: string): Promise<void> =>

@@ -189,6 +189,8 @@ func New(deps *Deps) *gin.Engine {
 		rbac.PUT("/accounts/users/:id/", deps.UserH.Update)
 		rbac.PATCH("/accounts/users/:id/", deps.UserH.Update)
 		rbac.DELETE("/accounts/users/:id/", deps.UserH.Delete)
+		// 强制下线：让目标用户已签发的 token 立即失效（有外部影响，按触发类操作审计）
+		rbac.POST("/accounts/users/:id/logout/", audited(appmw.AuditExecute, "User"), deps.UserH.Logout)
 
 		// 角色选项（用户管理页下拉用）
 		rbac.GET("/accounts/users/roles/", deps.RoleH.All)

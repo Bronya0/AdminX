@@ -19,6 +19,7 @@ go test ./...                  # 测试
 go run ./cmd/server            # 启动 HTTP 服务（默认 :8000）
 go run ./cmd/server --scheduler  # 启动 + 内置调度器（生产建议独立进程轮询 reload_pending）
 go run ./cmd/init-data         # 初始化种子数据（不传 --password 会生成随机超管密码并打印一次）
+air -- --config <你的配置>      # 热重载开发：改代码自动重编译重启（先 go install github.com/air-verse/air@latest）
 bash scripts/build.sh          # 生产构建到 bin/
 
 # Frontend (adminx-ui/)

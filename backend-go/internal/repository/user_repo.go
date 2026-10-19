@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,6 +10,9 @@ import (
 
 	"adminx/internal/model"
 )
+
+// ErrLastSuperuser 本次更新或删除会让系统不再有启用状态的超级管理员。
+var ErrLastSuperuser = errors.New("操作后系统不再有启用状态的超级管理员")
 
 // UserRepo 用户数据访问。
 type UserRepo struct {
@@ -69,7 +73,7 @@ func (r *UserRepo) List(offset, limit int, search, role string, isActive *bool) 
 		like := "%" + EscapeLike(search) + "%"
 		// "desc" 必须加引号：desc 是 PostgreSQL 保留字，裸写会让 PG 报 42601
 		// （sqlite 容忍，所以本地开发看不出来）
-		q = q.Where("username LIKE ? OR email LIKE ? OR phone LIKE ? OR \"desc\" LIKE ?", like, like, like, like)
+		q = q.Where("username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR \"desc\" LIKE ? ESCAPE '\\'", like, like, like, like)
 	}
 	if isActive != nil {
 		q = q.Where("is_active = ?", *isActive)
@@ -99,10 +103,16 @@ func (r *UserRepo) Update(u *model.User) error {
 
 // SaveAndMaybeRevoke 按列更新用户；revokeTokens 为真时在同一事务内更新 last_logout。
 // 只写 cols 白名单列，不做整行 Save：整行写回会覆盖 last_activity/last_login 等并发单列更新。
-func (r *UserRepo) SaveAndMaybeRevoke(id string, cols map[string]interface{}, revokeTokens bool) error {
+// guardSuperuser 为真时，事务内要求写完之后系统仍有启用中的超管，否则整体回滚。
+func (r *UserRepo) SaveAndMaybeRevoke(id string, cols map[string]interface{}, revokeTokens, guardSuperuser bool) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if len(cols) > 0 {
 			if err := tx.Model(&model.User{}).Where("id = ?", id).Updates(cols).Error; err != nil {
+				return err
+			}
+		}
+		if guardSuperuser {
+			if err := ensureSuperuserRemains(tx); err != nil {
 				return err
 			}
 		}
@@ -164,9 +174,33 @@ func SplitRoleRefs(refs []string) (ids []string, names []string) {
 	return ids, names
 }
 
-// SoftDelete 软删除用户。
-func (r *UserRepo) SoftDelete(id string) error {
-	return r.db.Delete(&model.User{}, "id = ?", id).Error
+// SoftDelete 软删除用户。guardSuperuser 为真时要求删完之后系统仍有启用中的超管。
+func (r *UserRepo) SoftDelete(id string, guardSuperuser bool) error {
+	if !guardSuperuser {
+		return r.db.Delete(&model.User{}, "id = ?", id).Error
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&model.User{}, "id = ?", id).Error; err != nil {
+			return err
+		}
+		return ensureSuperuserRemains(tx)
+	})
+}
+
+// ensureSuperuserRemains 事务内校验：写完/删完之后仍至少剩一个启用中的超管。
+// 校验放在写之后而不是写之前：并发下（两个超管同时互相降级）后提交的事务能看到
+// 前一个的结果，不会出现两人各自都看到“还有两个”而双双放行。
+func ensureSuperuserRemains(tx *gorm.DB) error {
+	var n int64
+	if err := tx.Model(&model.User{}).
+		Where("is_superuser = ? AND is_active = ?", true, true).
+		Count(&n).Error; err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrLastSuperuser
+	}
+	return nil
 }
 
 // UpdateActivity 更新最后活动时间。

@@ -67,6 +67,10 @@ func (u *User) IsOnline() bool {
 type Role struct {
 	ID        string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name      string    `gorm:"size:128;uniqueIndex;not null" json:"name"`
+	// DisplayName 界面展示名（中文）。权限判定与角色绑定一律用 Name 做标识，
+	// 展示时用这个：内置角色是 super_admin 这类英文标识，直接拉到列表里没人认得。
+	// 自定义角色留空时前端回退显示 Name。
+	DisplayName string  `gorm:"size:128;not null;default:''" json:"display_name"`
 	Desc      string    `gorm:"type:text;not null;default:''" json:"desc"`
 	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
 	IsSystem  bool      `gorm:"not null;default:false" json:"is_system"` // 系统内置角色不可删
@@ -79,6 +83,15 @@ type Role struct {
 }
 
 func (Role) TableName() string { return "roles" }
+
+// RoleDisplayName 角色在界面上的名字：优先 display_name，未设置时回退标识。
+// 展示与搜索各司其职：界面用这个，权限匹配与表单提交用 Name。
+func RoleDisplayName(r Role) string {
+	if r.DisplayName != "" {
+		return r.DisplayName
+	}
+	return r.Name
+}
 
 func (r *Role) BeforeCreate(tx *gorm.DB) error {
 	if r.ID == "" {

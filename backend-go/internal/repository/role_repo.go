@@ -38,12 +38,12 @@ func (r *RoleRepo) List(offset, limit int, search string) ([]model.Role, int64, 
 	q := r.db.Model(&model.Role{})
 	if search != "" {
 		// "desc" 是 PostgreSQL 保留字，必须加引号（裸写 PG 报 42601，sqlite 容忍）
-		q = q.Where("name LIKE ? OR \"desc\" LIKE ?", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
+		q = q.Where("name LIKE ? ESCAPE '\\' OR \"desc\" LIKE ? ESCAPE '\\'", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err
 	}
-	err := q.Order("created_at DESC").Offset(offset).Limit(limit).Find(&roles).Error
+	err := q.Preload("Menus").Order("created_at DESC").Offset(offset).Limit(limit).Find(&roles).Error
 	return roles, count, err
 }
 

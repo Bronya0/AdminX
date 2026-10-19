@@ -74,35 +74,38 @@
           </template>
           <template v-if="column.key === 'roles'">
             <a-space>
-              <a-tag v-for="role in record.role_names" :key="role" color="blue"
+              <a-tag v-for="(role, i) in record.roles" :key="role" color="blue"
                 style="cursor: pointer" @click="router.push({ name: 'roles', query: { search: role } })">
-                {{ role }}
+                {{ record.role_labels?.[i] || role }}
               </a-tag>
             </a-space>
           </template>
           <template v-if="column.key === 'action'">
-            <a-space>
+            <div class="action-cell">
               <a-button type="link" size="small" @click="handleEdit(record)">
                 <EditOutlined /> 编辑
               </a-button>
-              <a-button type="link" size="small" @click="handleResetPassword(record)">
-                <KeyOutlined /> 重置密码
-              </a-button>
-              <a-popconfirm
-                v-if="!isCurrentUser(record)"
-                title="确定要删除该用户吗？"
-                @confirm="handleDelete(record)"
-              >
-                <a-button type="link" danger size="small">
-                  <DeleteOutlined /> 删除
+              <!-- 次要操作收进下拉：四个按钮平铺会把操作列挤出表格 -->
+              <a-dropdown :trigger="['click']">
+                <a-button type="link" size="small">
+                  更多 <DownOutlined />
                 </a-button>
-              </a-popconfirm>
-              <a-tooltip v-else title="不能删除当前登录用户">
-                <a-button type="link" danger size="small" disabled>
-                  <DeleteOutlined /> 删除
-                </a-button>
-              </a-tooltip>
-            </a-space>
+                <template #overlay>
+                  <a-menu @click="(info: any) => handleMoreAction(info, record)">
+                    <a-menu-item key="reset">
+                      <KeyOutlined /> 重置密码
+                    </a-menu-item>
+                    <a-menu-item v-if="record.is_online && !isCurrentUser(record)" key="logout">
+                      <LogoutOutlined /> 强制下线
+                    </a-menu-item>
+                    <!-- 删除也收进下拉；当前登录用户不出现，避免删掉自己 -->
+                    <a-menu-item v-if="!isCurrentUser(record)" key="delete" danger>
+                      <DeleteOutlined /> 删除
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </div>
           </template>
         </template>
       </a-table>
@@ -151,6 +154,19 @@
             mode="multiple"
             placeholder="请选择角色"
             :options="roleOptions"
+            :disabled="editingSuperuser"
+          />
+          <div v-if="editingSuperuser" class="form-hint">
+            超级管理员的权限来自账号本身，与角色无关，角色仅用于展示
+          </div>
+        </a-form-item>
+        <a-form-item label="首页" name="home_page">
+          <a-tree-select
+            v-model:value="formState.home_page"
+            :tree-data="menuTreeOptions"
+            placeholder="默认首页（可选）"
+            allow-clear
+            style="width: 100%"
           />
         </a-form-item>
         <a-form-item label="状态" name="is_active">
@@ -158,15 +174,6 @@
             v-model:checked="formState.is_active"
             checked-children="启用"
             un-checked-children="禁用"
-          />
-        </a-form-item>
-        <a-form-item label="首页">
-          <a-tree-select
-            v-model:value="formState.home_page"
-            :tree-data="menuTreeOptions"
-            placeholder="默认"
-            allow-clear
-            style="width: 100%"
           />
         </a-form-item>
       </a-form>
@@ -195,7 +202,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -203,6 +210,8 @@ import {
   EditOutlined,
   DeleteOutlined,
   KeyOutlined,
+  LogoutOutlined,
+  DownOutlined,
 } from '@ant-design/icons-vue'
 import { userApi, roleApi, authApi } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
@@ -216,15 +225,17 @@ const userStore = useUserStore()
 
 // 表格列定义
 const columns = [
-  { title: '用户名', dataIndex: 'username', key: 'username' },
-  { title: '邮箱', dataIndex: 'email', key: 'email' },
-  { title: '手机号', dataIndex: 'phone', key: 'phone' },
-  { title: '描述', dataIndex: 'desc', key: 'desc', ellipsis: true },
-  { title: '角色', key: 'roles' },
-  { title: '在线状态', key: 'online', width: 110 },
-  { title: '状态', key: 'is_active' },
-  { title: '最后登录', dataIndex: 'last_login', key: 'last_login', customRender: ({ text }: any) => formatDateTime(text) },
-  { title: '操作', key: 'action', width: 250 },
+  { title: '用户名', dataIndex: 'username', key: 'username', width: 180 },
+  { title: '邮箱', dataIndex: 'email', key: 'email', width: 160, ellipsis: true },
+  { title: '手机号', dataIndex: 'phone', key: 'phone', width: 120 },
+  { title: '描述', dataIndex: 'desc', key: 'desc', width: 240, ellipsis: true },
+  // 角色/状态这类窄信息固定窄列，不设宽度会按内容抢空间，把操作列挤出去
+  { title: '角色', key: 'roles', width: 130 },
+  { title: '在线状态', key: 'online', width: 120 },
+  { title: '状态', key: 'is_active', width: 100 },
+  { title: '最后登录', dataIndex: 'last_login', key: 'last_login', width: 160, customRender: ({ text }: any) => formatDateTime(text) },
+  // 操作列不写死宽度：由内容自适应，写死会被 4 个按钮撑出去
+  { title: '操作', key: 'action' },
 ]
 
 // 状态
@@ -262,16 +273,19 @@ const buildMenuTreeOptions = (items: Menu[], allowedPaths: Set<string>): TreeSel
     const children = buildMenuTreeOptions(item.children || [], allowedPaths)
     // 仅叶子菜单（无子菜单）可选为首页，父级菜单没有实际页面组件，选中会导致空白页
     const hasChildren = Boolean(item.children && item.children.length > 0)
-    const isSelectable = !hasChildren && Boolean(item.path && item.path !== '/dashboard' && allowedPaths.has(item.path))
+    const isSelectable = !hasChildren && Boolean(item.path && allowedPaths.has(item.path))
 
     if (!isSelectable && !children.length) {
       return []
     }
 
+    // key 必须与 value 一致：antd 的 TreeNode 两者不同会报警，
+    // 选中态靠 value 回显，key 不一致时容易选不中或回显错乱
+    const value = isSelectable ? item.path : `__group__:${item.code}`
     return [{
       title: item.name,
-      value: isSelectable ? item.path : `__group__:${item.code}`,
-      key: item.code,
+      value,
+      key: value,
       selectable: isSelectable,
       children: children.length ? children : undefined,
     }]
@@ -286,13 +300,42 @@ const loadFullMenuTree = async () => {
   }
 }
 
+// 收集全部菜单路径：未选角色时用它不做过过滤，直接给出所有可选首页
+const collectMenuPaths = (items: Menu[]): string[] =>
+  items.flatMap(item => [item.path, ...collectMenuPaths(item.children || [])]).filter(Boolean)
+
+// 找第一个可选的叶子菜单：新建用户时用它做首页默认值，
+// 免得“必选”变成每次都要手动挑一项。
+const firstSelectablePath = (items: TreeSelectOption[]): string => {
+  for (const item of items) {
+    if (item.selectable && !item.value.startsWith('__group__:')) return item.value
+    const child = item.children ? firstSelectablePath(item.children) : ''
+    if (child) return child
+  }
+  return ''
+}
+
+// 首页必选：当前值不可用时自动落到第一个可选项
+const ensureHomePage = () => {
+  const valid = (function has(items: TreeSelectOption[]): boolean {
+    return items.some(i => (i.selectable && i.value === formState.home_page) || (i.children ? has(i.children) : false))
+  })(menuTreeOptions.value)
+  if (!valid) formState.home_page = firstSelectablePath(menuTreeOptions.value)
+}
+
 let menuOptionsSeq = 0
 // 菜单首页选项（根据选中角色过滤）
 const loadMenuOptions = async (roles: string[]) => {
   const seq = ++menuOptionsSeq
+  // 未选角色时不做权限过滤：新建用户往往先看首页有哪些可选，
+  // 此时给一个空下拉会让人以为功能坏了。选角色后会自动收窄并清掉越界的选项。
   if (!roles.length) {
-    menuTreeOptions.value = []
-    formState.home_page = ''
+    if (!fullMenuTree.value.length) {
+      await loadFullMenuTree()
+    }
+    if (seq !== menuOptionsSeq) return
+    menuTreeOptions.value = buildMenuTreeOptions(fullMenuTree.value, new Set(collectMenuPaths(fullMenuTree.value)))
+    ensureHomePage()
     return
   }
   if (!fullMenuTree.value.length) {
@@ -303,9 +346,10 @@ const loadMenuOptions = async (roles: string[]) => {
     // 请求序号守卫：快速切换角色时只让最后一次回包生效，
     // 否则慢回包会覆盖新选项，首页下拉与所选角色错位
     if (seq !== menuOptionsSeq) return
+    // 不过滤仪表盘：普通用户这类角色可能只绑了仪表盘，排除它会让首页下拉直接空掉
     const allowedPaths = new Set(
       menus
-        .filter(m => m.path && m.path !== '/dashboard')
+        .filter(m => m.path)
         .map(m => m.path)
     )
     menuTreeOptions.value = buildMenuTreeOptions(fullMenuTree.value, allowedPaths)
@@ -313,6 +357,7 @@ const loadMenuOptions = async (roles: string[]) => {
     if (formState.home_page && !allowedPaths.has(formState.home_page)) {
       formState.home_page = ''
     }
+    ensureHomePage()
   } catch (e) {
     console.error('加载菜单失败', e)
   }
@@ -323,6 +368,9 @@ const modalVisible = ref(false)
 const modalLoading = ref(false)
 const modalTitle = ref('新增用户')
 const isEdit = ref(false)
+// 正在编辑的是超级管理员：超管的权限来自 is_superuser，角色只影响列表展示，
+// 所以角色选择器置灰，避免“改了角色好像就能提权/降权”的误会。
+const editingSuperuser = ref(false)
 const currentId = ref('')
 const formRef = ref()
 
@@ -378,6 +426,12 @@ const formRules = computed(() => ({
     ...policyRules.value.map((r) => ({ pattern: r.pattern, message: r.message, trigger: 'blur' })),
   ],
   email: [{ type: 'email', message: '请输入正确的邮箱' }],
+  // 普通用户至少要有一个角色：无角色账号登录后看不到任何菜单。
+  // 编辑超管时角色只读且不提交，这里不能拦，否则改个描述都保存不了。
+  roles: editingSuperuser.value
+    ? []
+    : [{ required: true, type: 'array' as const, min: 1, message: '请至少选择一个角色', trigger: 'change' }],
+  home_page: [{ required: true, message: '请选择登录后的首页', trigger: 'change' }],
 }))
 
 // 密码重置弹窗
@@ -408,8 +462,8 @@ const loadData = async () => {
 const loadRoles = async () => {
   try {
     const res = await userApi.getRoleOptions()
-    roleOptions.value = res.map((role: { name: string }) => ({
-      label: role.name,
+    roleOptions.value = res.map((role: { name: string; display_name?: string }) => ({
+      label: role.display_name || role.name,
       value: role.name,
     }))
   } catch (e) {
@@ -441,6 +495,7 @@ const handleTableChange = (pag: any) => {
 // 新增
 const handleAdd = () => {
   isEdit.value = false
+  editingSuperuser.value = false
   modalTitle.value = '新增用户'
   currentId.value = ''
   Object.assign(formState, {
@@ -456,11 +511,14 @@ const handleAdd = () => {
   modalVisible.value = true
   // 清除上次的校验错误状态（红色提示），避免打开弹窗时残留
   formRef.value?.clearValidate?.()
+  // 角色未变时 watch 不会触发，这里显式加载一次首页菜单选项
+  loadMenuOptions(formState.roles)
 }
 
 // 编辑
 const handleEdit = (record: User) => {
   isEdit.value = true
+  editingSuperuser.value = !!record.is_superuser
   modalTitle.value = '编辑用户'
   currentId.value = record.id
   Object.assign(formState, {
@@ -475,18 +533,49 @@ const handleEdit = (record: User) => {
   modalVisible.value = true
   // 清除上次的校验错误状态
   formRef.value?.clearValidate?.()
+  // 角色未变时 watch 不会触发，这里显式加载一次首页菜单选项
+  loadMenuOptions(formState.roles)
 }
 
-// 删除
-const handleDelete = async (record: User) => {
-  try {
-    await userApi.deleteUser(record.id)
-    message.success('删除成功')
-    loadData()
-  } catch { /* interceptor handles error */ }
+// 删除：收进下拉后失去 popconfirm，改用 Modal 确认
+const handleDelete = (record: User) => {
+  Modal.confirm({
+    title: '删除用户',
+    content: `确定删除用户 ${record.username}？删除后该账号不能再登录。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      await userApi.deleteUser(record.id)
+      message.success('删除成功')
+      loadData()
+    },
+  })
 }
 
 const isCurrentUser = (record: User) => record.id === userStore.user?.id
+
+// 强制下线：后端写 last_logout，该用户已签发的 token 立即失效
+const handleForceLogout = (record: User) => {
+  Modal.confirm({
+    title: '强制下线',
+    content: `确定让 ${record.username} 立即下线？该用户已登录的会话会立即失效。`,
+    okText: '确定',
+    cancelText: '取消',
+    onOk: async () => {
+      await userApi.forceLogout(record.id)
+      message.success('已强制下线')
+      loadData()
+    },
+  })
+}
+
+// 操作列「更多」下拉：次要操作都在这里
+const handleMoreAction = (info: { key: string }, record: User) => {
+  if (info.key === 'reset') handleResetPassword(record)
+  else if (info.key === 'logout') handleForceLogout(record)
+  else if (info.key === 'delete') handleDelete(record)
+}
 
 // 弹窗确认
 const handleModalOk = async () => {
@@ -501,7 +590,8 @@ const handleModalOk = async () => {
         email: formState.email,
         phone: formState.phone,
         desc: formState.desc,
-        roles: formState.roles,
+        // 超管的角色不参与授权，后端也会忽略，索性不提交
+        ...(editingSuperuser.value ? {} : { roles: formState.roles }),
         is_active: formState.is_active,
         home_page: formState.home_page,
       })
@@ -576,5 +666,21 @@ onMounted(() => {
 
 .table-card {
   margin-bottom: 16px;
+}
+
+.form-hint {
+  margin-top: 6px;
+  color: inherit;
+  opacity: 0.65;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 操作列自适应：不换行、不被列宽截断，宽度由按钮内容决定 */
+.action-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 </style>

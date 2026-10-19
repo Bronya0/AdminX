@@ -22,7 +22,7 @@ func (r *ClusterRepo) ListNodes(offset, limit int, search, status string) ([]mod
 	q := r.db.Model(&model.ClusterNode{})
 	if search != "" {
 		like := "%" + EscapeLike(search) + "%"
-		q = q.Where("name LIKE ? OR host LIKE ?", like, like)
+		q = q.Where("name LIKE ? ESCAPE '\\' OR host LIKE ? ESCAPE '\\'", like, like)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)

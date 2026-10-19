@@ -28,13 +28,18 @@ type UserDTO struct {
 	DateJoined   time.Time   `json:"date_joined"`
 	Roles        []string    `json:"roles"`      // 角色名数组（前端期望 string[]）
 	RoleNames    []string    `json:"role_names"` // 同 roles，兼容字段
+	// RoleLabels 与 Roles 一一对应，只用于界面展示：优先角色中文名，未设置时回退标识。
+	// 授权与表单提交仍用 Roles/RoleNames（英文标识），两者不能混用。
+	RoleLabels   []string    `json:"role_labels"`
 }
 
 // ToUserDTO 将 User model 转为 DTO。
 func ToUserDTO(u *User) UserDTO {
 	roleNames := make([]string, 0, len(u.Roles))
+	roleLabels := make([]string, 0, len(u.Roles))
 	for _, r := range u.Roles {
 		roleNames = append(roleNames, r.Name)
+		roleLabels = append(roleLabels, RoleDisplayName(r))
 	}
 	return UserDTO{
 		ID:           u.ID,
@@ -53,6 +58,7 @@ func ToUserDTO(u *User) UserDTO {
 		DateJoined:   u.DateJoined,
 		Roles:        roleNames,
 		RoleNames:    roleNames,
+		RoleLabels:   roleLabels,
 	}
 }
 

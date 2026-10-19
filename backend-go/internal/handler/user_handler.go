@@ -130,6 +130,30 @@ func (h *UserHandler) Update(c *gin.Context) {
 }
 
 // Delete DELETE /accounts/users/:id/
+// Logout POST /accounts/users/:id/logout/
+//
+// 强制下线：写入 last_logout，目标用户已签发的 token 立即失效，
+// 下一次请求就会被踢回登录页（不需要等 access token 自然过期）。
+func (h *UserHandler) Logout(c *gin.Context) {
+	id := c.Param("id")
+	target, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	// 与改/删同一条边界：超管账号只能由超管操作
+	if target.IsSuperuser && !isSuperuser(c) {
+		response.Fail(c, 403, "仅超级管理员可操作超管账号")
+		return
+	}
+	if err := h.svc.Logout(id); err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	// 审计由 router 的 audited() 统一落库
+	response.OK(c, gin.H{"id": id})
+}
+
 func (h *UserHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	// 删除前快照（审计留痕）

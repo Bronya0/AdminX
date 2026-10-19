@@ -23,3 +23,5 @@
 [前端] 2026-10-19 高危：axios 拦截器把非 JSON 的 404 原样透传成成功，前端调不存在的接口照样 resolve，界面提示成功。@utils/request.ts
 [前端] 2026-10-19 中危：菜单树只按 path 前缀找父，外链/iframe 的绝对 URL 拼出 /https: 前缀，整棵子树挂到树根；parent_id 优先。@utils/menuTree.ts
 [init-data] 2026-10-19 中危：种子无条件写 is_active/is_visible=true，运维应急停用的菜单跑一次 init-data 就复活。@cmd/init-data/main.go
+[sqlite] 2026-10-19 高危：手工写 SQLite 时间列必须带 +08:00 时区，否则 Go 按 UTC 解析，last_logout 变未来时间，全部 token 立即失效，登录后被踢回登录页。@users.last_logout
+[sql] 2026-10-19 中危：LIKE 过了 EscapeLike 却不加 ESCAPE '\'，SQLite 把 \_ 当字面量，带下划线的搜索在本地全 0 条（PG 正常）。@repository/*_repo.go

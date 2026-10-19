@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -37,8 +38,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	db, err := database.Init(cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "数据库初始化失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 先判断超管是否已存在：已存在时 createSuperuser 会跳过，
+	// 此时再生成并打印随机密码只会让人以为密码变了，照着登必然失败。
+	exists, err := superuserExists(db, *username)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "查询超级用户失败: %v\n", err)
+		os.Exit(1)
+	}
+
 	// 未提供密码时生成随机密码（打印一次；不再内置 admin123 等弱口令）
-	if *password == "" {
+	if !exists && *password == "" {
 		b := make([]byte, 12)
 		if _, err := rand.Read(b); err != nil {
 			fmt.Fprintf(os.Stderr, "生成随机密码失败: %v\n", err)
@@ -49,16 +64,12 @@ func main() {
 		fmt.Printf("已生成随机超级管理员密码（仅显示这一次，请立即保存）:\n  %s\n\n", pw)
 	}
 
-	// 密码策略校验，弱口令直接拒绝初始化
-	if err := validatePasswordStrength(*password); err != nil {
-		fmt.Fprintf(os.Stderr, "密码不满足安全要求: %v\n", err)
-		os.Exit(1)
-	}
-
-	db, err := database.Init(cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "数据库初始化失败: %v\n", err)
-		os.Exit(1)
+	// 密码策略校验，弱口令直接拒绝初始化（账号已存在时本次不会写密码，不校验）
+	if !exists {
+		if err := validatePasswordStrength(*password); err != nil {
+			fmt.Fprintf(os.Stderr, "密码不满足安全要求: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// 1. 创建超级管理员
@@ -66,7 +77,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "创建超级用户失败: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✓ 超级用户已创建: %s\n", *username)
+	if exists {
+		fmt.Printf("✓ 超级管理员已存在，跳过创建（密码未改动）: %s\n", *username)
+	} else {
+		fmt.Printf("✓ 超级用户已创建: %s\n", *username)
+	}
 
 	// 2. 创建默认角色
 	if err := createDefaultRoles(db); err != nil {
@@ -74,6 +89,15 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("✓ 默认角色已创建: super_admin, security_admin, audit_admin, user")
+
+	// 2b. 超管账号补绑 super_admin 角色（幂等）
+	// 超管的权限来自 is_superuser，角色只是界面展示；但列表里角色空白会让人
+	// 以为这个号没权限，所以补一份与身份一致的角色。历史库同样适用。
+	if err := bindSuperuserRole(db, *username); err != nil {
+		fmt.Fprintf(os.Stderr, "绑定超管角色失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("✓ 超级管理员角色已绑定")
 
 	// 3. 创建默认菜单
 	if err := createDefaultMenus(db); err != nil {
@@ -100,9 +124,11 @@ func main() {
 }
 
 func createSuperuser(db *gorm.DB, username, password string) error {
-	var count int64
-	db.Model(&model.User{}).Where("username = ?", username).Count(&count)
-	if count > 0 {
+	exists, err := superuserExists(db, username)
+	if err != nil {
+		return err
+	}
+	if exists {
 		return nil // 已存在，跳过
 	}
 
@@ -122,24 +148,73 @@ func createSuperuser(db *gorm.DB, username, password string) error {
 	return db.Create(user).Error
 }
 
+// superuserExists 判断指定用户名的账号是否已存在。
+func superuserExists(db *gorm.DB, username string) (bool, error) {
+	var count int64
+	if err := db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func createDefaultRoles(db *gorm.DB) error {
 	roles := []model.Role{
-		{Name: "super_admin", Desc: "超级管理员（全部权限）", IsActive: true, IsSystem: true},
-		{Name: "security_admin", Desc: "安全管理员（配置/监控/集群/审计）", IsActive: true, IsSystem: true},
-		{Name: "audit_admin", Desc: "审计管理员（审计/登录日志只读）", IsActive: true, IsSystem: true},
-		{Name: "user", Desc: "普通用户（基础访问）", IsActive: true, IsSystem: true},
+		{Name: "super_admin", DisplayName: "超级管理员", Desc: "超级管理员（全部权限）", IsActive: true, IsSystem: true},
+		{Name: "security_admin", DisplayName: "安全管理员", Desc: "安全管理员（配置/监控/集群/审计）", IsActive: true, IsSystem: true},
+		{Name: "audit_admin", DisplayName: "审计管理员", Desc: "审计管理员（审计/登录日志只读）", IsActive: true, IsSystem: true},
+		{Name: "user", DisplayName: "普通用户", Desc: "普通用户（基础访问）", IsActive: true, IsSystem: true},
 	}
 	for _, r := range roles {
-		var count int64
-		db.Model(&model.Role{}).Where("name = ?", r.Name).Count(&count)
-		if count > 0 {
+		var existing model.Role
+		err := db.Where("name = ?", r.Name).First(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := db.Create(&r).Error; err != nil {
+				return err
+			}
 			continue
 		}
-		if err := db.Create(&r).Error; err != nil {
+		if err != nil {
 			return err
+		}
+		// 历史库补显示名：只在为空时写，管理员自己改过的不覆盖
+		if existing.DisplayName == "" && r.DisplayName != "" {
+			if err := db.Model(&model.Role{}).Where("id = ?", existing.ID).
+				Update("display_name", r.DisplayName).Error; err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// bindSuperuserRole 给内置超管补上 super_admin 角色（幂等）。
+// 只追加不清空：超管可能已经被人工绑了其它角色，这里不能把它们冲掉。
+func bindSuperuserRole(db *gorm.DB, username string) error {
+	var user model.User
+	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	var role model.Role
+	if err := db.Where("name = ?", "super_admin").First(&role).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	var linked int64
+	if err := db.Table("user_roles").
+		Where("user_id = ? AND role_id = ?", user.ID, role.ID).Count(&linked).Error; err != nil {
+		return err
+	}
+	if linked > 0 {
+		return nil
+	}
+	return db.Model(&user).Association("Roles").Append(&role)
 }
 
 func createDefaultMenus(db *gorm.DB) error {
@@ -254,6 +329,8 @@ func bindDefaultRoleMenus(db *gorm.DB) error {
 		{"super_admin", allCodes},
 		{"security_admin", []string{"system:permission", "system:config", "system:resource", "system:cluster", "audit", "audit:log", "audit:login-log"}},
 		{"audit_admin", []string{"audit", "audit:log", "audit:login-log"}},
+		// 普通用户至少要有一个可落地的页面，否则登录后一间菜单都没有
+		{"user", []string{"dashboard"}},
 	}
 	for _, b := range bindings {
 		var role model.Role

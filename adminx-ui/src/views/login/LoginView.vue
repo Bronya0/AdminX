@@ -52,6 +52,10 @@
           </a-input>
         </a-form-item>
 
+        <a-form-item v-if="loginError">
+          <a-alert type="error" :message="loginError" show-icon :closable="false" />
+        </a-form-item>
+
         <a-form-item>
           <a-button
             type="primary"
@@ -87,6 +91,9 @@ const userStore = useUserStore()
 
 // 状态
 const loading = ref(false)
+// 登录失败原因常驻在表单里：后端区分验证码错误、密码错误、账号锁定并给出各自文案，
+// 只用 3 秒消失的 toast 展示，用户很容易错过真正的原因
+const loginError = ref('')
 const rememberMe = ref(false)
 const REMEMBER_KEY = 'adminx_remember_username' 
 const captchaEnabled = ref(false)
@@ -135,6 +142,7 @@ const fetchCaptcha = async (): Promise<boolean> => {
 // 提交登录
 const handleSubmit = async () => {
   loading.value = true
+  loginError.value = ''
   try {
     const result = await userStore.login(
       formState.username,
@@ -151,9 +159,19 @@ const handleSubmit = async () => {
     } catch { /* 隐私模式忽略 */ }
     message.success('登录成功')
     router.push(userStore.user?.home_page || '/')
-  } catch {
-    // 错误提示已由全局拦截器统一处理，这里不再重复弹；失败时刷新验证码
-    if (captchaEnabled.value) fetchCaptcha()
+  } catch (e) {
+    // 拦截器 reject 的 Error.message 就是后端 msg；axios 自身的英文错误不进内联提示
+    const reason = e instanceof Error ? e.message : ''
+    loginError.value =
+      reason && !reason.startsWith('Request failed') && reason !== 'Network Error'
+        ? reason
+        : '登录失败，请检查网络后重试'
+    // 验证码一次性消费：失败后必须换一张，同时清空输入框里上一张的字符。
+    // 只换图不清空的话，用户接着点登录提交的还是旧字符，必然再报一次验证码错误。
+    if (captchaEnabled.value) {
+      formState.captchaText = ''
+      fetchCaptcha()
+    }
   } finally {
     loading.value = false
   }

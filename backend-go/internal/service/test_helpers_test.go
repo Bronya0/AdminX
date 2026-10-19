@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -100,3 +101,20 @@ func seedUser(t *testing.T, db *gorm.DB, username, password string, roleIDs ...s
 
 // boolPtr 测试辅助：bool 指针。
 func boolPtr(b bool) *bool { return &b }
+
+// createPlainUser 建一个带角色的普通用户。
+// 普通用户必须有角色（无角色账号登录后看不到任何菜单），
+// 各用例只关心用户本身，不必每次自己 seed 角色。
+func createPlainUser(t *testing.T, db *gorm.DB, svc *UserService, username, password string) (*model.User, error) {
+	t.Helper()
+	// 同名角色复用：重名用户用例会带着同一个用户名多次进入这里
+	name := "role_" + username
+	var role model.Role
+	err := db.Where("name = ?", name).First(&role).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		role = *seedRole(t, db, name, false)
+	} else if err != nil {
+		t.Fatalf("准备角色失败: %v", err)
+	}
+	return svc.Create(CreateInput{Username: username, Password: password, Roles: []string{role.ID}})
+}

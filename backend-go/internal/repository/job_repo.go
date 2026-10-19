@@ -26,7 +26,7 @@ func (r *JobRepo) List(offset, limit int, search string) ([]model.ScheduleJob, i
 	var count int64
 	q := r.db.Model(&model.ScheduleJob{})
 	if search != "" {
-		q = q.Where("name LIKE ?", "%"+EscapeLike(search)+"%")
+		q = q.Where("name LIKE ? ESCAPE '\\'", "%"+EscapeLike(search)+"%")
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err

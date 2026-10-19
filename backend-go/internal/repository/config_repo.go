@@ -39,7 +39,7 @@ func (r *ConfigRepo) List(offset, limit int, search, group string) ([]model.Conf
 	q := r.db.Model(&model.Config{})
 	if search != "" {
 		// "desc" 是 PostgreSQL 保留字，必须加引号（裸写 PG 报 42601，sqlite 容忍）
-		q = q.Where("key LIKE ? OR \"desc\" LIKE ?", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
+		q = q.Where("key LIKE ? ESCAPE '\\' OR \"desc\" LIKE ? ESCAPE '\\'", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
 	}
 	if group != "" {
 		q = q.Where("\"group\" = ?", group)

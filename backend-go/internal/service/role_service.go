@@ -84,10 +84,11 @@ func (s *RoleService) GetByID(id string) (*model.Role, error) {
 
 // CreateInput 创建角色入参。
 type RoleCreateInput struct {
-	Name     string  `json:"name" binding:"required,max=128"`
-	Desc     string  `json:"desc"`
-	IsActive *bool   `json:"is_active"`
-	MenuIDs  []int64 `json:"menu_ids"`
+	Name        string  `json:"name" binding:"required,max=128"`
+	DisplayName string  `json:"display_name" binding:"max=128"`
+	Desc        string  `json:"desc"`
+	IsActive    *bool   `json:"is_active"`
+	MenuIDs     []int64 `json:"menu_ids"`
 }
 
 func (s *RoleService) Create(in RoleCreateInput) (*model.Role, error) {
@@ -102,9 +103,10 @@ func (s *RoleService) Create(in RoleCreateInput) (*model.Role, error) {
 	}
 
 	role := &model.Role{
-		Name:     in.Name,
-		Desc:     in.Desc,
-		IsActive: isActive,
+		Name:        in.Name,
+		DisplayName: in.DisplayName,
+		Desc:        in.Desc,
+		IsActive:    isActive,
 	}
 	// 建角色与绑菜单包在同一事务内：AssignMenus 失败时整体回滚。
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -129,10 +131,11 @@ func (s *RoleService) Create(in RoleCreateInput) (*model.Role, error) {
 
 // UpdateInput 更新角色入参。Desc 用指针区分「未传」与「传空串」。
 type RoleUpdateInput struct {
-	Name     string  `json:"name"`
-	Desc     *string `json:"desc"`
-	IsActive *bool   `json:"is_active"`
-	MenuIDs  []int64 `json:"menu_ids"`
+	Name        string  `json:"name"`
+	DisplayName *string `json:"display_name"`
+	Desc        *string `json:"desc"`
+	IsActive    *bool   `json:"is_active"`
+	MenuIDs     []int64 `json:"menu_ids"`
 }
 
 func (s *RoleService) Update(id string, in RoleUpdateInput) (*model.Role, error) {
@@ -159,6 +162,10 @@ func (s *RoleService) Update(id string, in RoleUpdateInput) (*model.Role, error)
 	}
 	if in.Desc != nil {
 		role.Desc = *in.Desc
+	}
+	// 展示名可随时改，包括系统内置角色：它不参与任何权限判定
+	if in.DisplayName != nil {
+		role.DisplayName = *in.DisplayName
 	}
 	if in.IsActive != nil {
 		role.IsActive = *in.IsActive

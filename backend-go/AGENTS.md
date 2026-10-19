@@ -60,12 +60,13 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - M2M：`gorm:"many2many:table_name;"`，GORM 自动建中间表
 - 菜单层级：`parent_id` + `depth`（根=1，子=父+1），`depth` 由 `MenuService` 从父级派生并拒绝成环/自引用；前端 `flatMenusToTreeByDepth` **先按 `parent_id` 建树**，取不到父节点才退回 `depth` + path 前缀（前缀比较前先剥掉 `scheme://host`，否则外链/iframe 菜单的绝对 URL 会被挂到树根）；**depth 写错就等于多级菜单变平铺**
 - 骨架菜单种子（`defaultMenuSeeds`）对骨架内的 code 是**定义**的权威来源（对齐 Django 版 `update_or_create`），重跑 init-data 会覆盖其名称/路径/权限码/RBAC 规则；但**启停（`is_active`）与可见性（`is_visible`）不覆盖**：那是运维状态，种子未显式声明（`menuSeed.IsActive` / `IsVisible`，nil=不表态）就保留库里现值，否则每次 init-data 都会把应急停用/隐藏的菜单静默刷回启用可见。改种子 code 必须在 `legacyMenuCodeRenames` 登记，否则历史库会多出一份重复菜单。`permission_code` 必须等于前端 `router/index.ts` 的 `meta.permission`
-- 新增模型/字段后必须同步 `internal/database/sqlite.go` 的 SQLite DDL（`Models()` 与守卫测试会校验覆盖完整性）
+- 新增模型/字段后必须同步 `internal/database/sqlite.go` 的 SQLite DDL（`Models()` 与守卫测试会校验覆盖完整性）；**已存在的本地库不会自动加列**（`CREATE TABLE IF NOT EXISTS` 不给旧表加列），新增列要同时在 `migrateSQLite` 的补列清单里登记（`ensureSQLiteColumn`）
+- **角色名分两套**：`name` 是英文标识（权限判定、`super_admin` 常量、表单提交都用它），`display_name` 只给界面展示；`UserDTO.role_labels` 与 `roles` 一一对应，展示用 labels、提交用 roles，两者不能混用
 
 ### 序列化
 
 - **不要直接返回 model**，用 `model.ToUserDTO()` / `model.ToServiceComponentDTO()`
-- 前端依赖 `role_names: string[]`、`is_online`、`status` 等计算字段
+- 前端依赖 `role_names: string[]`、`role_labels: string[]`、`is_online`、`status` 等计算字段
 - 密码字段 `json:"-"` 永不序列化
 
 ### 认证
@@ -143,7 +144,9 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - **改密成功会更新 last_logout 吊销全部旧 token**；创建/重置密码走 `validatePasswordPolicy`；**管理员重置用户密码同样吊销该用户旧 token**（`UserRepo.SaveAndMaybeRevoke`，与密码写入同事务）
 - **通知已读按用户隔离**：真值在 `notification_reads`，`notifications.is_read` 只是按当前用户计算出的响应字段，不要当列读写
 - **超管账号不可被普通管理员改动/删除**（改密、禁用、删除一律 403）
-- **LIKE 搜索词必须过 `repository.EscapeLike`**
+- **最后一个启用中的超管不能被降级/停用/删除**：`UserRepo.SaveAndMaybeRevoke` / `SoftDelete` 传 `guardSuperuser`，校验写在写之后（`ensureSuperuserRemains`），并发下两个超管互相降级也不会双双放行；一旦清零，后台就没人能管，只能改库
+- **超管账号的角色只读**：权限来自 `is_superuser`，角色仅用于展示，`UserService.Update` 静默忽略超管的 `roles` 变更（报错会让前端改个描述也保存不了）；`init-data` 给内置超管补绑 `super_admin` 只为列表展示一致
+- **LIKE 搜索词必须过 `repository.EscapeLike`，并在 SQL 里附 `ESCAPE '\\'`**：PostgreSQL 的 LIKE 默认把反斜杠当转义符，SQLite 没有，漏了 ESCAPE 会在本地把 `super_admin` 这类带下划线的搜索词变成 0 条（线上 PG 正常，很难复现）
 - **写端点必须挂审计**：新增/改动的写端点（POST/PUT/PATCH/DELETE）在 router 用 `audited(action, model)` 声明，成功（code 200/201/204）时由 `middleware.Audited` 统一落库；用户/角色/菜单的写操作由 handler 自带 old/new 快照记录，**不要**再挂（一次操作会写两条）。动作词表见 `middleware.Audit*`，改词表要同步前端审计页的操作类型下拉
 
 ## 已知技术债

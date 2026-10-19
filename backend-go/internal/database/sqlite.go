@@ -42,6 +42,7 @@ func SQLiteStatements() []string {
 		`CREATE TABLE IF NOT EXISTS roles (
 			id TEXT PRIMARY KEY,
 			name TEXT UNIQUE NOT NULL,
+			display_name TEXT NOT NULL DEFAULT '',
 			"desc" TEXT NOT NULL DEFAULT '',
 			is_active INTEGER NOT NULL DEFAULT 1,
 			is_system INTEGER NOT NULL DEFAULT 0,
@@ -257,12 +258,44 @@ func SQLiteStatements() []string {
 	}
 }
 
-// migrateSQLite 执行 SQLite 建表语句（CREATE TABLE IF NOT EXISTS，幂等）。
+// migrateSQLite 执行 SQLite 建表语句（CREATE TABLE IF NOT EXISTS，幂等），
+// 再给已存在的旧库补上后来新增的列。
 func migrateSQLite(db *gorm.DB) error {
 	for _, stmt := range SQLiteStatements() {
 		if err := db.Exec(stmt).Error; err != nil {
 			return fmt.Errorf("执行 SQLite 建表语句失败: %w", err)
 		}
 	}
+	// CREATE TABLE IF NOT EXISTS 对已有表不会加列，而本地库不重建：
+	// 模型新增字段时这里不补，启动就是 “no such column”。新增列请登记到这里。
+	for _, c := range []struct{ table, column, ddl string }{
+		{"roles", "display_name", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := ensureSQLiteColumn(db, c.table, c.column, c.ddl); err != nil {
+			return err
+		}
+	}
 	return nil
 }
+
+// ensureSQLiteColumn 给已有表补列（已存在则跳过）。
+// SQLite 不支持 ADD COLUMN IF NOT EXISTS，只能先查 pragma；
+// table/column 都是代码里的常量，不接受外部输入。
+func ensureSQLiteColumn(db *gorm.DB, table, column, ddl string) error {
+	var cols []struct {
+		Name string
+	}
+	if err := db.Raw("PRAGMA table_info(" + table + ")").Scan(&cols).Error; err != nil {
+		return fmt.Errorf("读取 %s 表结构失败: %w", table, err)
+	}
+	for _, c := range cols {
+		if c.Name == column {
+			return nil
+		}
+	}
+	if err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl)).Error; err != nil {
+		return fmt.Errorf("为 %s 表补列 %s 失败: %w", table, column, err)
+	}
+	return nil
+}
+

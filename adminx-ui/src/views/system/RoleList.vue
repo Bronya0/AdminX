@@ -75,8 +75,11 @@
       <a-tabs v-model:activeKey="modalActiveTab">
         <a-tab-pane key="basic" tab="基本信息">
           <a-form ref="formRef" :model="formState" :rules="viewOnly ? {} : formRules" layout="vertical">
-            <a-form-item label="角色名称" name="name">
-              <a-input v-model:value="formState.name" placeholder="请输入角色名称" :disabled="viewOnly" />
+            <a-form-item label="角色标识" name="name">
+              <a-input v-model:value="formState.name" placeholder="英文标识，权限与绑定用它，如 ops_admin" :disabled="viewOnly" />
+            </a-form-item>
+            <a-form-item label="显示名称" name="display_name">
+              <a-input v-model:value="formState.display_name" placeholder="界面展示用（如 运维管理员），留空则显示角色标识" :disabled="viewOnly" />
             </a-form-item>
             <a-form-item label="描述" name="desc">
               <a-textarea v-model:value="formState.desc" placeholder="请输入描述" :rows="3" :disabled="viewOnly" />
@@ -137,13 +140,14 @@ import { menusToTreeData, filterTreeBySearch } from '@/utils/menuTree'
 import { formatDateTime } from '@/utils/format'
 import SearchBar from '@/components/SearchBar.vue'
 import SearchField from '@/components/SearchField.vue'
-import type { Role } from '@/types'
+import type { Menu, Role } from '@/types'
 
 const route = useRoute()
 
 // 表格列定义
 const columns = [
-  { title: '角色名称', dataIndex: 'name', key: 'name' },
+  { title: '显示名称', key: 'display_name', customRender: ({ record }: any) => record.display_name || record.name },
+  { title: '角色标识', dataIndex: 'name', key: 'name' },
   { title: '描述', dataIndex: 'desc', key: 'desc', ellipsis: true },
   { title: '权限数量', key: 'menus_count', width: 100, align: 'center' as const, customRender: ({ record }: any) => record.menus?.length ?? 0 },
   { title: '状态', key: 'is_active' },
@@ -173,10 +177,10 @@ const currentId = ref('')
 const formRef = ref()
 
 const formState = reactive({
-  name: '', desc: '', is_active: true, menus: [] as string[],
+  name: '', display_name: '', desc: '', is_active: true,
 })
 const formRules = {
-  name: [{ required: true, message: '请输入角色名称' }],
+  name: [{ required: true, message: '请输入角色标识' }],
 }
 
 // 菜单树
@@ -185,6 +189,15 @@ const menuExpandedKeys = ref<string[]>([])
 const originalMenuTreeData = ref<any[]>([])
 const filteredMenuTreeData = ref<any[]>([])
 const selectedMenus = ref<string[]>([])
+// code → 菜单 ID：树上勾的是 code，提交给后端的是 menu_ids
+const menuIdByCode = ref<Record<string, number>>({})
+
+const indexMenuIds = (items: Menu[]) => {
+  for (const m of items) {
+    menuIdByCode.value[m.code] = m.id
+    if (m.children?.length) indexMenuIds(m.children)
+  }
+}
 
 // 加载数据
 const loadData = async () => {
@@ -202,6 +215,7 @@ const loadData = async () => {
 const loadMenus = async () => {
   try {
     const tree = await roleApi.getMenuTree()
+    indexMenuIds(tree)
     originalMenuTreeData.value = menusToTreeData(tree, 'code')
     filteredMenuTreeData.value = [...originalMenuTreeData.value]
   } catch (e) {
@@ -256,7 +270,7 @@ const handleAdd = () => {
   modalTitle.value = '新增角色'
   currentId.value = ''
   modalActiveTab.value = 'basic'
-  Object.assign(formState, { name: '', desc: '', is_active: true, menus: [] })
+  Object.assign(formState, { name: '', display_name: '', desc: '', is_active: true })
   selectedMenus.value = []
   menuExpandedKeys.value = []
   menuSearch.value = ''
@@ -270,11 +284,14 @@ const handleAdd = () => {
 const handleEdit = (record: Role, readOnly = false) => {
   isEdit.value = true
   viewOnly.value = readOnly
-  modalTitle.value = readOnly ? `角色详情 - ${record.name}` : '编辑角色'
+  modalTitle.value = readOnly ? `角色详情 - ${record.display_name || record.name}` : '编辑角色'
   currentId.value = record.id
   modalActiveTab.value = 'basic'
-  Object.assign(formState, { name: record.name, desc: record.desc, is_active: record.is_active, menus: record.menus || [] })
-  selectedMenus.value = record.menus || []
+  Object.assign(formState, { name: record.name, display_name: record.display_name || '', desc: record.desc, is_active: record.is_active })
+  // 列表返回的是菜单对象数组，而树勾的是菜单 code：不转就一个都勾不上
+  selectedMenus.value = (record.menus || [])
+    .map(m => (typeof m === 'string' ? m : m.code))
+    .filter(Boolean)
   menuExpandedKeys.value = []
   menuSearch.value = ''
   loadMenus()
@@ -301,12 +318,16 @@ const handleModalOk = async () => {
   try {
     await formRef.value.validate()
     modalLoading.value = true
-    formState.menus = selectedMenus.value
+    // 后端只认 menu_ids（数字），树上的 code 必须先换成菜单 ID，否则权限根本没保存
+    const menuIds = selectedMenus.value
+      .map(code => menuIdByCode.value[code])
+      .filter((id): id is number => typeof id === 'number')
+    const payload = { ...formState, menu_ids: menuIds }
     if (isEdit.value) {
-      await roleApi.updateRole(currentId.value, formState)
+      await roleApi.updateRole(currentId.value, payload)
       message.success('更新成功')
     } else {
-      await roleApi.createRole(formState)
+      await roleApi.createRole(payload)
       message.success('创建成功')
     }
     modalVisible.value = false

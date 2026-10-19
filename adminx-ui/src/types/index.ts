@@ -29,6 +29,8 @@ export interface User {
   last_activity?: string | null
   roles: string[]
   role_names: string[]
+  // 与 roles 一一对应的展示名（后端把角色中文名与标识分开）
+  role_labels: string[]
   home_page?: string
   date_joined: string
   last_login: string | null
@@ -57,12 +59,15 @@ export interface UserInfo {
 export interface Role {
   id: string
   name: string
+  // 界面展示名（中文），为空时前端回退显示 name
+  display_name: string
   desc: string
   is_active: boolean
   is_system?: boolean
   permissions: string[]
   business_permissions: string[]
-  menus: string[]
+  // 后端返回的是菜单对象数组（非 code 字符串），列表页用它算数量，编辑时映射成 code 回显
+  menus: Menu[]
   created_at: string
   updated_at: string
 }
