@@ -79,7 +79,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecord(c, h.audit, "create", "User", user.ID, user.Username)
+	auditRecordDiff(c, h.audit, "create", "User", user.ID, user.Username, nil, model.ToUserDTO(user))
 	response.Created(c, model.ToUserDTO(user))
 }
 
@@ -125,7 +125,11 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecordDiff(c, h.audit, "update", "User", user.ID, user.Username, toUserDTOSafe(oldUser), model.ToUserDTO(user))
+	operation := "更新用户"
+	if in.Password != "" {
+		operation += "；重置密码并吊销会话"
+	}
+	auditOperation(c, h.audit, "update", "User", user.ID, user.Username, operation, toUserDTOSafe(oldUser), model.ToUserDTO(user))
 	response.OK(c, model.ToUserDTO(user))
 }
 
@@ -150,14 +154,19 @@ func (h *UserHandler) Logout(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	// 审计由 router 的 audited() 统一落库
+
+	auditOperation(c, h.audit, "execute", "User", id, target.Username, "强制下线", nil, gin.H{"sessions_revoked": true})
 	response.OK(c, gin.H{"id": id})
 }
 
 func (h *UserHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	// 删除前快照（审计留痕）
-	oldUser, _ := h.svc.GetByID(id)
+	oldUser, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	// 删除超管仅限超级管理员（否则"用户管理"权限持有者可直接删掉超管账号）
 	if oldUser != nil && oldUser.IsSuperuser && !isSuperuser(c) {
 		response.Fail(c, 403, "仅超级管理员可删除超管账号")

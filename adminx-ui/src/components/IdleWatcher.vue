@@ -98,7 +98,7 @@ const doLogout = async () => {
 }
 
 // 监听用户活动事件
-const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
+const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'adminx:business-activity']
 
 let listening = false
 

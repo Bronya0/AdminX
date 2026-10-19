@@ -2,12 +2,14 @@ package service
 
 import (
 	"errors"
+	"strings"
 
 	"gorm.io/gorm"
 
 	apperr "adminx/pkg/errors"
 
 	"adminx/internal/model"
+	"adminx/internal/rbacrule"
 	"adminx/internal/repository"
 )
 
@@ -109,6 +111,9 @@ type MenuCreateInput struct {
 }
 
 func (s *MenuService) Create(in MenuCreateInput) (*model.Menu, error) {
+	if err := validateAllowedPaths(in.AllowedPaths); err != nil {
+		return nil, err
+	}
 	menuType := in.MenuType
 	if menuType == "" {
 		menuType = "menu"
@@ -185,6 +190,9 @@ func (s *MenuService) RegisterOrUpdate(in MenuCreateInput) (*model.Menu, error) 
 			existing.SortOrder = in.SortOrder
 		}
 		if in.AllowedPaths != nil {
+			if err := validateAllowedPaths(in.AllowedPaths); err != nil {
+				return nil, err
+			}
 			existing.AllowedPaths = mustJSON(in.AllowedPaths)
 		}
 		if in.ParentID != nil && !sameParent(existing.ParentID, in.ParentID) {
@@ -216,22 +224,25 @@ func (s *MenuService) RegisterOrUpdate(in MenuCreateInput) (*model.Menu, error) 
 
 // UpdateInput 更新菜单入参（指针字段区分"未传"和"清空"）。
 type MenuUpdateInput struct {
-	Code           string   `json:"code"`
-	Name           string   `json:"name"`
-	Icon           *string  `json:"icon"`
-	Path           *string  `json:"path"`
-	Component      *string  `json:"component"`
-	PermissionCode *string  `json:"permission_code"`
-	MenuType       string   `json:"menu_type"`
-	IsActive       *bool    `json:"is_active"`
-	IsVisible      *bool    `json:"is_visible"`
-	SortOrder      *int     `json:"sort_order"`
+	Code           string  `json:"code"`
+	Name           string  `json:"name"`
+	Icon           *string `json:"icon"`
+	Path           *string `json:"path"`
+	Component      *string `json:"component"`
+	PermissionCode *string `json:"permission_code"`
+	MenuType       string  `json:"menu_type"`
+	IsActive       *bool   `json:"is_active"`
+	IsVisible      *bool   `json:"is_visible"`
+	SortOrder      *int    `json:"sort_order"`
 	// ParentID nil = 不改动父子关系；传父菜单 ID 时按其深度重算 depth。
 	ParentID     *int64   `json:"parent_id"`
 	AllowedPaths []string `json:"allowed_paths"`
 }
 
 func (s *MenuService) Update(id int64, in MenuUpdateInput) (*model.Menu, error) {
+	if err := validateAllowedPaths(in.AllowedPaths); err != nil {
+		return nil, err
+	}
 	menu, err := s.menuRepo.FindByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -305,6 +316,21 @@ func (s *MenuService) Delete(id int64) error {
 			return apperr.New(400, "该菜单下有子菜单，请先删除子菜单")
 		}
 		return apperr.ErrInternal
+	}
+	return nil
+}
+
+// validateAllowedPaths 校验接口路径白名单（规则语义与解析见 internal/rbacrule）。
+//
+// 必须在写入前拦住：非法规则不会让接口报错，只是运行时永不匹配，
+// 表现为「菜单明明配了权限、用户仍然 403」，只能人肉比对规则字符串才能发现。
+func validateAllowedPaths(paths []string) error {
+	for _, p := range paths {
+		reason := rbacrule.InvalidReason(p)
+		if reason == "" {
+			continue
+		}
+		return apperr.New(400, "接口路径白名单格式错误："+reason+"（"+strings.TrimSpace(p)+"）")
 	}
 	return nil
 }
@@ -406,4 +432,12 @@ func (s *MenuService) wouldCycle(menuID, newParentID int64) (bool, error) {
 		id = *parent
 	}
 	return false, nil
+}
+
+func (s *MenuService) GetByCode(code string) (*model.Menu, error) {
+	menu, err := s.menuRepo.FindByCode(code)
+	if err != nil {
+		return nil, err
+	}
+	return menu, nil
 }

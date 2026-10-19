@@ -29,10 +29,10 @@ def _not_found(post_id: int):
     )
 
 
-def _current_username(request: Request) -> str:
-    """introspect 中间件注入的用户名（未登录场景为空，仅用于演示隔离）"""
+def _current_owner(request: Request) -> str:
+    """用稳定用户 ID 隔离数据，避免账号删除后同名新账号继承旧数据。"""
     user = getattr(request.state, "user", None)
-    return (user or {}).get("username", "")
+    return (user or {}).get("user_id", "")
 
 
 @router.get("/")
@@ -44,7 +44,7 @@ async def list_posts(
     limit: int = Query(20, ge=1, le=100, description="每页条数"),
 ):
     """文章列表（按创建者隔离），支持分页、状态筛选和标题搜索"""
-    owner = _current_username(request)
+    owner = _current_owner(request)
     items = [p for p in _db if p.owner == owner]
 
     # 筛选
@@ -74,7 +74,7 @@ async def create_post(body: PostCreate, request: Request):
     """新建文章"""
     post = Post(
         id=_next_id(),
-        owner=_current_username(request),
+        owner=_current_owner(request),
         title=body.title,
         content=body.content,
         status=body.status,
@@ -88,7 +88,7 @@ async def create_post(body: PostCreate, request: Request):
 @router.get("/{post_id}")
 async def get_post(post_id: int, request: Request):
     """获取单篇文章（仅本人可见）"""
-    owner = _current_username(request)
+    owner = _current_owner(request)
     for p in _db:
         if p.id == post_id and p.owner == owner:
             return {"code": 200, "msg": "ok", "data": p}
@@ -98,7 +98,7 @@ async def get_post(post_id: int, request: Request):
 @router.put("/{post_id}")
 async def update_post(post_id: int, body: PostCreate, request: Request):
     """全量更新文章"""
-    owner = _current_username(request)
+    owner = _current_owner(request)
     for i, p in enumerate(_db):
         if p.id == post_id and p.owner == owner:
             _db[i] = Post(
@@ -117,7 +117,7 @@ async def update_post(post_id: int, body: PostCreate, request: Request):
 @router.patch("/{post_id}")
 async def patch_post(post_id: int, body: PostUpdate, request: Request):
     """部分更新文章"""
-    owner = _current_username(request)
+    owner = _current_owner(request)
     for i, p in enumerate(_db):
         if p.id == post_id and p.owner == owner:
             update_data = body.model_dump(exclude_unset=True)
@@ -131,7 +131,7 @@ async def patch_post(post_id: int, body: PostUpdate, request: Request):
 @router.delete("/{post_id}")
 async def delete_post(post_id: int, request: Request):
     """删除文章"""
-    owner = _current_username(request)
+    owner = _current_owner(request)
     for i, p in enumerate(_db):
         if p.id == post_id and p.owner == owner:
             _db.pop(i)

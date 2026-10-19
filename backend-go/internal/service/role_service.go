@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
@@ -119,6 +121,9 @@ func (s *RoleService) Create(in RoleCreateInput) (*model.Role, error) {
 		}
 		if len(in.MenuIDs) > 0 {
 			if err := txRepo.AssignMenus(role.ID, in.MenuIDs); err != nil {
+				if errors.Is(err, repository.ErrInvalidMenuIDs) {
+					return apperr.New(400, "菜单不存在或已删除，请刷新后重新选择")
+				}
 				return apperr.ErrInternal
 			}
 		}
@@ -171,19 +176,34 @@ func (s *RoleService) Update(id string, in RoleUpdateInput) (*model.Role, error)
 		role.IsActive = *in.IsActive
 	}
 
-	if err := s.roleRepo.Update(role); err != nil {
-		if isDupKey(err) {
-			return nil, apperr.New(409, "角色名已存在")
+	var updated *model.Role
+	// 角色资料、授权关联与结果回读共用事务，任一步失败都不留下部分修改。
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := s.roleRepo.WithTx(tx)
+		if err := txRepo.Update(role); err != nil {
+			if isDupKey(err) {
+				return apperr.New(409, "角色名已存在")
+			}
+			return apperr.ErrInternal
 		}
-		return nil, apperr.ErrInternal
-	}
-
-	if in.MenuIDs != nil {
-		if err := s.roleRepo.AssignMenus(role.ID, in.MenuIDs); err != nil {
-			return nil, apperr.ErrInternal
+		if in.MenuIDs != nil {
+			if err := txRepo.AssignMenus(role.ID, in.MenuIDs); err != nil {
+				if errors.Is(err, repository.ErrInvalidMenuIDs) {
+					return apperr.New(400, "菜单不存在或已删除，请刷新后重新选择")
+				}
+				return apperr.ErrInternal
+			}
 		}
+		var err error
+		updated, err = txRepo.FindByID(role.ID)
+		if err != nil {
+			return apperr.ErrInternal
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	return s.roleRepo.FindByID(role.ID)
+	return updated, nil
 }
 
 func (s *RoleService) Delete(id string) error {

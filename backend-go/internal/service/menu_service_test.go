@@ -207,3 +207,24 @@ func TestMenuService_UpdateHierarchy(t *testing.T) {
 		t.Error("挂到自己的后代下应报错")
 	}
 }
+
+// PATCH must enforce the same rule validation as create/register, without partially writing other fields.
+func TestMenuUpdateRejectsInvalidRules(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewMenuService(db, repository.NewMenuRepo(db))
+	menu, err := svc.Create(MenuCreateInput{Code: "validation", Name: "original", Path: "/validation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Update(menu.ID, MenuUpdateInput{Name: "changed", AllowedPaths: []string{"GTE:/api/v1/users/*"}})
+	if err == nil {
+		t.Fatal("invalid permission rule accepted")
+	}
+	stored, err := svc.GetByID(menu.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Name != "original" {
+		t.Fatal("invalid update partially persisted")
+	}
+}

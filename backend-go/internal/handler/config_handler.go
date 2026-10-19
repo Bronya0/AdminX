@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -15,12 +17,13 @@ import (
 
 // ConfigHandler 配置中心 HTTP 处理器。
 type ConfigHandler struct {
+	audit  *service.AuditService
 	svc    *service.ConfigService
 	logger *slog.Logger
 }
 
-func NewConfigHandler(svc *service.ConfigService, logger *slog.Logger) *ConfigHandler {
-	return &ConfigHandler{svc: svc, logger: logger}
+func NewConfigHandler(svc *service.ConfigService, audit *service.AuditService, logger *slog.Logger) *ConfigHandler {
+	return &ConfigHandler{svc: svc, audit: audit, logger: logger}
 }
 
 func (h *ConfigHandler) List(c *gin.Context) {
@@ -60,6 +63,7 @@ func (h *ConfigHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "create", "Config", strconv.FormatInt(cfg.ID, 10), cfg.Key, nil, service.ToConfigDTO(cfg))
 	response.Created(c, service.ToConfigDTO(cfg))
 }
 
@@ -74,11 +78,17 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	old, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	cfg, err := h.svc.Update(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "update", "Config", strconv.FormatInt(cfg.ID, 10), cfg.Key, old, service.ToConfigDTO(cfg))
 	response.OK(c, service.ToConfigDTO(cfg))
 }
 
@@ -88,10 +98,16 @@ func (h *ConfigHandler) Delete(c *gin.Context) {
 		response.Fail(c, 400, "无效的 ID")
 		return
 	}
+	old, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	if err := h.svc.Delete(id); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "delete", "Config", strconv.FormatInt(id, 10), old.Key, old, nil)
 	response.NoContent(c)
 }
 
@@ -155,10 +171,50 @@ func (h *ConfigHandler) Import(c *gin.Context) {
 		response.Fail(c, 400, "读取请求体失败")
 		return
 	}
+	before, _, err := h.svc.List(0, -1, "", "")
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	result, err := h.svc.ImportFile(c.Request.Context(), raw)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
+	}
+	var imported service.ConfigFile
+	_ = json.Unmarshal(raw, &imported) // ImportFile 已完整校验格式。
+	oldByKey := make(map[string]service.ConfigDTO, len(before))
+	for _, item := range before {
+		oldByKey[item.Key] = item
+	}
+	after, _, readErr := h.svc.List(0, -1, "", "")
+	if readErr != nil {
+		h.logger.Error("配置导入后审计快照读取失败", "error", readErr)
+	}
+	newByKey := make(map[string]service.ConfigDTO)
+	if after != nil {
+		for _, item := range after {
+			newByKey[item.Key] = item
+		}
+	}
+	for _, item := range imported.Items {
+		key := strings.TrimSpace(item.Key)
+		var old interface{}
+		action := "create"
+		if previous, ok := oldByKey[key]; ok {
+			old = previous
+			action = "update"
+		}
+		current, exists := newByKey[key]
+		objectID := key
+		if exists {
+			objectID = strconv.FormatInt(current.ID, 10)
+		}
+		var updated interface{} = current
+		if readErr != nil || !exists {
+			updated = gin.H{"snapshot_unavailable": true, "key": key}
+		}
+		auditOperation(c, h.audit, action, "Config", objectID, key, "导入配置", old, updated)
 	}
 	response.OK(c, result)
 }

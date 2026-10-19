@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+import json
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -11,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import SERVICE_PORT, CORS_ORIGINS, DEBUG, LOG_LEVEL, COMPONENT_SECRET
+from config import (SERVICE_PORT, CORS_ORIGINS, DEBUG, LOG_LEVEL, COMPONENT_SECRET,
+                    PLATFORM_API_BASE, PLATFORM_FRONTEND_URL, PLATFORM_FRONTEND_ORIGINS)
 from routers import posts, register
 from routers import component as comp_module
 from auth import introspect_token
@@ -31,9 +33,12 @@ _heartbeat_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     global _heartbeat_task
     # 注册菜单（原有逻辑）
-    logger.info("正在注册菜单到平台 %s ...", register.PLATFORM_URL)
-    result = await register.register_menu()
-    logger.info("注册结果: %s", result.get("msg", result))
+    logger.info("正在注册菜单到平台 %s ...", PLATFORM_API_BASE)
+    try:
+        result = await register.register_menu()
+        logger.info("注册结果: %s", result.get("msg", result))
+    except Exception:
+        logger.exception("菜单注册暂时失败，可在平台恢复后重试注册端点")
 
     # 注册组件 + 启动心跳
     await comp_module.register()
@@ -44,6 +49,8 @@ async def lifespan(app: FastAPI):
     # 关闭时注销
     if _heartbeat_task:
         _heartbeat_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _heartbeat_task
     await comp_module.unregister()
 
 
@@ -67,6 +74,11 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         body = exc.detail
         return JSONResponse(status_code=body.get("code", exc.status_code), content=body)
     return JSONResponse(status_code=exc.status_code, content={"code": exc.status_code, "msg": exc.detail, "data": None})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=422, content={"code": 422, "msg": "请求参数格式错误", "data": None})
 
 # ─── CORS ───
 if CORS_ORIGINS == "*":
@@ -158,7 +170,12 @@ app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 @app.get("/", include_in_schema=False)
 async def index():
     content = (HERE / "static" / "index.html").read_text(encoding="utf-8")
-    return HTMLResponse(content)
+    config = json.dumps({"platformOrigins": PLATFORM_FRONTEND_ORIGINS, "platformURL": PLATFORM_FRONTEND_URL}, ensure_ascii=True).replace("<", "\\u003c")
+    return HTMLResponse(content.replace("__ADMINX_CONFIG__", config), headers={
+        "Content-Security-Policy": "frame-ancestors " + " ".join(PLATFORM_FRONTEND_ORIGINS),
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+    })
 
 
 @app.get("/healthz", tags=["系统"])

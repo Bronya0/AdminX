@@ -12,7 +12,7 @@ logger = logging.getLogger("business.auth")
 # 本地缓存: token -> (expire_ts, user_info)。
 # 缓存可避免每个业务请求都打平台 introspect（限流 300/min/IP），
 # 平台短暂不可用时也能兜底放行已缓存的有效 token。
-# 注意：缓存会延迟登出/封禁的生效时间（默认 15s，可用 INTROSPECT_CACHE_TTL 调整，
+# 注意：缓存会延迟登出/封禁的生效时间（默认关闭，可用 INTROSPECT_CACHE_TTL 调整，
 # 设为 0 关闭缓存）。
 _cache: dict[str, tuple[float, dict]] = {}
 
@@ -36,7 +36,9 @@ def _cache_set(token: str, info: dict) -> None:
     # 简单防膨胀：超过 1000 条时清空重建
     if len(_cache) > 1000:
         _cache.clear()
-    _cache[token] = (time.time() + INTROSPECT_CACHE_TTL, info)
+    expiry = min(time.time() + INTROSPECT_CACHE_TTL, info["exp"])
+    if expiry > time.time():
+        _cache[token] = (expiry, info)
 
 
 async def introspect_token(token: str) -> dict | None:
@@ -57,22 +59,26 @@ async def introspect_token(token: str) -> dict | None:
                 headers={"Authorization": f"Bearer {token}"},
             )
             if resp.status_code != 200:
-                logger.warning("introspect 返回非 200: %d", resp.status_code)
-                return None
+                raise RuntimeError("平台鉴权服务返回异常状态")
             body = resp.json()
     except (httpx.HTTPError, ValueError) as e:
         logger.warning("introspect 请求失败: %s", e)
-        return None
+        raise RuntimeError("平台鉴权服务不可达") from e
 
-    data = body.get("data", {})
-    if not data.get("valid"):
+    if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
+        raise RuntimeError("平台鉴权响应格式错误")
+    data = body["data"]
+    if data.get("valid") is not True:
         return None
+    if not isinstance(data.get("user_id"), str) or not data["user_id"]:
+        raise RuntimeError("平台鉴权响应缺少用户标识")
 
     info = {
         "user_id": data.get("user_id"),
         "username": data.get("username"),
         "roles": data.get("roles", []),
         "permissions": data.get("permissions", []),
+        "exp": data.get("exp", 0),
     }
     _cache_set(token, info)
     return info

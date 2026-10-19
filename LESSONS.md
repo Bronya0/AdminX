@@ -25,3 +25,4 @@
 [init-data] 2026-10-19 中危：种子无条件写 is_active/is_visible=true，运维应急停用的菜单跑一次 init-data 就复活。@cmd/init-data/main.go
 [sqlite] 2026-10-19 高危：手工写 SQLite 时间列必须带 +08:00 时区，否则 Go 按 UTC 解析，last_logout 变未来时间，全部 token 立即失效，登录后被踢回登录页。@users.last_logout
 [sql] 2026-10-19 中危：LIKE 过了 EscapeLike 却不加 ESCAPE '\'，SQLite 把 \_ 当字面量，带下划线的搜索在本地全 0 条（PG 正常）。@repository/*_repo.go
+[前端] 2026-10-19 中危：rc-table 树形只判 children 字段是否存在（空数组为真），叶子输出 children:[] 会多出展开图标。@utils/menuTree.ts

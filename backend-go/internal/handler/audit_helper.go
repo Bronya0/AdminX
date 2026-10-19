@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -12,36 +14,34 @@ import (
 	"adminx/internal/service"
 )
 
-// auditRecord 记录一条操作审计（create/update/delete）。
-// 从 gin context 提取操作人与 IP；审计失败不影响主流程（只留痕，不阻断）。
-func auditRecord(c *gin.Context, svc *service.AuditService, action, modelName, objectID, objectRepr string) {
-	if svc == nil {
-		return
-	}
-	operator, _ := c.Get("username")
-	op, _ := operator.(string)
-	if err := svc.Record(action, modelName, objectID, objectRepr, op, c.ClientIP(), nil, nil, ""); err != nil {
-		// 审计失败仅记录，不阻断业务
-		return
-	}
+// auditRecordDiff 在业务成功后记录实际对象快照，不读取/缓存 HTTP 请求响应体。
+func auditRecordDiff(c *gin.Context, svc *service.AuditService, action, modelName, objectID, objectRepr string, oldObj, newObj interface{}) {
+	auditOperation(c, svc, action, modelName, objectID, objectRepr, "", oldObj, newObj)
 }
 
-// auditRecordDiff 记录带前后快照的审计（update/delete）。
-// oldObj/newObj 经 JSON 序列化存储（model 敏感字段需 json:"-"，密码字段均满足），
-// 并生成变更字段名摘要写入 diff_summary。读取失败不阻断审计与业务。
-func auditRecordDiff(c *gin.Context, svc *service.AuditService, action, modelName, objectID, objectRepr string, oldObj, newObj interface{}) {
+// auditOperation 为非 CRUD 动作补充业务语义；异步任务只记录提交结果。
+func auditOperation(c *gin.Context, svc *service.AuditService, action, modelName, objectID, objectRepr, operation string, oldObj, newObj interface{}) {
 	if svc == nil {
 		return
 	}
-	operator, _ := c.Get("username")
-	op, _ := operator.(string)
-
-	oldJSON := marshalAudit(oldObj)
-	newJSON := marshalAudit(newObj)
-	diff := diffSummary(oldJSON, newJSON)
-
-	if err := svc.Record(action, modelName, objectID, objectRepr, op, c.ClientIP(), oldJSON, newJSON, diff); err != nil {
-		return
+	oldJSON, newJSON := marshalAudit(oldObj), marshalAudit(newObj)
+	parts := []string{c.Request.Method + " " + c.FullPath()}
+	if operation != "" {
+		parts = append(parts, operation)
+	}
+	if diff := diffSummary(oldJSON, newJSON); diff != "" {
+		parts = append(parts, diff)
+	}
+	summary := strings.Join(parts, " | ")
+	operator := c.GetString("username")
+	if operator == "" {
+		operator = c.GetString("user_id")
+		if operator == "" {
+			operator = "system"
+		}
+	}
+	if err := svc.Record(action, modelName, objectID, objectRepr, operator, c.ClientIP(), oldJSON, newJSON, summary); err != nil {
+		slog.Default().Error("操作审计写入失败", "action", action, "model", modelName, "object_id", objectID, "error", err)
 	}
 }
 
@@ -50,6 +50,16 @@ func marshalAudit(v interface{}) datatypes.JSON {
 		return nil
 	}
 	b, err := json.Marshal(v)
+	if err != nil {
+		slog.Default().Error("操作审计快照序列化失败", "error", err)
+		return datatypes.JSON(`{"snapshot_unavailable":true}`)
+	}
+	var value interface{}
+	if err := json.Unmarshal(b, &value); err != nil {
+		return nil
+	}
+	redactAudit(value)
+	b, err = json.Marshal(value)
 	if err != nil {
 		return nil
 	}
@@ -95,4 +105,54 @@ func jsonEqual(a, b interface{}) bool {
 		return fmt.Sprint(a) == fmt.Sprint(b)
 	}
 	return string(ab) == string(bb)
+}
+
+// DTO 是第一道脱敏边界；递归清理扩展 JSON，防止 extra_info 等字段夹带凭据。
+func redactAudit(value interface{}) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		sensitiveConfig := false
+		if key, ok := v["key"].(string); ok {
+			sensitiveConfig = auditSecretKey(key)
+		}
+		encrypted, _ := v["is_encrypted"].(bool)
+		for key, item := range v {
+			lower := strings.ToLower(key)
+			if text, ok := item.(string); ok && (strings.HasPrefix(strings.TrimSpace(text), "{") || strings.HasPrefix(strings.TrimSpace(text), "[")) {
+				var nested interface{}
+				if json.Unmarshal([]byte(text), &nested) == nil {
+					redactAudit(nested)
+					if encoded, err := json.Marshal(nested); err == nil {
+						v[key] = string(encoded)
+					}
+				}
+			}
+			if auditSecretKey(key) || ((sensitiveConfig || encrypted) && (lower == "value" || lower == "display_value")) {
+				v[key] = "[REDACTED]"
+				continue
+			}
+			if raw, ok := item.(string); ok && (lower == "url" || strings.HasSuffix(lower, "_url")) {
+				if u, err := url.Parse(raw); err == nil && u.Host != "" {
+					u.User = nil
+					u.RawQuery = ""
+					u.Fragment = ""
+					v[key] = u.String()
+				}
+			}
+			redactAudit(item)
+		}
+	case []interface{}:
+		for _, item := range v {
+			redactAudit(item)
+		}
+	}
+}
+
+func auditSecretKey(key string) bool {
+	key = strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(key))
+	switch key {
+	case "password", "old_password", "new_password", "password_hash", "secret", "token", "access_token", "refresh_token", "authorization", "cookie", "api_key", "apikey", "accesstoken", "refreshtoken", "clientsecret", "private_key":
+		return true
+	}
+	return (key != "has_secret" && strings.HasSuffix(key, "_secret")) || strings.HasSuffix(key, "_password") || strings.HasSuffix(key, "_token") || strings.HasSuffix(key, "_api_key")
 }

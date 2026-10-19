@@ -10,6 +10,7 @@ package middleware
 
 import (
 	"encoding/json"
+	"log/slog"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,11 +21,15 @@ import (
 	"adminx/pkg/response"
 
 	"adminx/internal/model"
+	"adminx/internal/rbacrule"
 )
 
 // compiledCache glob 模式编译缓存（sync.Map，读多写少）。
 // 只缓存“模式→正则”这个纯函数结果；权限规则本身不做进程内缓存（见 checkPermission）。
 var compiledCache sync.Map // map[string]*regexp.Regexp
+
+// warnedRules 已告警过的非法规则：同一条只报一次，避免每请求刷屏。
+var warnedRules sync.Map // map[string]struct{}
 
 // RBAC 权限校验中间件。
 // 必须在 JWTAuth 之后使用（依赖 context 中的 user_id/is_superuser）。
@@ -74,6 +79,7 @@ func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, err
 		return false, err
 	}
 	for _, rule := range rules {
+		warnInvalidRule(rule)
 		if matchPath(method, requestPath, rule) {
 			return true, nil
 		}
@@ -131,32 +137,42 @@ func loadUserRules(db *gorm.DB, userID string) ([]string, error) {
 	return rules, nil
 }
 
-// matchPath 匹配单条规则
+// warnInvalidRule 对静态可判定非法的规则记一条告警（同一条只报一次）。
+// 这类规则不会让接口报错、只是永不匹配，表现为“菜单配了权限、用户仍然 403”；
+// 写入侧（MenuService）已拦新数据，这里兼顾库里已有的历史脏规则。
+func warnInvalidRule(rule string) {
+	reason := rbacrule.InvalidReason(rule)
+	if reason == "" {
+		return
+	}
+	if _, loaded := warnedRules.LoadOrStore(rule, struct{}{}); !loaded {
+		slog.Default().Warn("RBAC 规则格式非法，该规则永不匹配", "rule", rule, "reason", reason)
+	}
+}
+
+// matchPath 匹配单条规则。
 // 规则格式: 可选 "METHOD:/path"，path 部分用 glob（* 跨多级路径，? 单字符）。
+// 解析统一走 rbacrule（与写入侧校验共用一份实现）。
 // 用正则实现，使 `*` 能匹配多级路径（path.Match 的 * 不跨 /，
 // 导致 "GET:/api/v1/posts/*" 匹配不到 /api/v1/posts/1/xx 这类多段路径）。
 func matchPath(method, requestPath, rule string) bool {
-	rule = strings.TrimSpace(rule)
-	if rule == "" {
+	if rbacrule.InvalidReason(rule) != "" {
 		return false
 	}
-
-	ruleMethod := ""
-	rulePath := rule
-	if idx := strings.Index(rule, ":"); idx >= 0 {
-		ruleMethod = strings.ToUpper(rule[:idx])
-		rulePath = strings.TrimSpace(rule[idx+1:])
+	r := rbacrule.Parse(rule)
+	if r.Path == "" {
+		return false
 	}
 
 	// 方法不匹配则跳过
-	if ruleMethod != "" && ruleMethod != strings.ToUpper(method) {
+	if r.Method != "" && r.Method != strings.ToUpper(method) {
 		return false
 	}
 
-	re, err := getCompiledRegex(rulePath)
+	re, err := getCompiledRegex(r.Path)
 	if err != nil {
 		// 模式非法时降级为字面量比较
-		return rulePath == requestPath
+		return r.Path == requestPath
 	}
 	return re.MatchString(requestPath)
 }

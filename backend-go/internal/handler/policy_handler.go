@@ -12,12 +12,13 @@ import (
 
 // PolicyHandler 密码策略 HTTP 处理器。
 type PolicyHandler struct {
+	audit  *service.AuditService
 	svc    *service.PolicyService
 	logger *slog.Logger
 }
 
-func NewPolicyHandler(svc *service.PolicyService, logger *slog.Logger) *PolicyHandler {
-	return &PolicyHandler{svc: svc, logger: logger}
+func NewPolicyHandler(svc *service.PolicyService, audit *service.AuditService, logger *slog.Logger) *PolicyHandler {
+	return &PolicyHandler{svc: svc, audit: audit, logger: logger}
 }
 
 // GetPolicy GET /policy/policy/
@@ -37,11 +38,17 @@ func (h *PolicyHandler) UpdatePolicy(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	old, err := h.svc.GetPolicy()
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	result, err := h.svc.UpdatePolicy(in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "update", "PasswordPolicy", "1", "密码策略", old, result)
 	response.OK(c, result)
 }
 
@@ -61,5 +68,6 @@ func (h *PolicyHandler) ChangePassword(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditOperation(c, h.audit, "update", "User", uid, c.GetString("username"), "修改密码", nil, gin.H{"password_changed": true, "sessions_revoked": true})
 	response.OK(c, nil)
 }

@@ -12,6 +12,11 @@ import zhCN from 'ant-design-vue/es/locale/zh_CN'
 
 const userStore = useUserStore()
 
+const antToken = computed(() => {
+  const algorithm = userStore.theme.isDark ? theme.darkAlgorithm : theme.defaultAlgorithm
+  return algorithm({ ...theme.defaultSeed, colorPrimary: userStore.theme.primaryColor })
+})
+
 const antTheme = computed(() => ({
   algorithm: userStore.theme.isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
   token: {
@@ -25,6 +30,10 @@ const applyDocumentTheme = () => {
   const root = document.documentElement
   root.classList.toggle('dark', isDark)
   root.style.setProperty('--primary-color', primaryColor)
+  // Ant Design Vue 4 不支持 React Ant Design 的 cssVar 配置，显式导出页面所需语义色。
+  root.style.setProperty('--ant-color-primary', antToken.value.colorPrimary)
+  root.style.setProperty('--ant-color-primary-bg', antToken.value.colorPrimaryBg)
+  root.style.setProperty('--ant-color-text-secondary', antToken.value.colorTextSecondary)
   // 14px 为默认字号：不写内联样式，保持样式表原有行为
   root.style.fontSize = fontSize === 14 ? '' : `${fontSize}px`
 }

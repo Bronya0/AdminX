@@ -174,6 +174,11 @@ apiClient.interceptors.response.use(
 // 统一处理 token 过期：刷新或跳登录。
 // config 为触发过期的请求配置，刷新成功后会用新 token 重放该请求。
 function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
+  return refreshAccessToken().then((token) => replayWithToken(config, token))
+}
+
+// 业务 iframe 与平台请求共用刷新单飞，refresh token 不离开平台。
+export function refreshAccessToken(): Promise<string> {
   const userStore = useUserStore()
   const refreshToken = userStore.refreshToken
 
@@ -187,7 +192,7 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
   if (isRefreshing) {
     return new Promise<string>((resolve, reject) => {
       refreshQueue.push({ resolve, reject })
-    }).then((token) => replayWithToken(config, token))
+    })
   }
 
   isRefreshing = true
@@ -195,15 +200,15 @@ function handleTokenExpired(config: AxiosRequestConfig): Promise<unknown> {
     .post<{ access: string; refresh: string }>('/accounts/refresh/', { refresh: refreshToken })
     .then((res) => {
       const payload = res as unknown as { access: string; refresh: string }
+      if (userStore.refreshToken !== refreshToken) throw new Error('会话已变更')
       userStore.setToken(payload.access, payload.refresh)
       flushRefreshQueue(payload.access, null)
-      // 重放原请求（标记 _retried，防止重放后再次 401 时无限刷新）
-      return replayWithToken(config, payload.access)
+      return payload.access
     })
     .catch((e) => {
       flushRefreshQueue(null, e)
       // 不传 msg：拦截器已提示过 refresh 失败原因，避免双 toast
-      forceLogout()
+      if (userStore.refreshToken === refreshToken) forceLogout()
       return Promise.reject(e)
     })
 }

@@ -16,6 +16,7 @@ import (
 
 // AuthHandler 认证相关 HTTP 处理器。
 type AuthHandler struct {
+	audit   *service.AuditService
 	authSvc *service.AuthService
 	userSvc *service.UserService
 	menuSvc *service.MenuService
@@ -27,11 +28,11 @@ type AuthHandler struct {
 }
 
 func NewAuthHandler(authSvc *service.AuthService, userSvc *service.UserService, menuSvc *service.MenuService,
-	captchaMgr *captcha.Manager, siteInfo *service.SiteInfoService, logger *slog.Logger) *AuthHandler {
+	captchaMgr *captcha.Manager, siteInfo *service.SiteInfoService, audit *service.AuditService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		authSvc: authSvc, userSvc: userSvc, menuSvc: menuSvc,
 		captcha: captchaMgr, siteInfo: siteInfo,
-		logger: logger,
+		audit: audit, logger: logger,
 	}
 }
 
@@ -223,11 +224,17 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		HomePage: in.HomePage,
 	}
 
+	old, err := h.userSvc.GetByID(uid)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	user, err := h.userSvc.Update(uid, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "update", "User", uid, user.Username, toUserDTOSafe(old), model.ToUserDTO(user))
 	response.OK(c, model.ToUserDTO(user))
 }
 

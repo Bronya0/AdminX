@@ -17,6 +17,7 @@ import (
 
 // CommonHandler 通用端点（dashboard/health/site-info/monitor）。
 type CommonHandler struct {
+	audit            *service.AuditService
 	db               *gorm.DB
 	monitor          *service.MonitorService
 	siteInfo         *service.SiteInfoService
@@ -29,11 +30,11 @@ func NewCommonHandler(
 	monitor *service.MonitorService,
 	siteInfo *service.SiteInfoService,
 	systemComponents *service.SystemComponentService,
-	logger *slog.Logger,
+	audit *service.AuditService, logger *slog.Logger,
 ) *CommonHandler {
 	return &CommonHandler{
 		db: db, monitor: monitor, siteInfo: siteInfo,
-		systemComponents: systemComponents, logger: logger,
+		systemComponents: systemComponents, audit: audit, logger: logger,
 	}
 }
 
@@ -142,6 +143,7 @@ func (h *CommonHandler) ResourceHistory(c *gin.Context) {
 func (h *CommonHandler) SystemComponents(c *gin.Context) {
 	response.OK(c, h.systemComponents.Status(c.Request.Context()))
 }
+
 // NetStat GET /monitor/netstat/
 func (h *CommonHandler) NetStat(c *gin.Context) {
 	stat := h.monitor.GetNetStat()
@@ -166,10 +168,16 @@ func (h *CommonHandler) UpdateSiteInfo(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	old, err := h.siteInfo.Get(c.Request.Context())
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	info, err := h.siteInfo.Update(c.Request.Context(), in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "update", "SiteInfo", "site", "站点信息", old, info)
 	response.OK(c, info)
 }

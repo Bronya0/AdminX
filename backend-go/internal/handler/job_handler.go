@@ -14,13 +14,14 @@ import (
 
 // JobHandler 定时任务 HTTP 处理器。
 type JobHandler struct {
+	audit  *service.AuditService
 	svc    *service.JobService
 	repo   *repository.JobRepo
 	logger *slog.Logger
 }
 
-func NewJobHandler(svc *service.JobService, repo *repository.JobRepo, logger *slog.Logger) *JobHandler {
-	return &JobHandler{svc: svc, repo: repo, logger: logger}
+func NewJobHandler(svc *service.JobService, repo *repository.JobRepo, audit *service.AuditService, logger *slog.Logger) *JobHandler {
+	return &JobHandler{svc: svc, repo: repo, audit: audit, logger: logger}
 }
 
 func (h *JobHandler) List(c *gin.Context) {
@@ -55,6 +56,7 @@ func (h *JobHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "create", "Job", job.ID, job.Name, nil, job)
 	response.Created(c, job)
 }
 
@@ -64,29 +66,47 @@ func (h *JobHandler) Update(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	old, err := h.svc.GetByID(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	job, err := h.svc.Update(c.Param("id"), in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "update", "Job", job.ID, job.Name, old, job)
 	response.OK(c, job)
 }
 
 func (h *JobHandler) Delete(c *gin.Context) {
+	old, err := h.svc.GetByID(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	if err := h.svc.Delete(c.Param("id")); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "delete", "Job", c.Param("id"), old.Name, old, nil)
 	response.NoContent(c)
 }
 
 // RunOnce POST /jobs/:id/run_once/ — 异步执行，立即返回 logID（调用方轮询 logs 拿结果）。
 func (h *JobHandler) RunOnce(c *gin.Context) {
+	job, err := h.svc.GetByID(c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	logID, err := h.svc.RunOnce(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditOperation(c, h.audit, "execute", "Job", job.ID, job.Name, "手动执行任务", job, gin.H{"log_id": logID, "status": "submitted"})
 	response.OK(c, gin.H{"log_id": logID})
 }
 
@@ -106,6 +126,7 @@ func (h *JobHandler) Status(c *gin.Context) {
 // Reload POST /jobs/reload/ — 手动触发调度器重载。
 func (h *JobHandler) Reload(c *gin.Context) {
 	h.svc.Reload()
+	auditOperation(c, h.audit, "execute", "Job", "scheduler", "调度器", "提交重载", nil, gin.H{"status": "submitted"})
 	alive, err := h.repo.IsSchedulerAlive()
 	if err != nil {
 		response.Error(c, h.logger, err)

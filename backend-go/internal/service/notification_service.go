@@ -44,10 +44,10 @@ func NewNotificationService(db *gorm.DB, repo *repository.NotificationRepo, logg
 
 // CreateInput 创建通知入参。
 type NotificationCreateInput struct {
-	Title      string `json:"title" binding:"required"`
-	Content    string `json:"content"`
-	Type       string `json:"notification_type"` // info/success/warning/error
-	UserID     string `json:"user_id"`           // 空 = 广播
+	Title   string `json:"title" binding:"required"`
+	Content string `json:"content"`
+	Type    string `json:"notification_type"` // info/success/warning/error
+	UserID  string `json:"user_id"`           // 空 = 广播
 }
 
 // Create 创建通知 + 异步触发 webhook 外发。
@@ -381,3 +381,11 @@ func matchEvent(eventsCSV, eventType string) bool {
 	return false
 }
 
+func (s *NotificationService) GetWebhook(id string) (*model.WebhookConfigDTO, error) {
+	var cfg model.WebhookConfig
+	if err := s.db.First(&cfg, "id = ?", id).Error; err != nil {
+		return nil, apperr.ErrNotFound
+	}
+	dto := model.ToWebhookConfigDTO(&cfg)
+	return &dto, nil
+}

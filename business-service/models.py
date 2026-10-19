@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 class Post(BaseModel):
     id: int | None = None
-    owner: str | None = None  # 创建者 username（来自 JWT introspect；数据按用户隔离）
+    owner: str | None = None  # 创建者 user_id（来自 JWT introspect；数据按用户隔离）
     title: str
     content: str
     status: str = "draft"

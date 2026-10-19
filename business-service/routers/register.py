@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 import httpx
 
-from config import PLATFORM_API_BASE, PLATFORM_ADMIN_USER, PLATFORM_ADMIN_PASS, SERVICE_URL, COMPONENT_SECRET
+from config import PLATFORM_API_BASE, PLATFORM_ADMIN_USER, PLATFORM_ADMIN_PASS, PLATFORM_ADMIN_TOKEN, SERVICE_URL, COMPONENT_SECRET
 
 logger = logging.getLogger("business.register")
 router = APIRouter(prefix="/api/v1", tags=["注册"])
@@ -31,6 +31,10 @@ MENUS = [
 
 
 async def _get_admin_token() -> str:
+    if PLATFORM_ADMIN_TOKEN:
+        return PLATFORM_ADMIN_TOKEN
+    if not PLATFORM_ADMIN_PASS:
+        raise RuntimeError("请配置 PLATFORM_ADMIN_TOKEN 或 PLATFORM_ADMIN_PASS")
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             f"{PLATFORM_API_BASE}/accounts/login/",
@@ -48,7 +52,7 @@ def _build_menu_data(menu: dict) -> dict:
         "code": menu["code"],
         "name": menu["name"],
         "icon": menu.get("icon", "LinkOutlined"),
-        "path": SERVICE_URL + "/",
+        "path": SERVICE_URL.rstrip("/") + "/",
         "component": "",
         "permission_code": "",
         "menu_type": menu["menu_type"],
@@ -62,6 +66,7 @@ def _build_menu_data(menu: dict) -> dict:
             "POST:/api/v1/posts/",
             "GET:/api/v1/posts/*",
             "PUT:/api/v1/posts/*",
+            "PATCH:/api/v1/posts/*",
             "DELETE:/api/v1/posts/*",
         ],
     }
@@ -97,7 +102,7 @@ async def register_menu() -> dict:
             body = resp.json()
             if resp.status_code >= 400 or body.get("code", 200) >= 400:
                 logger.error("菜单注册失败 [%s]: %s", menu["code"], body)
-                return {"code": resp.status_code, "msg": f"菜单注册失败 [{menu['code']}]: {body.get('msg', str(body))}"}
+                return {"code": 502, "msg": f"菜单注册失败 [{menu['code']}]: {body.get('msg', str(body))}"}
             logger.info("菜单注册成功: %s (%s)", menu["name"], menu["menu_type"])
             results.append(body.get("data"))
 
@@ -129,8 +134,9 @@ async def unregister_menu() -> dict:
                 f"{PLATFORM_API_BASE}/menu/{existing['id']}/",
                 headers=headers,
             )
-            if del_resp.status_code >= 400:
+            if del_resp.status_code >= 400 or del_resp.json().get("code", 200) >= 400:
                 logger.warning("删除菜单失败 [%s]: %s", menu["code"], del_resp.text)
+                return {"code": 502, "msg": "平台拒绝删除菜单"}
             else:
                 deleted += 1
                 logger.info("菜单已删除: %s", menu["code"])

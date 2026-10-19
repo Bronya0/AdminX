@@ -6,21 +6,32 @@
     <iframe
       v-if="iframeUrl"
       ref="iframeRef"
+      :key="iframeUrl + attempt"
+      title="业务页面"
       :src="iframeUrl"
       class="iframe-full"
       frameborder="0"
       allow="fullscreen"
     ></iframe>
-    <a-empty v-else :description="emptyReason" style="margin-top: 120px;" />
+    <div v-if="iframeUrl && waiting" class="bridge-overlay"><a-spin tip="正在连接业务服务…" /></div>
+    <div v-if="iframeUrl && failed" class="bridge-overlay">
+      <a-result status="warning" title="业务服务未就绪" sub-title="请检查业务服务和平台接入配置后重试。">
+        <template #extra><a-button type="primary" @click="retry">重新加载</a-button></template>
+      </a-result>
+    </div>
+    <a-empty v-else-if="!iframeUrl" :description="emptyReason" style="margin-top: 120px;" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
+import { Modal } from 'ant-design-vue'
+import { useBusinessBridge } from '@/composables/useBusinessBridge'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 
 const externalUrl = computed(() => {
@@ -54,7 +65,7 @@ const safeUrl = computed(() => (isSafeUrl(externalUrl.value) ? externalUrl.value
 // 防止通过构造 /iframe?url=https://evil.com 的链接，把登录者的 token 注入任意站点。
 const normalizeUrl = (url: string): string => {
   try {
-    const u = new URL(url)
+    const u = new URL(url, window.location.origin)
     // 比较协议 + host + path，忽略末尾斜杠与查询参数差异
     return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`
   } catch {
@@ -77,31 +88,42 @@ const emptyReason = computed(() => {
 
 const iframeUrl = computed(() => (safeUrl.value && isWhitelistedUrl(safeUrl.value) ? safeUrl.value : ''))
 
-// ── token 下发：postMessage 单次下发，token 不再进 URL（hash/query 都会留痕）──
-// 业务页面加载后发送 { type: 'adminx:request-token' }，本页校验来源后回传 token。
+// 通信能力与新标签页共用；业务路由只更新外壳 URL，不重载 iframe。
 const iframeRef = ref<HTMLIFrameElement | null>(null)
-
-const onMessage = (event: MessageEvent) => {
-  if (!safeUrl.value || !iframeUrl.value) return
-  let expectedOrigin = ''
-  try {
-    expectedOrigin = new URL(safeUrl.value).origin
-  } catch {
-    return
-  }
-  if (event.origin !== expectedOrigin) return
-  const source = event.source
-  if (!source || source !== iframeRef.value?.contentWindow) return
-  const data = event.data as { type?: string } | null
-  if (data?.type === 'adminx:request-token') {
-    source.postMessage(
-      { type: 'adminx:token', token: userStore.token || '' },
-      { targetOrigin: expectedOrigin }
-    )
-  }
+const waiting = ref(true)
+const failed = ref(false)
+const dirty = ref(false)
+const attempt = ref(0)
+let timer: ReturnType<typeof setTimeout> | undefined
+function startWaiting() {
+  clearTimeout(timer)
+  waiting.value = true
+  failed.value = false
+  dirty.value = false
+  if (iframeUrl.value) timer = setTimeout(() => { waiting.value = false; failed.value = true }, 45000)
 }
-
-window.addEventListener('message', onMessage)
+const retry = () => { attempt.value++; startWaiting() }
+watch(iframeUrl, startWaiting, { immediate: true })
+useBusinessBridge(() => {
+  const win = iframeRef.value?.contentWindow
+  return win && iframeUrl.value ? [{ win, origin: new URL(iframeUrl.value, window.location.origin).origin }] : []
+}, {
+  ready: () => { clearTimeout(timer); waiting.value = false; failed.value = false },
+  dirty: value => { dirty.value = value },
+  initialRoute: () => typeof route.query.businessRoute === 'string' ? route.query.businessRoute : '',
+  route: hash => {
+    if (hash !== (route.query.businessRoute || '')) {
+      void router.replace({ path: route.path, query: { ...route.query, businessRoute: hash || undefined } })
+    }
+  },
+})
+const canLeave = () => !userStore.token || !dirty.value || new Promise<boolean>(resolve => {
+  Modal.confirm({ title: '还有未保存的内容，确定离开？', okText: '确定', cancelText: '取消', onOk: () => resolve(true), onCancel: () => resolve(false) })
+})
+onBeforeRouteLeave(canLeave)
+onBeforeRouteUpdate((to, from) => to.query.url !== from.query.url ? canLeave() : true)
+const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty.value) { event.preventDefault(); event.returnValue = '' } }
+window.addEventListener('beforeunload', beforeUnload)
 
 // prevTitle 必须在客户端环境(onMounted)中读取，避免 setup 顶层访问 document（SSR/测试会报错）
 const prevTitle = ref('')
@@ -115,12 +137,17 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.title = prevTitle.value
-  window.removeEventListener('message', onMessage)
+  clearTimeout(timer)
+  window.removeEventListener('beforeunload', beforeUnload)
 })
 </script>
 
 <style scoped>
+.bridge-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--admin-bg-header, #fff); z-index: 1; }
+
 .iframe-container {
+  position: relative;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   height: 100%;

@@ -118,13 +118,13 @@ func (s *ClusterService) CreateNodeInput(in NodeCreateInput) (*model.ClusterNode
 
 // NodeUpdateInput 节点更新入参（白名单字段，杜绝 map 直通 Updates 的任意列写入）。
 type NodeUpdateInput struct {
-	Name     string `json:"name"`
-	Host     string `json:"host"`
-	Port     *int   `json:"port"`
-	Role     string `json:"role"`
-	Status   string `json:"status"`
+	Name     string  `json:"name"`
+	Host     string  `json:"host"`
+	Port     *int    `json:"port"`
+	Role     string  `json:"role"`
+	Status   string  `json:"status"`
 	Version  *string `json:"version"`
-	IsActive *bool  `json:"is_active"`
+	IsActive *bool   `json:"is_active"`
 }
 
 func (s *ClusterService) UpdateNode(id string, in NodeUpdateInput) (*model.ClusterNode, error) {
@@ -347,4 +347,12 @@ func mustJSONMap(m map[string]interface{}) datatypesJSON {
 	}
 	b, _ := jsonMarshal(m)
 	return datatypesJSON(b)
+}
+
+func (s *ClusterService) GetComponentByLabel(label string) (*model.ServiceComponent, error) {
+	component, err := s.repo.FindComponentByLabel(label)
+	if err != nil {
+		return nil, err
+	}
+	return component, nil
 }

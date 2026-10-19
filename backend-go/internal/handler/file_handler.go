@@ -17,12 +17,13 @@ import (
 
 // FileHandler 文件中心 HTTP 处理器。
 type FileHandler struct {
+	audit  *service.AuditService
 	svc    *service.FileService
 	logger *slog.Logger
 }
 
-func NewFileHandler(svc *service.FileService, logger *slog.Logger) *FileHandler {
-	return &FileHandler{svc: svc, logger: logger}
+func NewFileHandler(svc *service.FileService, audit *service.AuditService, logger *slog.Logger) *FileHandler {
+	return &FileHandler{svc: svc, audit: audit, logger: logger}
 }
 
 // Upload POST /files/upload/ (multipart 字段名: file)
@@ -51,6 +52,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "create", "File", record.ID, record.OriginalName, nil, record)
 	response.Created(c, record)
 }
 
@@ -107,9 +109,15 @@ func (h *FileHandler) Delete(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	uid, _ := userID.(string)
 
+	old, err := h.svc.FindForUser(c.Param("id"), uid, isSuperuser(c))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	if err := h.svc.Delete(c.Param("id"), uid, isSuperuser(c)); err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditRecordDiff(c, h.audit, "delete", "File", old.ID, old.OriginalName, old, nil)
 	response.NoContent(c)
 }

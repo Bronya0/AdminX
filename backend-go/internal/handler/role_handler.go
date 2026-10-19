@@ -67,7 +67,7 @@ func (h *RoleHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecord(c, h.audit, "create", "Role", role.ID, role.Name)
+	auditRecordDiff(c, h.audit, "create", "Role", role.ID, role.Name, nil, role)
 	response.Created(c, role)
 }
 
@@ -80,7 +80,11 @@ func (h *RoleHandler) Update(c *gin.Context) {
 	}
 	id := c.Param("id")
 	// 变更前快照（审计 old/new/diff；失败不影响主流程）
-	oldRole, _ := h.svc.GetByID(id)
+	oldRole, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	role, err := h.svc.Update(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
@@ -111,7 +115,11 @@ func (h *RoleHandler) AccessibleMenus(c *gin.Context) {
 func (h *RoleHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	// 删除前快照（审计留痕）
-	oldRole, _ := h.svc.GetByID(id)
+	oldRole, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	repr := id
 	if oldRole != nil {
 		repr = oldRole.Name

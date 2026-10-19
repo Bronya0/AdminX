@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"gorm.io/gorm"
 	"log/slog"
 	"strconv"
 
@@ -71,7 +73,7 @@ func (h *MenuHandler) Create(c *gin.Context) {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecord(c, h.audit, "create", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name)
+	auditRecordDiff(c, h.audit, "create", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name, nil, menu)
 	response.Created(c, menu)
 }
 
@@ -92,12 +94,21 @@ func (h *MenuHandler) Register(c *gin.Context) {
 		response.BindingError(c, err)
 		return
 	}
+	old, err := h.svc.GetByCode(in.Code)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		response.Error(c, h.logger, err)
+		return
+	}
 	menu, err := h.svc.RegisterOrUpdate(in)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
-	auditRecord(c, h.audit, "update", "Menu", strconv.FormatInt(menu.ID, 10), menu.Name)
+	action := "create"
+	if old != nil {
+		action = "update"
+	}
+	auditOperation(c, h.audit, action, "Menu", strconv.FormatInt(menu.ID, 10), menu.Name, "注册菜单", old, menu)
 	response.OK(c, menu)
 }
 
@@ -114,7 +125,11 @@ func (h *MenuHandler) Update(c *gin.Context) {
 		return
 	}
 	// 变更前快照（审计 old/new/diff；失败不影响主流程）
-	oldMenu, _ := h.svc.GetByID(id)
+	oldMenu, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	menu, err := h.svc.Update(id, in)
 	if err != nil {
 		response.Error(c, h.logger, err)
@@ -132,7 +147,11 @@ func (h *MenuHandler) Delete(c *gin.Context) {
 		return
 	}
 	// 删除前快照（审计留痕）
-	oldMenu, _ := h.svc.GetByID(id)
+	oldMenu, err := h.svc.GetByID(id)
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	repr := strconv.FormatInt(id, 10)
 	if oldMenu != nil {
 		repr = oldMenu.Name

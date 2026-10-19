@@ -108,7 +108,10 @@ export function menusToTreeData(
     permission_code: menu.permission_code,
     allowed_paths: menu.allowed_paths,
     depth: menu.depth,
-    children: menu.children ? menusToTreeData(menu.children, keyField) : undefined,
+    // 叶子节点必须输出 undefined 而不是 []：
+    // rc-table 的树形模式只判断 children 字段是否存在（空数组是 truthy），
+    // 叶子带 children: [] 会被当成有子节点，渲染出多余的展开图标。
+    children: menu.children && menu.children.length ? menusToTreeData(menu.children, keyField) : undefined,
   }))
 }
 
@@ -192,7 +195,8 @@ export function filterTreeBySearch(
       const match = String(node[titleKey]).toLowerCase().includes(q)
 
       if (match || (filteredChildren && filteredChildren.length > 0)) {
-        return { ...node, children: filteredChildren }
+        // 同上：过滤后没有子节点的行不能留空数组，否则会多出展开图标
+        return { ...node, children: filteredChildren && filteredChildren.length > 0 ? filteredChildren : undefined }
       }
       return null
     })

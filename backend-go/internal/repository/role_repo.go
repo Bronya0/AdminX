@@ -9,6 +9,7 @@ import (
 )
 
 var ErrSystemRoleNotDeletable = errors.New("system role cannot be deleted")
+var ErrInvalidMenuIDs = errors.New("one or more menu IDs do not exist")
 
 // RoleRepo 角色数据访问。
 type RoleRepo struct {
@@ -89,6 +90,14 @@ func (r *RoleRepo) AssignMenus(roleID string, menuIDs []int64) error {
 	if len(menuIDs) > 0 {
 		if err := r.db.Where("id IN ?", menuIDs).Find(&menus).Error; err != nil {
 			return err
+		}
+		// 授权是集合语义：重复 ID 不算错误，但不存在的 ID 不能被静默忽略。
+		uniqueIDs := make(map[int64]struct{}, len(menuIDs))
+		for _, id := range menuIDs {
+			uniqueIDs[id] = struct{}{}
+		}
+		if len(menus) != len(uniqueIDs) {
+			return ErrInvalidMenuIDs
 		}
 	}
 	return r.db.Model(&role).Association("Menus").Replace(menus)

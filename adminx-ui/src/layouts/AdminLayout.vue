@@ -118,6 +118,7 @@ import BreadcrumbNav from '@/components/BreadcrumbNav.vue'
 import SideBar from './SideBar.vue'
 import TopNav from './TopNav.vue'
 import type { SidebarItem } from '@/types'
+import { useBusinessBridge } from '@/composables/useBusinessBridge'
 
 const route = useRoute()
 const router = useRouter()
@@ -293,20 +294,10 @@ const pruneClosedTokenWindows = () => {
   }
 }
 
-const onTokenRequest = (event: MessageEvent) => {
-  const data = event.data as { type?: string } | null
-  if (data?.type !== 'adminx:request-token') return
+useBusinessBridge(() => {
   pruneClosedTokenWindows()
-  const entry = pendingTokenWindows.find((e) => e.win === event.source)
-  if (!entry || entry.origin !== event.origin) return
-  entry.win.postMessage(
-    { type: 'adminx:token', token: userStore.token || '' },
-    { targetOrigin: entry.origin }
-  )
-}
-
-window.addEventListener('message', onTokenRequest)
-onUnmounted(() => window.removeEventListener('message', onTokenRequest))
+  return pendingTokenWindows.map(entry => ({ win: entry.win, origin: entry.origin }))
+})
 
 const openExternal = (item: SidebarItem) => {
   const targetUrl = item.url!

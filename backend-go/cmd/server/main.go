@@ -20,9 +20,9 @@ import (
 	"adminx/internal/database"
 	"adminx/internal/handler"
 	"adminx/internal/jwt"
+	redisclient "adminx/internal/redis"
 	"adminx/internal/repository"
 	"adminx/internal/router"
-	redisclient "adminx/internal/redis"
 	"adminx/internal/scheduler"
 	"adminx/internal/service"
 	"adminx/internal/websocket"
@@ -131,19 +131,19 @@ func main() {
 	if rdb == nil {
 		log.Info("未配置 Redis：验证码答案改用数据库表 captcha_codes 存储")
 	}
-	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, capMgr, siteInfoSvc, log)
+	authH := handler.NewAuthHandler(authSvc, userSvc, menuSvc, capMgr, siteInfoSvc, auditSvc, log)
 	userH := handler.NewUserHandler(userSvc, auditSvc, log)
 	roleH := handler.NewRoleHandler(roleSvc, auditSvc, log)
 	menuH := handler.NewMenuHandler(menuSvc, auditSvc, log)
-	cfgH := handler.NewConfigHandler(configSvc, log)
+	cfgH := handler.NewConfigHandler(configSvc, auditSvc, log)
 	auditH := handler.NewAuditHandler(auditSvc, log)
-	jobH := handler.NewJobHandler(jobSvc, jobRepo, log)
-	notifH := handler.NewNotificationHandler(notifSvc, log)
-	clsH := handler.NewClusterHandler(clusterSvc, log)
-	fileH := handler.NewFileHandler(fileSvc, log)
-	monH := handler.NewCommonHandler(db, monitorSvc, siteInfoSvc, systemComponentSvc, log)
-	themeH := handler.NewThemeHandler(themeSvc, log)
-	policyH := handler.NewPolicyHandler(policySvc, log)
+	jobH := handler.NewJobHandler(jobSvc, jobRepo, auditSvc, log)
+	notifH := handler.NewNotificationHandler(notifSvc, auditSvc, log)
+	clsH := handler.NewClusterHandler(clusterSvc, auditSvc, log)
+	fileH := handler.NewFileHandler(fileSvc, auditSvc, log)
+	monH := handler.NewCommonHandler(db, monitorSvc, siteInfoSvc, systemComponentSvc, auditSvc, log)
+	themeH := handler.NewThemeHandler(themeSvc, auditSvc, log)
+	policyH := handler.NewPolicyHandler(policySvc, auditSvc, log)
 	capH := handler.NewCaptchaHandler(capMgr, log)
 
 	// 10. WebSocket Hub
@@ -181,8 +181,7 @@ func main() {
 	// 12. 路由
 	r := router.New(&router.Deps{
 		Config: cfg, DB: db, Redis: rdb,
-		AuditSvc: auditSvc,
-		AuthH:    authH, UserH: userH, RoleH: roleH, MenuH: menuH,
+		AuthH: authH, UserH: userH, RoleH: roleH, MenuH: menuH,
 		CfgH: cfgH, AuditH: auditH, JobH: jobH, NotifH: notifH,
 		ClsH: clsH, FileH: fileH, MonH: monH, PolicyH: policyH,
 		CapH: capH, WSH: wsH, ThemeH: themeH,

@@ -12,12 +12,13 @@ import (
 
 // ThemeHandler 全局主题设置 HTTP 处理器。
 type ThemeHandler struct {
+	audit  *service.AuditService
 	svc    *service.ThemeService
 	logger *slog.Logger
 }
 
-func NewThemeHandler(svc *service.ThemeService, logger *slog.Logger) *ThemeHandler {
-	return &ThemeHandler{svc: svc, logger: logger}
+func NewThemeHandler(svc *service.ThemeService, audit *service.AuditService, logger *slog.Logger) *ThemeHandler {
+	return &ThemeHandler{svc: svc, audit: audit, logger: logger}
 }
 
 // Get GET /common/theme/ — 全局主题（公共端点：登录页也要先应用主题）。
@@ -37,11 +38,17 @@ func (h *ThemeHandler) Update(c *gin.Context) {
 		response.Fail(c, 400, "读取请求体失败")
 		return
 	}
+	old, err := h.svc.Get(c.Request.Context())
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	cfg, err := h.svc.Update(c.Request.Context(), raw)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditOperation(c, h.audit, "update", "Theme", "theme.settings", "全局主题", "保存主题", old, cfg)
 	response.OK(c, cfg)
 }
 
@@ -62,10 +69,16 @@ func (h *ThemeHandler) Import(c *gin.Context) {
 		response.Fail(c, 400, "读取请求体失败")
 		return
 	}
+	old, err := h.svc.Get(c.Request.Context())
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
 	cfg, err := h.svc.ImportFile(c.Request.Context(), raw)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
+	auditOperation(c, h.audit, "update", "Theme", "theme.settings", "全局主题", "导入主题", old, cfg)
 	response.OK(c, cfg)
 }

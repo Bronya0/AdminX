@@ -45,8 +45,11 @@ tmp_dir = "../.tmp/air"
   [build.windows]
     args_bin = []
     bin = "..\\.tmp\\air\\server.exe"
-    cmd = "go build -o ../.tmp/air/server.exe ./cmd/server"
-    entrypoint = ["..\\.tmp\\air\\server.exe"]
+    cmd = "go build -ldflags=\"-s -w\" -o ../.tmp/air/server.exe ./cmd/server"
+    # air 在 Windows 上经 powershell -Command 启动入口程序，工作目录不是 backend-go，
+    # viper 读不到 configs/config.yaml（报“必须配置安全的 jwt.secret”），
+    # 这里显式 cd 回 backend-go 再启动。
+    entrypoint = ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Set-Location ..\\backend-go; ..\\.tmp\\air\\server.exe"]
     full_bin = ""
     post_cmd = []
     pre_cmd = []

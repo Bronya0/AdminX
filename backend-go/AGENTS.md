@@ -81,6 +81,7 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - superuser 全放行
 - 普通用户：查 user→role→menu→allowed_paths，glob 匹配（`path.Match`）
 - 规则格式：`METHOD:/api/path/*` 或 `/api/path`
+- **规则的解析与校验只有 `internal/rbacrule` 一处**：middleware 用它匹配、`MenuService` 用它校验写入（非法规则直接 400）。各写一份的下场是「接口校验通过、运行时永不匹配」——配了权限仍然 403 且无任何报错
 - **菜单 `path` 为空时其 `allowed_paths` 不参与授权**（查权限前先按 `path != ''` 收菜单集合）：想用菜单控制接口权限就必须给它一个路径
 - 菜单可见性同一条“全放行”约定：`MenuService.MenusByUser(uid, isSuperuser)` 对超管返回全部启用菜单（`/accounts/users/me/`、`/menu/user_tree/` 均传入 `isSuperuser(c)`）
 
@@ -147,7 +148,7 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - **最后一个启用中的超管不能被降级/停用/删除**：`UserRepo.SaveAndMaybeRevoke` / `SoftDelete` 传 `guardSuperuser`，校验写在写之后（`ensureSuperuserRemains`），并发下两个超管互相降级也不会双双放行；一旦清零，后台就没人能管，只能改库
 - **超管账号的角色只读**：权限来自 `is_superuser`，角色仅用于展示，`UserService.Update` 静默忽略超管的 `roles` 变更（报错会让前端改个描述也保存不了）；`init-data` 给内置超管补绑 `super_admin` 只为列表展示一致
 - **LIKE 搜索词必须过 `repository.EscapeLike`，并在 SQL 里附 `ESCAPE '\\'`**：PostgreSQL 的 LIKE 默认把反斜杠当转义符，SQLite 没有，漏了 ESCAPE 会在本地把 `super_admin` 这类带下划线的搜索词变成 0 条（线上 PG 正常，很难复现）
-- **写端点必须挂审计**：新增/改动的写端点（POST/PUT/PATCH/DELETE）在 router 用 `audited(action, model)` 声明，成功（code 200/201/204）时由 `middleware.Audited` 统一落库；用户/角色/菜单的写操作由 handler 自带 old/new 快照记录，**不要**再挂（一次操作会写两条）。动作词表见 `middleware.Audit*`，改词表要同步前端审计页的操作类型下拉
+- **写端点必须显式审计**：各 handler 在业务成功后调用 `auditRecordDiff` / `auditOperation`，新增记录新快照、修改记录前后快照、删除保留旧快照；执行类操作写明具体动作和提交/执行结果。使用安全 DTO，敏感数据须脱敏，禁止用请求/响应拦截器推测审计内容。动作 create/update/delete/execute 与前端下拉一致。
 
 ## 已知技术债
 
