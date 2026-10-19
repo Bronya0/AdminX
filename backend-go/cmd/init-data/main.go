@@ -289,6 +289,12 @@ type menuSeed struct {
 	SortOrder      int
 	ParentCode     string
 	AllowedPaths   []string // RBAC glob 规则列表，空表示不配置
+
+	// IsActive / IsVisible 是运维状态，不是菜单定义：nil = 种子不表态，保留库里的现值。
+	// 只有显式声明才覆盖。反之（种子一律写 true）会让“应急停用某个页面”在下次
+	// init-data 后静默复活，页面上还看不出来发生过什么。新建菜单时未声明即取 true。
+	IsActive  *bool
+	IsVisible *bool
 }
 
 // defaultMenuSeeds 内置菜单骨架。
@@ -322,9 +328,11 @@ func defaultMenuSeeds() []menuSeed {
 
 // ensureMenu 按 code 建立或更新菜单骨架。
 //
-// 对骨架里的 code，种子是权威来源（对齐 Django 版 update_or_create 语义）：覆盖名称/路径/
-// 组件/权限码/图标/排序/RBAC 规则，因此重跑 init-data 能修复历史库里过时的菜单定义；
+// 对骨架里的 code，种子是**定义**的权威来源（对齐 Django 版 update_or_create 语义）：覆盖
+// 名称/路径/组件/权限码/图标/排序/RBAC 规则，因此重跑 init-data 能修复历史库里过时的菜单定义；
 // 管理员自建的菜单（code 不在骨架里）完全不受影响。
+//
+// 启停（is_active）与可见性（is_visible）不属于定义，而是运维状态：种子未显式声明就保留现值。
 func ensureMenu(db *gorm.DB, s menuSeed) (*model.Menu, error) {
 	var m model.Menu
 	err := db.Where("code = ?", s.Code).First(&m).Error
@@ -346,10 +354,20 @@ func ensureMenu(db *gorm.DB, s menuSeed) (*model.Menu, error) {
 	m.MenuType = menuType
 	m.SortOrder = s.SortOrder
 	m.AllowedPaths = allowedPathsJSON(s.AllowedPaths)
-	m.IsActive = true
-	m.IsVisible = true
 
-	if err == gorm.ErrRecordNotFound {
+	fresh := err == gorm.ErrRecordNotFound
+	if fresh {
+		// 新建时必须给一个确定值：种子未声明就按启用可见落库，否则默认 false 建出来就是隐藏的
+		m.IsActive, m.IsVisible = true, true
+	}
+	if s.IsActive != nil {
+		m.IsActive = *s.IsActive
+	}
+	if s.IsVisible != nil {
+		m.IsVisible = *s.IsVisible
+	}
+
+	if fresh {
 		m.Depth = 1 // 层级统一在 createDefaultMenus 第二遍回填
 		if err := db.Create(&m).Error; err != nil {
 			return nil, err

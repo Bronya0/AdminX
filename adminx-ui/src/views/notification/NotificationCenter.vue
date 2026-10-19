@@ -5,7 +5,7 @@
         <span><BellOutlined /> 通知中心</span>
       </template>
       <template #extra>
-        <a-button size="small" style="margin-right: 8px;" @click="whModalVisible = true">
+        <a-button size="small" style="margin-right: 8px;" @click="openWhModal">
           <ApiOutlined /> Webhook 配置
         </a-button>
         <a-button size="small" @click="handleMarkAllRead" v-if="unreadCount > 0">
@@ -298,6 +298,14 @@ const loadWh = async () => {
   }
 }
 
+// 打开弹窗即拉一次列表：只在 onMounted 加载会让首次打开永远是空表，
+// 用户必须先点一次“刷新”才能看到已有的 webhook。
+const openWhModal = () => {
+  whModalVisible.value = true
+  whFormVisible.value = false
+  loadWh()
+}
+
 const closeWhModal = () => {
   whFormVisible.value = false
 }
@@ -332,8 +340,13 @@ const whDelete = async (record: WebhookConfig) => {
 
 const whTest = async (record: WebhookConfig) => {
   try {
-    await webhookApi.test(record.id)
-    message.success('测试消息已发送')
+    const res = await webhookApi.test(record.id)
+    // 后端返回的是真实投递结果：对方 4xx/5xx、URL 不通都算失败，不能一律提示成功
+    if (res.ok) {
+      message.success(`测试消息已发送（HTTP ${res.status_code}）`)
+    } else {
+      message.error(`测试发送失败：${res.message || '未知原因'}`)
+    }
   } catch { /* interceptor handles error */ }
 }
 

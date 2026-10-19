@@ -3,26 +3,37 @@ import type { Menu, SidebarItem } from '@/types'
 /**
  * 将扁平菜单列表构建为树形结构。
  *
- * 由于 Menu 模型的 `path` 字段覆盖了 treebeard 内部物化路径，
- * get_parent() 不可用，parent 字段始终为 None。
- *
- * 改用路由 path 前缀匹配推断层级关系。
+ * 后端 `/menu/user_tree/` 与 `/accounts/users/me/` 下发的是扁平列表，父子关系有两条线索：
+ *   ① `parent_id`：真实字段，菜单保存时由后端写入，取决于层级而不是取决于路径写法；
+ *   ② `depth` + 路由 path 前缀：老数据 parent_id 为空时的兜底推断。
+ * 一律优先 ①，拿不到父节点时才退回 ②。
  */
 
-/** 用路由 path 前缀匹配找父节点：/system/user -> 父级可能是 /system */
+/** 归一化菜单 path：去掉 scheme://host，只留路径部分。 */
+function _normPath(p: string): string {
+  return (p || '').replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^/]+/, '')
+}
+
+/**
+ * 用路由 path 前缀匹配找父节点：/system/user -> 父级可能是 /system。
+ *
+ * 比较前必须归一化：外链与 iframe 菜单的 path 是完整 URL（`https://host/a/b`），
+ * 直接按 `/` 切分会拼出 `/https:` 这种永远匹配不上的前缀，
+ * 结果这类菜单连同它的子树会被当成顶级挂在树根。
+ */
 function _findParentByPathPrefix(
   menu: Menu,
   allMenus: Menu[],
   nodeMap: Map<number, Menu & { children: Menu[] }>,
 ): (Menu & { children: Menu[] }) | null {
-  const p = menu.path
+  const p = _normPath(menu.path)
   if (!p || p === '/') return null
 
   const parts = p.split('/').filter(Boolean)
   for (let i = parts.length - 1; i >= 1; i--) {
     const prefix = '/' + parts.slice(0, i).join('/')
     for (const m of allMenus) {
-      if (m.path === prefix && m.depth === menu.depth - 1 && nodeMap.has(m.id)) {
+      if (_normPath(m.path) === prefix && m.depth === menu.depth - 1 && nodeMap.has(m.id)) {
         return nodeMap.get(m.id)!
       }
     }
@@ -31,8 +42,25 @@ function _findParentByPathPrefix(
 }
 
 /**
- * 按 depth 排序构建树。
- * 先排 depth=1（成为根），depth>1 时通过路由 path 前缀找父节点。
+ * 找父节点：parent_id 优先（真实关系），path 前缀兜底（老数据 parent_id 为空）。
+ * 父节点不在本次下发的菜单里（例如角色只授权了子菜单、或父菜单已停用）时返回 null，
+ * 该菜单按顶级渲染，不会整块消失。
+ */
+function _findParent(
+  menu: Menu,
+  allMenus: Menu[],
+  nodeMap: Map<number, Menu & { children: Menu[] }>,
+): (Menu & { children: Menu[] }) | null {
+  if (menu.parent_id != null) {
+    const byId = nodeMap.get(menu.parent_id)
+    if (byId) return byId
+  }
+  if (menu.depth <= 1) return null
+  return _findParentByPathPrefix(menu, allMenus, nodeMap)
+}
+
+/**
+ * 按 depth 排序构建树（父节点一定先于子节点，才能一次遍历就挂上）。
  */
 export function flatMenusToTreeByDepth(menus: Menu[]): Menu[] {
   if (!menus.length) return []
@@ -50,15 +78,11 @@ export function flatMenusToTreeByDepth(menus: Menu[]): Menu[] {
     const node: Menu & { children: Menu[] } = { ...menu, children: [] }
     nodeMap.set(menu.id, node)
 
-    if (menu.depth <= 1) {
-      roots.push(node)
+    const parent = _findParent(menu, sorted, nodeMap)
+    if (parent) {
+      parent.children.push(node)
     } else {
-      const parent = _findParentByPathPrefix(menu, sorted, nodeMap)
-      if (parent) {
-        parent.children.push(node)
-      } else {
-        roots.push(node)
-      }
+      roots.push(node)
     }
   }
 

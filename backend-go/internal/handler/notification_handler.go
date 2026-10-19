@@ -123,6 +123,19 @@ func (h *NotificationHandler) DeleteWebhook(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// TestWebhook POST /notification/webhooks/:id/test/
+//
+// 返回真实投递结果（ok / 状态码 / 失败原因），由前端如实提示：
+// 这个动作的价值就在于把“对方到底收没收到”暴露出来，不能一律回 200 报成功。
+func (h *NotificationHandler) TestWebhook(c *gin.Context) {
+	result, err := h.svc.TestWebhook(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, h.logger, err)
+		return
+	}
+	response.OK(c, result)
+}
+
 func (h *NotificationHandler) WebhookLogs(c *gin.Context) {
 	p := pagination.Parse(c)
 	logs, count, err := h.svc.ListWebhookLogs(p.Offset(), p.Size, c.Query("webhook_id"))

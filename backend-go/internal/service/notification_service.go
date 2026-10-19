@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -234,6 +236,36 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 		"created_at": n.CreatedAt.Format(time.RFC3339),
 	}
 	body, _ := json.Marshal(payload)
+	notificationID := n.ID
+	s.deliver(ctx, cfg, body, &notificationID)
+}
+
+// WebhookDeliveryResult 单次投递结果。
+//
+// 测试发送要把“对方到底收没收到”如实告诉操作人，所以投递结果用返回值表达，
+// 而不是只记日志：历史上这个按钮调的是一个不存在的接口，界面照样提示“测试消息已发送”。
+type WebhookDeliveryResult struct {
+	OK         bool   `json:"ok"`
+	StatusCode int    `json:"status_code"`
+	Message    string `json:"message"`
+}
+
+// deliver 投递一次 webhook 并落外发日志。
+// body 由调用方组装：正式通知带 event/title/content，“测试”带 event=test；
+// notificationID 为空表示不是由某条通知触发（测试发送）。
+func (s *NotificationService) deliver(
+	ctx context.Context,
+	cfg *model.WebhookConfig,
+	body []byte,
+	notificationID *string,
+) *WebhookDeliveryResult {
+	// 校验 webhook URL 合法性，防止非法 URL 导致 NewRequest 返回 nil 后 panic
+	if !validWebhookURL(cfg.URL) {
+		s.log.Warn("webhook URL 非法，跳过发送", "name", cfg.Name, "url", cfg.URL)
+		return &WebhookDeliveryResult{
+			Message: "webhook URL 非法（仅允许 http/https，且不能指向本机或内网）",
+		}
+	}
 
 	headers := map[string]string{"Content-Type": "application/json"}
 	if cfg.Secret != "" {
@@ -242,45 +274,67 @@ func (s *NotificationService) sendWebhook(ctx context.Context, cfg *model.Webhoo
 		headers["X-Signature"] = hex.EncodeToString(mac.Sum(nil))
 	}
 
-	// 校验 webhook URL 合法性，防止非法 URL 导致 NewRequest 返回 nil 后 panic
-	if !validWebhookURL(cfg.URL) {
-		s.log.Warn("webhook URL 非法，跳过发送", "name", cfg.Name, "url", cfg.URL)
-		return
-	}
-
 	req, err := http.NewRequestWithContext(ctx, "POST", cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		s.log.Warn("构造 webhook 请求失败", "name", cfg.Name, "error", err)
-		return
+		return &WebhookDeliveryResult{Message: "构造请求失败: " + err.Error()}
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 
 	resp, err := s.httpClient.Do(req)
-	logEntry := &model.WebhookLog{
-		WebhookID: cfg.ID,
-	}
-	notificationID := n.ID
-	logEntry.NotificationID = &notificationID
+	logEntry := &model.WebhookLog{WebhookID: cfg.ID, NotificationID: notificationID}
 
 	if err != nil {
 		logEntry.Status = "failed"
 		logEntry.ErrorMessage = err.Error()
 		_ = s.repo.CreateWebhookLog(logEntry)
 		s.log.Warn("webhook 发送失败", "name", cfg.Name, "error", err)
-		return
+		return &WebhookDeliveryResult{Message: "请求发送失败: " + err.Error()}
 	}
 	defer resp.Body.Close()
 
-	logEntry.Status = map[bool]string{true: "success", false: "failed"}[resp.StatusCode < 400]
-	logEntry.ResponseStatus = &resp.StatusCode
+	status := resp.StatusCode
+	logEntry.Status = map[bool]string{true: "success", false: "failed"}[status < 400]
+	logEntry.ResponseStatus = &status
 	// 简化: 不读 body 详情
 
 	if err := s.repo.CreateWebhookLog(logEntry); err != nil {
 		s.log.Warn("写 webhook 日志失败", "error", err)
 	}
-	s.log.Info("webhook 已发送", "name", cfg.Name, "status", resp.StatusCode)
+	s.log.Info("webhook 已发送", "name", cfg.Name, "status", status)
+
+	if status >= 400 {
+		return &WebhookDeliveryResult{StatusCode: status, Message: fmt.Sprintf("对方返回 HTTP %d", status)}
+	}
+	return &WebhookDeliveryResult{OK: true, StatusCode: status}
+}
+
+// TestWebhook 向指定 webhook 发一条测试消息，把真实投递结果返回给操作人。
+//
+// 与正式外发的差别：不按 is_active / events 过滤（正在配置的 webhook 也要能测通），
+// 载荷的 event 是 test，外发日志的 notification_id 为空（不是由某条通知触发）。
+func (s *NotificationService) TestWebhook(ctx context.Context, id string) (*WebhookDeliveryResult, error) {
+	var cfg model.WebhookConfig
+	if err := s.db.First(&cfg, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	body, err := json.Marshal(map[string]interface{}{
+		"event":      "test",
+		"title":      "测试消息",
+		"content":    "这是 AdminX 通知中心发出的测试消息，用于验证 webhook 是否可达。",
+		"created_at": time.Now().Format(time.RFC3339),
+	})
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	return s.deliver(ctx, &cfg, body, nil), nil
 }
 
 // validWebhookURL 校验 webhook URL（必须 http/https 且能解析出 host，scheme 大小写不敏感），

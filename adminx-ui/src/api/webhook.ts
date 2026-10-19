@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { WebhookConfig, WebhookLog, PaginatedResponse } from '@/types'
+import type { WebhookConfig, WebhookLog, WebhookTestResult, PaginatedResponse } from '@/types'
 
 export const webhookApi = {
   getList: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<WebhookConfig>> =>
@@ -17,7 +17,8 @@ export const webhookApi = {
   delete: (id: string): Promise<void> =>
     request.delete(`/notification/webhooks/${id}/`),
 
-  test: (id: string): Promise<void> =>
+  // 测试发送：返回真实投递结果（后端会真的发一次请求），不是“发出去就算成功”
+  test: (id: string): Promise<WebhookTestResult> =>
     request.post(`/notification/webhooks/${id}/test/`),
 
   getLogs: (params?: { page?: number; size?: number; webhook?: string; status?: string }): Promise<PaginatedResponse<WebhookLog>> =>

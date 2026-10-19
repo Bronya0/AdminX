@@ -126,8 +126,8 @@ export interface Menu {
   is_visible: boolean
   sort_order: number
   depth: number
-  numchild: number
-  parent?: number | null
+  // 真实父子关系（后端字段名 parent_id）。老数据可能为空，此时前端才退回 path 前缀推断。
+  parent_id: number | null
   children?: Menu[]
   allowed_paths: string[]
   created_at: string
@@ -317,6 +317,13 @@ export interface WebhookConfig {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+// Webhook 测试发送结果。后端如实回传投递结果，前端据此区分“发出去了”与“对方拒收/不可达”
+export interface WebhookTestResult {
+  ok: boolean
+  status_code: number
+  message: string
 }
 
 // Webhook 发送日志

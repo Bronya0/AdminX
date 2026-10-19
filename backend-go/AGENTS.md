@@ -58,8 +58,8 @@ response.Paginated(c, count, next, prev, results)  // 分页
 - 软删除：仅 User 用 `gorm.DeletedAt`（其他模型无软删除）
 - jsonb 字段：`datatypes.JSON` + `default:'[]'::jsonb`（必须带 `::jsonb` cast）
 - M2M：`gorm:"many2many:table_name;"`，GORM 自动建中间表
-- 菜单层级：`parent_id` + `depth`（根=1，子=父+1），`depth` 由 `MenuService` 从父级派生并拒绝成环/自引用；前端 `flatMenusToTreeByDepth` 按 `depth` + path 前缀建树，**depth 写错就等于多级菜单变平铺**
-- 骨架菜单种子（`defaultMenuSeeds`）对骨架内的 code 是**权威来源**（对齐 Django 版 `update_or_create`），重跑 init-data 会覆盖其名称/路径/权限码/RBAC 规则；改种子 code 必须在 `legacyMenuCodeRenames` 登记，否则历史库会多出一份重复菜单。`permission_code` 必须等于前端 `router/index.ts` 的 `meta.permission`
+- 菜单层级：`parent_id` + `depth`（根=1，子=父+1），`depth` 由 `MenuService` 从父级派生并拒绝成环/自引用；前端 `flatMenusToTreeByDepth` **先按 `parent_id` 建树**，取不到父节点才退回 `depth` + path 前缀（前缀比较前先剥掉 `scheme://host`，否则外链/iframe 菜单的绝对 URL 会被挂到树根）；**depth 写错就等于多级菜单变平铺**
+- 骨架菜单种子（`defaultMenuSeeds`）对骨架内的 code 是**定义**的权威来源（对齐 Django 版 `update_or_create`），重跑 init-data 会覆盖其名称/路径/权限码/RBAC 规则；但**启停（`is_active`）与可见性（`is_visible`）不覆盖**：那是运维状态，种子未显式声明（`menuSeed.IsActive` / `IsVisible`，nil=不表态）就保留库里现值，否则每次 init-data 都会把应急停用/隐藏的菜单静默刷回启用可见。改种子 code 必须在 `legacyMenuCodeRenames` 登记，否则历史库会多出一份重复菜单。`permission_code` 必须等于前端 `router/index.ts` 的 `meta.permission`
 - 新增模型/字段后必须同步 `internal/database/sqlite.go` 的 SQLite DDL（`Models()` 与守卫测试会校验覆盖完整性）
 
 ### 序列化

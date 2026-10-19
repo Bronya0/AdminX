@@ -19,3 +19,7 @@
 [前端] 2026-10-12 中危：主区放进不同 v-if 分支会让 <router-view> 被卸载重建，页面 onMounted 重拉服务端状态覆盖未保存的编辑（点混合布局像没反应）。@AdminLayout.vue
 [sqlite] 2026-10-13 中危：请求路径上新增写库（清理/采样）在单写者下撞第二进程会 database is locked 拖 5s 并 500，家务写须限频且失败不致命。@internal/captcha
 [audit] 2026-10-13 高危：写端点漏审计是静默的（改配置/执行 shell 任务无痕）；新增写端点必须在 router 用 audited() 声明。@internal/router/router.go
+[前端] 2026-10-13 中危：跨仓库搬修复前核对后端契约，parent_id/job_id/unread 等与 Django 的 parent/job 不等价，照搬=静默丢参。@frontend-prod
+[前端] 2026-10-19 高危：axios 拦截器把非 JSON 的 404 原样透传成成功，前端调不存在的接口照样 resolve，界面提示成功。@utils/request.ts
+[前端] 2026-10-19 中危：菜单树只按 path 前缀找父，外链/iframe 的绝对 URL 拼出 /https: 前缀，整棵子树挂到树根；parent_id 优先。@utils/menuTree.ts
+[init-data] 2026-10-19 中危：种子无条件写 is_active/is_visible=true，运维应急停用的菜单跑一次 init-data 就复活。@cmd/init-data/main.go

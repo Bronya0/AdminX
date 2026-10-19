@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"adminx/internal/model"
 	"adminx/internal/repository"
 )
 
@@ -235,6 +236,36 @@ func TestNotificationService_WebhookCRUD(t *testing.T) {
 	// delete
 	if err := svc.DeleteWebhook(w.ID); err != nil {
 		t.Fatalf("DeleteWebhook 失败: %v", err)
+	}
+}
+
+// TestNotificationService_TestWebhook 测试发送必须如实报结果。
+// 契约：投不出去就 ok=false 并带原因（不能像历史上那样“接口不存在也提示发送成功”）；
+// 不存在的 webhook 返回 ErrNotFound。
+func TestNotificationService_TestWebhook(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewNotificationService(db, repository.NewNotificationRepo(db), slog.Default())
+
+	// 绕过创建时的 URL 校验直接落一行内网地址：模拟“创建时合规、环境变了”，
+	// 这正是“测试发送”要暴露的情况。
+	w := &model.WebhookConfig{Name: "intranet", URL: "http://10.0.0.5/hook", Events: "info", IsActive: true}
+	if err := db.Create(w).Error; err != nil {
+		t.Fatalf("准备 webhook 失败: %v", err)
+	}
+
+	res, err := svc.TestWebhook(context.Background(), w.ID)
+	if err != nil {
+		t.Fatalf("TestWebhook 失败: %v", err)
+	}
+	if res.OK {
+		t.Errorf("内网地址不应投递成功: %+v", res)
+	}
+	if res.Message == "" {
+		t.Errorf("投递失败必须带原因: %+v", res)
+	}
+
+	if _, err := svc.TestWebhook(context.Background(), "00000000-0000-0000-0000-000000000000"); err == nil {
+		t.Errorf("不存在的 webhook 应报错")
 	}
 }
 

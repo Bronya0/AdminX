@@ -240,6 +240,8 @@ func New(deps *Deps) *gin.Engine {
 		rbac.PUT("/notification/webhooks/:id/", audited(appmw.AuditUpdate, "Webhook"), deps.NotifH.UpdateWebhook)
 		rbac.PATCH("/notification/webhooks/:id/", audited(appmw.AuditUpdate, "Webhook"), deps.NotifH.UpdateWebhook)
 		rbac.DELETE("/notification/webhooks/:id/", audited(appmw.AuditDelete, "Webhook"), deps.NotifH.DeleteWebhook)
+		// 测试发送：会向用户配置的地址发一次真实请求（有外部副作用），按触发类操作审计
+		rbac.POST("/notification/webhooks/:id/test/", audited(appmw.AuditExecute, "Webhook"), deps.NotifH.TestWebhook)
 		rbac.GET("/notification/webhook-logs/", deps.NotifH.WebhookLogs)
 
 		// 集群节点管理（节点 CRUD 归 RBAC；组件升级指令归超管）

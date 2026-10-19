@@ -200,14 +200,24 @@ const topLevelMenus = computed(() =>
   sidebarMenus.value.map(m => ({ ...m, children: undefined }))
 )
 
-// MIX 布局：当前选中的一级菜单。菜单 key 就是菜单 path，所以以「当前路由」为事实源推导 ——
-// 这样切换布局、刷新页面都能立刻定位到所属一级菜单，不再依赖「路由变化」这个时机。
-// 点击一级菜单时先写一份 override：外链 / 未发布页面的点击不改变路由，靠它立即换掉左侧子菜单。
+// 菜单归属：这条菜单属于哪个一级菜单。菜单树是权威（按 parent_id 建出来的），
+// 不再按路径首段猜：父 /reports、子 /daily 这种「层级不体现在路径里」的配置下，
+// 猜路径只能得到空串，混合布局的左侧栏会整块消失。
+const topKeyOfItem = (key: string): string => {
+  for (const top of sidebarMenus.value) {
+    if (top.key === key) return top.key
+    if (top.children?.length && findSidebarItem(key, top.children)) return top.key
+  }
+  return ''
+}
+
 const clickedTopKey = ref('')
+// 混合布局：当前选中的一级菜单。点击时写一份 override（外链 / 内嵌页的跳转不改变路由，
+// 靠它立即换掉左侧子菜单）；否则按当前路由在菜单树里定位它所属的一级菜单。
 const selectedTopKey = computed(() => {
   const keys = topLevelMenus.value.map(m => m.key)
   if (clickedTopKey.value && keys.includes(clickedTopKey.value)) return clickedTopKey.value
-  const topKey = '/' + (route.path.split('/').filter(Boolean)[0] || '')
+  const topKey = topKeyOfItem(route.path)
   return keys.includes(topKey) ? topKey : ''
 })
 const currentChildMenus = computed(() => {
@@ -225,8 +235,10 @@ watch(
     // 进入通知页时标记跳过下一次布局轮询（通知页自会拉取未读数）
     if (path === '/system/notification') skipUnreadOnce = true
 
-    // 路由变了就以路由为准：清掉点击一级菜单时写的 override（见 selectedTopKey）
-    clickedTopKey.value = ''
+    // 路由变了就以路由为准：清掉点击一级菜单时写的 override（见 selectedTopKey）。
+    // 例外：外链/内嵌菜单会 push 到 /iframe，此时菜单归属仍然是刚点的那个一级菜单，
+    // 清掉它会让混合布局的左侧菜单整块消失。
+    if (path !== '/iframe') clickedTopKey.value = ''
 
     // 自动展开父菜单
     const parentPath = path.split('/').slice(0, 2).join('/')
@@ -320,6 +332,9 @@ const openExternal = (item: SidebarItem) => {
 const handleMenuClick = (key: string) => {
   if (!key) return
   const item = findSidebarItem(key, sidebarMenus.value)
+  // 先记下它属于哪个一级菜单：外链/内嵌（push 到 /iframe）之后路径不再能反推归属
+  const topKey = topKeyOfItem(key)
+  if (topKey) clickedTopKey.value = topKey
   if (item?.url) {
     openExternal(item)
     return
