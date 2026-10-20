@@ -33,18 +33,40 @@ func (r *RoleRepo) FindByName(name string) (*model.Role, error) {
 	return &role, err
 }
 
-func (r *RoleRepo) List(offset, limit int, search string) ([]model.Role, int64, error) {
+// RoleListFilter 角色列表筛选条件。
+type RoleListFilter struct {
+	Search   string
+	IsActive *bool
+	IsSystem *bool
+	MenuCode string // 只看绑定了该菜单（按 code 标识）的角色
+}
+
+func (r *RoleRepo) List(offset, limit int, f RoleListFilter) ([]model.Role, int64, error) {
 	var roles []model.Role
 	var count int64
 	q := r.db.Model(&model.Role{})
-	if search != "" {
+	if f.Search != "" {
+		like := "%" + EscapeLike(f.Search) + "%"
 		// "desc" 是 PostgreSQL 保留字，必须加引号（裸写 PG 报 42601，sqlite 容忍）
-		q = q.Where("name LIKE ? ESCAPE '\\' OR \"desc\" LIKE ? ESCAPE '\\'", "%"+EscapeLike(search)+"%", "%"+EscapeLike(search)+"%")
+		// display_name 也要参与：界面上展示的是中文名，只搜 name 会让人以为搜索坏了
+		q = q.Where("roles.name LIKE ? ESCAPE '\\' OR roles.display_name LIKE ? ESCAPE '\\' OR roles.\"desc\" LIKE ? ESCAPE '\\'", like, like, like)
+	}
+	if f.IsActive != nil {
+		q = q.Where("roles.is_active = ?", *f.IsActive)
+	}
+	if f.IsSystem != nil {
+		q = q.Where("roles.is_system = ?", *f.IsSystem)
+	}
+	if f.MenuCode != "" {
+		// 同一角色对同一菜单只有一条关联，JOIN 不会放大行数，count 仍准确
+		q = q.Joins("JOIN role_menus ON role_menus.role_id = roles.id").
+			Joins("JOIN menus ON menus.id = role_menus.menu_id").
+			Where("menus.code = ?", f.MenuCode)
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err
 	}
-	err := q.Preload("Menus").Order("created_at DESC").Offset(offset).Limit(limit).Find(&roles).Error
+	err := q.Preload("Menus").Order("roles.created_at DESC").Offset(offset).Limit(limit).Find(&roles).Error
 	return roles, count, err
 }
 

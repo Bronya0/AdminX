@@ -128,7 +128,7 @@ func TestUserService_List(t *testing.T) {
 	_, _ = createPlainUser(t, db, svc, "alice", "Pass123!")
 	_, _ = createPlainUser(t, db, svc, "bob", "Pass456!")
 
-	users, count, err := svc.List(0, 10, "", "", nil)
+	users, count, err := svc.List(0, 10, repository.UserListFilter{})
 	if err != nil {
 		t.Fatalf("List 失败: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestUserService_List_Search(t *testing.T) {
 	bobRole := seedRole(t, db, "role_bob", false)
 	_, _ = svc.Create(CreateInput{Username: "bob", Password: "Pass456!", Email: "bob@test.com", Roles: []string{bobRole.ID}})
 
-	_, count, err := svc.List(0, 10, "alice", "", nil)
+	_, count, err := svc.List(0, 10, repository.UserListFilter{Search: "alice"})
 	if err != nil {
 		t.Fatalf("List search 失败: %v", err)
 	}

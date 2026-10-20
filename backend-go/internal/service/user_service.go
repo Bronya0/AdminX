@@ -27,8 +27,8 @@ func NewUserService(db *gorm.DB, userRepo *repository.UserRepo) *UserService {
 }
 
 // List 分页查询用户。
-func (s *UserService) List(offset, limit int, search, role string, isActive *bool) ([]model.User, int64, error) {
-	return s.userRepo.List(offset, limit, search, role, isActive)
+func (s *UserService) List(offset, limit int, f repository.UserListFilter) ([]model.User, int64, error) {
+	return s.userRepo.List(offset, limit, f)
 }
 
 // GetByID 查询单个用户。

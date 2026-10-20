@@ -43,7 +43,7 @@ export const authApi = {
 }
 
 export const userApi = {
-  getUsers: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; role?: string }): Promise<PaginatedResponse<User>> =>
+  getUsers: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; role?: string; online?: boolean; last_login_after?: string; last_login_before?: string }): Promise<PaginatedResponse<User>> =>
     request.get('/accounts/users/', { params }),
 
   getRoleOptions: (): Promise<{ name: string; display_name?: string }[]> =>
@@ -67,7 +67,7 @@ export const userApi = {
 }
 
 export const roleApi = {
-  getRoles: (params?: { page?: number; size?: number; search?: string }): Promise<PaginatedResponse<Role>> =>
+  getRoles: (params?: { page?: number; size?: number; search?: string; is_active?: boolean; is_system?: boolean; menu?: string }): Promise<PaginatedResponse<Role>> =>
     request.get('/accounts/roles/', { params }),
 
   getMenuTree: (): Promise<Menu[]> =>

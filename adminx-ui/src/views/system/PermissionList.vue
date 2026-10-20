@@ -4,6 +4,7 @@
       <div class="panel-head">
         <span class="panel-title">菜单权限</span>
         <span class="panel-desc">维护菜单层级、路由路径与权限标识</span>
+        <span class="list-count" style="margin-left: auto">共 {{ menuCount }} 项</span>
       </div>
 
       <TableToolbar>
@@ -117,7 +118,7 @@ POST:/api/v1/accounts/roles/*
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, ExpandOutlined, CompressOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { menuApi } from '@/api/menu'
@@ -134,6 +135,10 @@ const menuSearchText = ref('')
 const expandedRowKeys = ref<(string | number)[]>([])
 const originalMenuTreeData = ref<any[]>([])
 const filteredMenuTreeData = ref<any[]>([])
+// 树形表格没有分页，条目数自己数；搜索过滤后显示的是匹配到的节点总数
+const countMenuNodes = (nodes: any[]): number =>
+  nodes.reduce((sum, node) => sum + 1 + countMenuNodes(node.children || []), 0)
+const menuCount = computed(() => countMenuNodes(filteredMenuTreeData.value))
 const parentTreeData = ref<any[]>([])
 
 // 当前选中的行（再次点击同一行取消选中）

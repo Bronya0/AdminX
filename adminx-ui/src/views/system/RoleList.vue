@@ -3,15 +3,46 @@
     <!-- 搜索栏 -->
     <a-card class="search-card">
       <SearchBar>
-        <SearchField label="角色名称">
+        <SearchField label="关键词" style="flex: 1 1 260px">
           <a-input
             v-model:value="searchForm.search"
-            placeholder="名称"
+            placeholder="显示名称/角色标识/描述"
             allow-clear
             @pressEnter="handleSearch"
           />
         </SearchField>
+        <SearchField label="状态" style="flex: 0 0 130px">
+          <a-select
+            v-model:value="searchForm.is_active"
+            placeholder="全部"
+            allow-clear
+          >
+            <a-select-option :value="true">启用</a-select-option>
+            <a-select-option :value="false">禁用</a-select-option>
+          </a-select>
+        </SearchField>
+        <SearchField label="类型" style="flex: 0 0 150px">
+          <a-select
+            v-model:value="searchForm.is_system"
+            placeholder="全部"
+            allow-clear
+          >
+            <a-select-option :value="true">系统内置</a-select-option>
+            <a-select-option :value="false">自定义</a-select-option>
+          </a-select>
+        </SearchField>
+        <SearchField label="权限" style="flex: 0 0 200px">
+          <a-select
+            v-model:value="searchForm.menu"
+            placeholder="全部"
+            show-search
+            allow-clear
+            option-filter-prop="label"
+            :options="menuOptions"
+          />
+        </SearchField>
         <template #actions>
+          <span class="list-count">共 {{ pagination.total }} 条</span>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 查询
           </a-button>
@@ -34,9 +65,21 @@
         :loading="loading"
         :pagination="pagination"
         @change="handleTableChange"
+        table-layout="fixed"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'menus_count'">
+            <a-tooltip v-if="record.menus?.length" placement="left">
+              <template #title>
+                <div class="menus-tip">
+                  <div v-for="m in record.menus" :key="m.id">{{ m.name }}</div>
+                </div>
+              </template>
+              <a-tag :bordered="false" class="count-tag">{{ record.menus.length }}</a-tag>
+            </a-tooltip>
+            <span v-else>0</span>
+          </template>
           <template v-if="column.key === 'is_active'">
             <a-tag :color="record.is_active ? 'success' : 'error'">
               {{ record.is_active ? '启用' : '禁用' }}
@@ -146,14 +189,14 @@ const route = useRoute()
 
 // 表格列定义
 const columns = [
-  { title: '显示名称', key: 'display_name', customRender: ({ record }: any) => record.display_name || record.name },
-  { title: '角色标识', dataIndex: 'name', key: 'name' },
-  { title: '描述', dataIndex: 'desc', key: 'desc', ellipsis: true },
-  { title: '权限数量', key: 'menus_count', width: 100, align: 'center' as const, customRender: ({ record }: any) => record.menus?.length ?? 0 },
-  { title: '状态', key: 'is_active' },
+  { title: '显示名称', key: 'display_name', width: 160, customRender: ({ record }: any) => record.display_name || record.name },
+  { title: '角色标识', dataIndex: 'name', key: 'name', width: 160 },
+  { title: '描述', dataIndex: 'desc', key: 'desc', width: 260, ellipsis: true },
+  { title: '权限数量', key: 'menus_count', width: 100, align: 'center' as const },
+  { title: '状态', key: 'is_active', width: 90 },
   { title: '类型', key: 'is_system', width: 100, align: 'center' as const },
-  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', customRender: ({ text }: any) => formatDateTime(text) },
-  { title: '操作', key: 'action', width: 250 },
+  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 170, customRender: ({ text }: any) => formatDateTime(text) },
+  { title: '操作', key: 'action', width: 160 },
 ]
 
 // 状态
@@ -164,7 +207,27 @@ const pagination = reactive({
   showSizeChanger: true,
   showTotal: (total: number) => `共 ${total} 条`,
 })
-const searchForm = reactive({ search: '' })
+const searchForm = reactive({
+  search: '',
+  is_active: undefined as boolean | undefined,
+  is_system: undefined as boolean | undefined,
+  menu: undefined as string | undefined,
+})
+
+// 权限下拉选项：按菜单过滤角色，层级用缩进体现，选中值是菜单 code
+const menuOptions = ref<{ label: string; value: string }[]>([])
+const flattenMenuOptions = (items: Menu[], depth = 0): { label: string; value: string }[] =>
+  items.flatMap(item => [
+    { label: `${'　'.repeat(depth)}${item.name}`, value: item.code },
+    ...flattenMenuOptions(item.children || [], depth + 1),
+  ])
+const loadMenuOptions = async () => {
+  try {
+    menuOptions.value = flattenMenuOptions(await roleApi.getMenuTree())
+  } catch (e) {
+    console.error('加载菜单选项失败', e)
+  }
+}
 
 // 弹窗状态
 const modalVisible = ref(false)
@@ -203,7 +266,14 @@ const indexMenuIds = (items: Menu[]) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await roleApi.getRoles({ page: pagination.current, size: pagination.pageSize, search: searchForm.search })
+    const res = await roleApi.getRoles({
+      page: pagination.current,
+      size: pagination.pageSize,
+      search: searchForm.search,
+      is_active: searchForm.is_active,
+      is_system: searchForm.is_system,
+      menu: searchForm.menu,
+    })
     tableData.value = res.results
     pagination.total = res.count
   } finally {
@@ -256,7 +326,13 @@ const deselectAllMenus = () => { selectedMenus.value = [] }
 
 // 搜索
 const handleSearch = () => { pagination.current = 1; loadData() }
-const resetSearch = () => { searchForm.search = ''; handleSearch() }
+const resetSearch = () => {
+  searchForm.search = ''
+  searchForm.is_active = undefined
+  searchForm.is_system = undefined
+  searchForm.menu = undefined
+  handleSearch()
+}
 const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
@@ -339,6 +415,7 @@ const handleModalCancel = () => { modalVisible.value = false; formRef.value?.res
 
 onMounted(() => {
   if (route.query.search) searchForm.search = route.query.search as string
+  loadMenuOptions()
   loadData()
 })
 
@@ -355,6 +432,19 @@ watch(() => route.query.search, (val) => {
 .page-container { padding: 24px; }
 .search-card { margin-bottom: 16px; }
 .table-card { margin-bottom: 16px; }
+
+/* 权限数量：数字做成标签，悬浮列出该角色绑定的菜单 */
+.count-tag {
+  cursor: default;
+  margin-inline-end: 0;
+}
+
+.menus-tip {
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.9;
+}
 
 .permission-toolbar {
   display: flex;

@@ -99,6 +99,11 @@ const handleOpenChange = (keys: string[]) => {
 .admin-sider :deep(.ant-menu-submenu-title) {
   font-size: var(--admin-nav-font-size, 14px);
 }
+/* 菜单项切选中态不要过渡：从用户管理跳到角色管理时，旧项背景淡出会被看成闪一下 */
+.admin-sider :deep(.ant-menu-item),
+.admin-sider :deep(.ant-menu-submenu-title) {
+  transition: none;
+}
 .admin-sider :deep(.ant-menu) {
   flex: 1;
   overflow-y: auto;

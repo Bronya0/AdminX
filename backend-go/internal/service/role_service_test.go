@@ -72,7 +72,7 @@ func TestRoleService_List(t *testing.T) {
 	seedRole(t, db, "admin", false)
 	seedRole(t, db, "user", false)
 
-	roles, count, err := svc.List(0, 10, "")
+	roles, count, err := svc.List(0, 10, repository.RoleListFilter{})
 	if err != nil {
 		t.Fatalf("List 失败: %v", err)
 	}

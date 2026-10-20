@@ -63,24 +63,53 @@ func (r *UserRepo) FindAnyByUsername(username string) (*model.User, error) {
 	return &u, nil
 }
 
+// UserListFilter 用户列表筛选条件。参数收成结构体，避免 List 的布尔/字符串参数越加越长。
+type UserListFilter struct {
+	Search          string
+	Role            string
+	IsActive        *bool
+	Online          *bool
+	LastLoginAfter  *time.Time
+	LastLoginBefore *time.Time
+}
+
 // List 分页查询用户。
-func (r *UserRepo) List(offset, limit int, search, role string, isActive *bool) ([]model.User, int64, error) {
+func (r *UserRepo) List(offset, limit int, f UserListFilter) ([]model.User, int64, error) {
 	var users []model.User
 	var count int64
 
 	q := r.db.Model(&model.User{}).Where("deleted_at IS NULL")
-	if search != "" {
-		like := "%" + EscapeLike(search) + "%"
+	if f.Search != "" {
+		like := "%" + EscapeLike(f.Search) + "%"
 		// "desc" 必须加引号：desc 是 PostgreSQL 保留字，裸写会让 PG 报 42601
 		// （sqlite 容忍，所以本地开发看不出来）
-		q = q.Where("username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR \"desc\" LIKE ? ESCAPE '\\'", like, like, like, like)
+		// 角色名用 EXISTS 子查询：用户可能绑多个角色，JOIN 会把同一用户放大成多行，count 和分页都会错
+		q = q.Where(
+			"username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR \"desc\" LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM user_roles ur JOIN roles rr ON rr.id = ur.role_id WHERE ur.user_id = users.id AND (rr.name LIKE ? ESCAPE '\\' OR rr.display_name LIKE ? ESCAPE '\\'))",
+			like, like, like, like, like, like,
+		)
 	}
-	if isActive != nil {
-		q = q.Where("is_active = ?", *isActive)
+	if f.IsActive != nil {
+		q = q.Where("is_active = ?", *f.IsActive)
 	}
-	if role != "" {
+	if f.Online != nil {
+		// 与 model.User.IsOnline 同一时间窗口：筛选与行内标记不能各算一套
+		cutoff := time.Now().Add(-model.OnlineWindow)
+		if *f.Online {
+			q = q.Where("last_activity >= ?", cutoff)
+		} else {
+			q = q.Where("(last_activity IS NULL OR last_activity < ?)", cutoff)
+		}
+	}
+	if f.LastLoginAfter != nil {
+		q = q.Where("last_login >= ?", *f.LastLoginAfter)
+	}
+	if f.LastLoginBefore != nil {
+		q = q.Where("last_login <= ?", *f.LastLoginBefore)
+	}
+	if f.Role != "" {
 		q = q.Joins("JOIN user_roles ON user_roles.user_id = users.id").
-			Joins("JOIN roles ON roles.id = user_roles.role_id AND roles.name = ?", role)
+			Joins("JOIN roles ON roles.id = user_roles.role_id AND roles.name = ?", f.Role)
 	}
 
 	if err := q.Count(&count).Error; err != nil {

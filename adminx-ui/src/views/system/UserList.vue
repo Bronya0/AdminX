@@ -3,37 +3,54 @@
     <!-- 搜索栏 -->
     <a-card class="search-card">
       <SearchBar>
-        <SearchField label="用户名">
+        <SearchField label="关键词" style="flex: 1 1 260px">
           <a-input
             v-model:value="searchForm.search"
-            placeholder="请输入用户名"
+            placeholder="用户名/手机号/邮箱/描述/角色"
             allow-clear
             @pressEnter="handleSearch"
           />
         </SearchField>
-        <SearchField label="角色">
+        <SearchField label="角色" style="flex: 0 0 180px">
           <a-select
             v-model:value="searchForm.role"
             placeholder="全部"
             allow-clear
-            @change="handleSearch"
           >
             <a-select-option v-for="r in roleOptions" :key="r.value" :value="r.value">{{ r.label }}</a-select-option>
           </a-select>
         </SearchField>
-        <SearchField label="状态">
+        <SearchField label="状态" style="flex: 0 0 130px">
           <a-select
             v-model:value="searchForm.is_active"
             placeholder="全部"
             allow-clear
-            @change="handleSearch"
           >
             <a-select-option :value="true">启用</a-select-option>
             <a-select-option :value="false">禁用</a-select-option>
           </a-select>
         </SearchField>
+        <SearchField label="在线状态" style="flex: 0 0 160px">
+          <a-select
+            v-model:value="searchForm.online"
+            placeholder="全部"
+            allow-clear
+          >
+            <a-select-option :value="true">在线</a-select-option>
+            <a-select-option :value="false">离线</a-select-option>
+          </a-select>
+        </SearchField>
+        <SearchField label="最后登录" style="flex: 0 0 260px">
+          <a-range-picker
+            v-model:value="searchForm.loginRange"
+            show-time
+            :placeholder="['开始时间', '结束时间']"
+            allow-clear
+          />
+        </SearchField>
 
         <template #actions>
+          <span class="list-count">共 {{ pagination.total }} 条</span>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined /> 查询
           </a-button>
@@ -56,6 +73,7 @@
         :loading="loading"
         :pagination="pagination"
         @change="handleTableChange"
+        table-layout="fixed"
         row-key="id"
       >
         <template #bodyCell="{ column, record }">
@@ -73,7 +91,7 @@
             </a-tag>
           </template>
           <template v-if="column.key === 'roles'">
-            <a-space>
+            <a-space wrap :size="[4, 4]">
               <a-tag v-for="(role, i) in record.roles" :key="role" color="blue"
                 style="cursor: pointer" @click="router.push({ name: 'roles', query: { search: role } })">
                 {{ record.role_labels?.[i] || role }}
@@ -126,48 +144,71 @@
         :rules="formRules"
         layout="vertical"
       >
-        <a-form-item label="用户名" name="username">
-          <a-input
-            v-model:value="formState.username"
-            placeholder="请输入用户名"
-            :disabled="isEdit"
-          />
-        </a-form-item>
-        <a-form-item label="密码" name="password" v-if="!isEdit">
-          <a-input-password
-            v-model:value="formState.password"
-            placeholder="请输入密码"
-          />
-        </a-form-item>
-        <a-form-item label="邮箱" name="email">
-          <a-input v-model:value="formState.email" placeholder="请输入邮箱" />
-        </a-form-item>
-        <a-form-item label="手机号" name="phone">
-          <a-input v-model:value="formState.phone" placeholder="请输入手机号" />
-        </a-form-item>
+        <a-row :gutter="16">
+          <a-col :span="isEdit ? 24 : 12">
+            <a-form-item label="用户名" name="username">
+              <a-input
+                v-model:value="formState.username"
+                placeholder="请输入用户名"
+                :disabled="isEdit"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col v-if="!isEdit" :span="12">
+            <a-form-item label="密码" name="password">
+              <a-input-password
+                v-model:value="formState.password"
+                placeholder="请输入密码"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item label="邮箱" name="email">
+              <a-input v-model:value="formState.email" placeholder="请输入邮箱" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="手机号" name="phone">
+              <a-input v-model:value="formState.phone" placeholder="请输入手机号" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item label="角色" name="roles">
+              <a-select
+                v-model:value="formState.roles"
+                mode="multiple"
+                placeholder="请选择角色"
+                :options="roleOptions"
+                :disabled="editingSuperuser"
+              />
+              <div v-if="editingSuperuser" class="form-hint">
+                超级管理员的权限来自账号本身，与角色无关，角色仅用于展示
+              </div>
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="首页" name="home_page">
+              <a-tree-select
+                v-model:value="formState.home_page"
+                :tree-data="menuTreeOptions"
+                :loading="homeOptionsLoading"
+                :disabled="!canPickHomePage"
+                :placeholder="canPickHomePage ? '请选择登录后的首页' : '请先选择角色'"
+                allow-clear
+                style="width: 100%"
+              />
+              <div v-if="canPickHomePage && !homeOptionsLoading && !menuTreeOptions.length" class="form-hint">
+                所选角色没有可用作首页的页面菜单，换个角色或先给角色分配菜单
+              </div>
+            </a-form-item>
+          </a-col>
+        </a-row>
         <a-form-item label="描述" name="desc">
           <a-textarea v-model:value="formState.desc" placeholder="请输入描述（可选）" :rows="2" />
-        </a-form-item>
-        <a-form-item label="角色" name="roles">
-          <a-select
-            v-model:value="formState.roles"
-            mode="multiple"
-            placeholder="请选择角色"
-            :options="roleOptions"
-            :disabled="editingSuperuser"
-          />
-          <div v-if="editingSuperuser" class="form-hint">
-            超级管理员的权限来自账号本身，与角色无关，角色仅用于展示
-          </div>
-        </a-form-item>
-        <a-form-item label="首页" name="home_page">
-          <a-tree-select
-            v-model:value="formState.home_page"
-            :tree-data="menuTreeOptions"
-            placeholder="默认首页（可选）"
-            allow-clear
-            style="width: 100%"
-          />
         </a-form-item>
         <a-form-item label="状态" name="is_active">
           <a-switch
@@ -213,6 +254,7 @@ import {
   LogoutOutlined,
   DownOutlined,
 } from '@ant-design/icons-vue'
+import type { Dayjs } from 'dayjs'
 import { userApi, roleApi, authApi } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
@@ -228,14 +270,14 @@ const columns = [
   { title: '用户名', dataIndex: 'username', key: 'username', width: 180 },
   { title: '邮箱', dataIndex: 'email', key: 'email', width: 160, ellipsis: true },
   { title: '手机号', dataIndex: 'phone', key: 'phone', width: 120 },
-  { title: '描述', dataIndex: 'desc', key: 'desc', width: 240, ellipsis: true },
+  { title: '描述', dataIndex: 'desc', key: 'desc', width: 180, ellipsis: true },
   // 角色/状态这类窄信息固定窄列，不设宽度会按内容抢空间，把操作列挤出去
-  { title: '角色', key: 'roles', width: 130 },
+  { title: '角色', key: 'roles', width: 150 },
   { title: '在线状态', key: 'online', width: 120 },
   { title: '状态', key: 'is_active', width: 100 },
   { title: '最后登录', dataIndex: 'last_login', key: 'last_login', width: 160, customRender: ({ text }: any) => formatDateTime(text) },
-  // 操作列不写死宽度：由内容自适应，写死会被 4 个按钮撑出去
-  { title: '操作', key: 'action' },
+  // 操作列固定宽度：fixed 布局下剩余空间按列宽比例分给其它列，不会把按钮顶出去
+  { title: '操作', key: 'action', width: 180 },
 ]
 
 // 状态
@@ -252,6 +294,8 @@ const searchForm = reactive({
   search: '',
   is_active: undefined as boolean | undefined,
   role: undefined as string | undefined,
+  online: undefined as boolean | undefined,
+  loginRange: undefined as [Dayjs, Dayjs] | undefined,
 })
 
 // 角色选项
@@ -267,6 +311,9 @@ type TreeSelectOption = {
   children?: TreeSelectOption[],
 }
 const menuTreeOptions = ref<TreeSelectOption[]>([])
+// 首页选项加载中：决定“没有可用菜单”的提示要不要显示，
+// 否则选完角色会先闪一下提示条，弹窗跟着长高再缩回去
+const homeOptionsLoading = ref(false)
 
 const buildMenuTreeOptions = (items: Menu[], allowedPaths: Set<string>): TreeSelectOption[] => {
   return items.flatMap((item) => {
@@ -304,62 +351,45 @@ const loadFullMenuTree = async () => {
 const collectMenuPaths = (items: Menu[]): string[] =>
   items.flatMap(item => [item.path, ...collectMenuPaths(item.children || [])]).filter(Boolean)
 
-// 找第一个可选的叶子菜单：新建用户时用它做首页默认值，
-// 免得“必选”变成每次都要手动挑一项。
-const firstSelectablePath = (items: TreeSelectOption[]): string => {
-  for (const item of items) {
-    if (item.selectable && !item.value.startsWith('__group__:')) return item.value
-    const child = item.children ? firstSelectablePath(item.children) : ''
-    if (child) return child
-  }
-  return ''
-}
-
-// 首页必选：当前值不可用时自动落到第一个可选项
-const ensureHomePage = () => {
+// 首页由用户自己选：角色变了只把越界的旧值清掉，不替用户预选一个，
+// 否则“必选”会悄悄存下一个用户没看过的落点。
+const clearInvalidHomePage = () => {
   const valid = (function has(items: TreeSelectOption[]): boolean {
     return items.some(i => (i.selectable && i.value === formState.home_page) || (i.children ? has(i.children) : false))
   })(menuTreeOptions.value)
-  if (!valid) formState.home_page = firstSelectablePath(menuTreeOptions.value)
+  if (!valid) formState.home_page = ''
 }
 
 let menuOptionsSeq = 0
-// 菜单首页选项（根据选中角色过滤）
+// 首页选项跟随所选角色：先定角色再挑落点，没选角色时下拉不可用；
+// 超管的权限来自账号本身（角色可能为空），直接给全量菜单，否则超管改不了首页。
 const loadMenuOptions = async (roles: string[]) => {
   const seq = ++menuOptionsSeq
-  // 未选角色时不做权限过滤：新建用户往往先看首页有哪些可选，
-  // 此时给一个空下拉会让人以为功能坏了。选角色后会自动收窄并清掉越界的选项。
-  if (!roles.length) {
-    if (!fullMenuTree.value.length) {
-      await loadFullMenuTree()
-    }
-    if (seq !== menuOptionsSeq) return
-    menuTreeOptions.value = buildMenuTreeOptions(fullMenuTree.value, new Set(collectMenuPaths(fullMenuTree.value)))
-    ensureHomePage()
+  const unrestricted = editingSuperuser.value
+  if (!unrestricted && !roles.length) {
+    menuTreeOptions.value = []
+    formState.home_page = ''
+    homeOptionsLoading.value = false
     return
   }
+  homeOptionsLoading.value = true
   if (!fullMenuTree.value.length) {
     await loadFullMenuTree()
   }
   try {
-    const menus = await roleApi.accessibleMenus(roles)
     // 请求序号守卫：快速切换角色时只让最后一次回包生效，
     // 否则慢回包会覆盖新选项，首页下拉与所选角色错位
+    const allowedPaths = unrestricted
+      ? new Set(collectMenuPaths(fullMenuTree.value))
+      : new Set((await roleApi.accessibleMenus(roles)).filter(m => m.path).map(m => m.path))
     if (seq !== menuOptionsSeq) return
-    // 不过滤仪表盘：普通用户这类角色可能只绑了仪表盘，排除它会让首页下拉直接空掉
-    const allowedPaths = new Set(
-      menus
-        .filter(m => m.path)
-        .map(m => m.path)
-    )
     menuTreeOptions.value = buildMenuTreeOptions(fullMenuTree.value, allowedPaths)
-
-    if (formState.home_page && !allowedPaths.has(formState.home_page)) {
-      formState.home_page = ''
-    }
-    ensureHomePage()
+    clearInvalidHomePage()
   } catch (e) {
     console.error('加载菜单失败', e)
+  } finally {
+    // 只有最后一次请求能收 loading：快回包不能把新请求的加载态提前关掉
+    if (seq === menuOptionsSeq) homeOptionsLoading.value = false
   }
 }
 
@@ -384,6 +414,9 @@ const formState = reactive({
   is_active: true,
   home_page: '',
 })
+
+// 没选角色前首页不可挑：避免先选一个越界首页、再选角色又被清掉的来回
+const canPickHomePage = computed(() => editingSuperuser.value || formState.roles.length > 0)
 
 watch(() => formState.roles, (val) => {
   loadMenuOptions(val)
@@ -450,6 +483,9 @@ const loadData = async () => {
       search: searchForm.search,
       is_active: searchForm.is_active,
       role: searchForm.role,
+      online: searchForm.online,
+      last_login_after: searchForm.loginRange?.[0]?.toISOString(),
+      last_login_before: searchForm.loginRange?.[1]?.toISOString(),
     })
     tableData.value = res.results
     pagination.total = res.count
@@ -482,6 +518,8 @@ const resetSearch = () => {
   searchForm.search = ''
   searchForm.is_active = undefined
   searchForm.role = undefined
+  searchForm.online = undefined
+  searchForm.loginRange = undefined
   handleSearch()
 }
 
@@ -676,11 +714,11 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-/* 操作列自适应：不换行、不被列宽截断，宽度由按钮内容决定 */
+/* 操作列按钮横排；列被压窄时允许换行，不往邻列溢出 */
 .action-cell {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
-  white-space: nowrap;
 }
 </style>

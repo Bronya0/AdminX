@@ -22,8 +22,8 @@ func NewRoleService(db *gorm.DB, roleRepo *repository.RoleRepo) *RoleService {
 	return &RoleService{db: db, roleRepo: roleRepo}
 }
 
-func (s *RoleService) List(offset, limit int, search string) ([]model.Role, int64, error) {
-	return s.roleRepo.List(offset, limit, search)
+func (s *RoleService) List(offset, limit int, f repository.RoleListFilter) ([]model.Role, int64, error) {
+	return s.roleRepo.List(offset, limit, f)
 }
 
 // AccessibleMenus 查询一组角色（接受角色 ID 或名称混传）可访问的活跃菜单。

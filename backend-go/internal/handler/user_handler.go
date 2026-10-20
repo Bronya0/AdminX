@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -9,6 +10,7 @@ import (
 	"adminx/pkg/response"
 
 	"adminx/internal/model"
+	"adminx/internal/repository"
 	"adminx/internal/service"
 )
 
@@ -26,18 +28,36 @@ func NewUserHandler(svc *service.UserService, auditSvc *service.AuditService, lo
 // List GET /accounts/users/
 func (h *UserHandler) List(c *gin.Context) {
 	p := pagination.Parse(c)
-	var isActive *bool
+	filter := repository.UserListFilter{
+		Search: c.Query("search"),
+		Role:   c.Query("role"),
+	}
 	if v := c.Query("is_active"); v == "true" {
 		t := true
-		isActive = &t
+		filter.IsActive = &t
 	} else if v == "false" {
-		f := false
-		isActive = &f
+		fv := false
+		filter.IsActive = &fv
 	}
-	search := c.Query("search")
-	role := c.Query("role")
+	if v := c.Query("online"); v == "true" {
+		t := true
+		filter.Online = &t
+	} else if v == "false" {
+		fv := false
+		filter.Online = &fv
+	}
+	if v := c.Query("last_login_after"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.LastLoginAfter = &t
+		}
+	}
+	if v := c.Query("last_login_before"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.LastLoginBefore = &t
+		}
+	}
 
-	users, count, err := h.svc.List(p.Offset(), p.Size, search, role, isActive)
+	users, count, err := h.svc.List(p.Offset(), p.Size, filter)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

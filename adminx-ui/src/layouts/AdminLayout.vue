@@ -154,7 +154,8 @@ const canConfigCenter = computed(() => {
   return !code || userStore.hasPermission(String(code))
 })
 
-const selectedKeys = ref<string[]>([])
+// 选中项直接由路由派生：用 ref + watch 更新会晚一帧，切菜单时旧项会先闪一下
+const selectedKeys = computed<string[]>(() => [route.path])
 const openKeys = ref<string[]>([])
 const username = computed(() => userStore.username || '未登录')
 const userRoles = computed(() => userStore.user?.role_names?.join(', ') || '')
@@ -231,8 +232,6 @@ const currentChildMenus = computed(() => {
 watch(
   () => route.path,
   (path) => {
-    selectedKeys.value = [path]
-
     // 进入通知页时标记跳过下一次布局轮询（通知页自会拉取未读数）
     if (path === '/system/notification') skipUnreadOnce = true
 

@@ -8,6 +8,7 @@ import (
 	"adminx/pkg/pagination"
 	"adminx/pkg/response"
 
+	"adminx/internal/repository"
 	"adminx/internal/service"
 )
 
@@ -25,7 +26,22 @@ func NewRoleHandler(svc *service.RoleService, auditSvc *service.AuditService, lo
 // List GET /accounts/roles/
 func (h *RoleHandler) List(c *gin.Context) {
 	p := pagination.Parse(c)
-	roles, count, err := h.svc.List(p.Offset(), p.Size, c.Query("search"))
+	filter := repository.RoleListFilter{Search: c.Query("search"), MenuCode: c.Query("menu")}
+	if v := c.Query("is_active"); v == "true" {
+		t := true
+		filter.IsActive = &t
+	} else if v == "false" {
+		fv := false
+		filter.IsActive = &fv
+	}
+	if v := c.Query("is_system"); v == "true" {
+		t := true
+		filter.IsSystem = &t
+	} else if v == "false" {
+		fv := false
+		filter.IsSystem = &fv
+	}
+	roles, count, err := h.svc.List(p.Offset(), p.Size, filter)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return

@@ -53,12 +53,16 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// IsOnline 在线判定：最后活动时间在 5 分钟以内。
+// OnlineWindow 在线判定窗口：最后活动时间在这个窗口内即视为在线。
+// 列表的在线/离线筛选复用同一口径，避免筛选结果与行内“在线”标记对不上。
+const OnlineWindow = 5 * time.Minute
+
+// IsOnline 在线判定：最后活动时间在窗口内。
 func (u *User) IsOnline() bool {
 	if u.LastActivity == nil {
 		return false
 	}
-	return u.LastActivity.After(time.Now().Add(-5 * time.Minute))
+	return u.LastActivity.After(time.Now().Add(-OnlineWindow))
 }
 
 // ── Role ──
