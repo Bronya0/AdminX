@@ -38,7 +38,7 @@ type JobLog struct {
 	JobID      string     `gorm:"type:uuid;not null;index" json:"job_id"`
 	Status     string     `gorm:"size:20;not null;default:'running'" json:"status"` // running/success/failed
 	Result     string     `gorm:"type:text;not null;default:''" json:"result"`
-	StartedAt  *time.Time `json:"started_at"`
+	StartedAt  *time.Time `gorm:"index" json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at"`
 }
 

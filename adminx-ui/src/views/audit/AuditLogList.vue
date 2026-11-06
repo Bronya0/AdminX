@@ -89,7 +89,11 @@ const tableData = ref<AuditLog[]>([])
 const loading = ref(false)
 const pagination = ref({ current: 1, pageSize: 10, total: 0 })
 
+// 请求序号守卫：快速翻页/改筛选时先发出的慢回包不能把新页数据盖掉（表格与分页高亮错位）
+let dataReqSeq = 0
+
 const fetchData = async () => {
+  const seq = ++dataReqSeq
   loading.value = true
   try {
     const params: any = {
@@ -103,10 +107,11 @@ const fetchData = async () => {
     if (dateRange.value?.[1]) params.end = dateRange.value[1].endOf('day').toISOString()
 
     const res = await auditApi.getAuditLogs(params)
+    if (seq !== dataReqSeq) return
     tableData.value = res.results
     pagination.value.total = res.count
   } finally {
-    loading.value = false
+    if (seq === dataReqSeq) loading.value = false
   }
 }
 

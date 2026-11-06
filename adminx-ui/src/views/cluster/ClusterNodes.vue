@@ -392,6 +392,10 @@ const handleDelete = async (record: ClusterNode) => {
   try {
     await clusterApi.deleteNode(record.id)
     message.success('删除成功')
+    // 删掉当前页最后一行时，按原页码再查会返回空列表（表格空着却显示「共 N 条」）：页码回退一页
+    if (tableData.value.length === 1 && pagination.current > 1) {
+      pagination.current -= 1
+    }
     loadData()
   } catch { /* interceptor handles error */ }
 }

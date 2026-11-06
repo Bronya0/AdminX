@@ -148,20 +148,24 @@ func (s *PolicyService) ChangePassword(userID, oldPassword, newPassword string) 
 		return apperr.ErrInternal
 	}
 
-	// 事务: 历史检查 + 更新密码 + 写历史
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	// 历史密码比对必须在事务外做：bcrypt(cost 12) 单次 200~400ms，history_count 上限 100 时
+	// 事务里最坏要跑 20~40 秒纯 CPU，期间一直攥着一个连接和未提交事务（SQLite 连接池固定 1，
+	// 整站请求全部排队）。比对只读历史数据，不需要和写操作共用一个事务。
+	if historyCount > 0 {
 		var histories []model.PasswordHistory
-		if historyCount > 0 {
-			if err := tx.Where("user_id = ?", userID).Order("created_at DESC").
-				Limit(historyCount).Find(&histories).Error; err != nil {
-				return err
-			}
+		if err := s.db.Where("user_id = ?", userID).Order("created_at DESC").
+			Limit(historyCount).Find(&histories).Error; err != nil {
+			return apperr.Wrap(500, "校验历史密码失败", err)
 		}
 		for _, h := range histories {
 			if crypto.CheckPassword(h.PasswordHash, newPassword) == nil {
 				return apperr.New(400, "新密码不能与最近使用过的密码相同")
 			}
 		}
+	}
+
+	// 事务: 更新密码 + 写历史（历史比对已在事务外完成，事务内只留必须原子完成的写操作）
+	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&user).Update("password", hashed).Error; err != nil {
 			return err
 		}

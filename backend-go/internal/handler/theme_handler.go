@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
@@ -32,7 +33,9 @@ func (h *ThemeHandler) Get(c *gin.Context) {
 }
 
 // Update POST /common/theme/ — 覆盖式保存：请求体里出现的字段覆盖当前值。
+// 用 MaxBytesReader 限流 2MB：GetRawData 无上限，大包会把内存打爆。
 func (h *ThemeHandler) Update(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
 	raw, err := c.GetRawData()
 	if err != nil {
 		response.Fail(c, 400, "读取请求体失败")
@@ -64,6 +67,7 @@ func (h *ThemeHandler) Export(c *gin.Context) {
 
 // Import POST /common/theme/import/ — 导入主题文件，按字段覆盖式合并。
 func (h *ThemeHandler) Import(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
 	raw, err := c.GetRawData()
 	if err != nil {
 		response.Fail(c, 400, "读取请求体失败")

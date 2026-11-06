@@ -74,6 +74,9 @@ func New(deps *Deps) *gin.Engine {
 	r.Use(appmw.RequestID())
 	r.Use(appmw.RequestLog())
 	r.Use(corsMiddleware(deps.Config))
+	// 引擎级请求体上限：登录等无需鉴权的端点也要读 body，没有上限时一个大包就能打爆内存。
+	// 文件上传（流式 MultipartReader，100MB）与 WebSocket 路径在中间件内部按路径白名单跳过。
+	r.Use(appmw.BodyLimit(appmw.MaxBodyBytes))
 
 	base := deps.Config.Server.BasePath
 	api := r.Group(base + "/api/v1")

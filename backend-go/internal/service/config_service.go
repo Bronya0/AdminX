@@ -86,6 +86,20 @@ func (s *ConfigService) List(offset, limit int, search, group string) ([]ConfigD
 	return toConfigDTOs(cfgs), count, nil
 }
 
+// FindByKeys 按 key 批量查询（含停用项），返回 key → DTO（加密值已脱敏）。
+// 供字典导入取审计快照：只需要文件里出现的那些 key，不能为此读整张配置表。
+func (s *ConfigService) FindByKeys(keys []string) (map[string]ConfigDTO, error) {
+	cfgs, err := s.repo.FindByKeys(keys)
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+	out := make(map[string]ConfigDTO, len(cfgs))
+	for i := range cfgs {
+		out[cfgs[i].Key] = ToConfigDTO(&cfgs[i])
+	}
+	return out, nil
+}
+
 // Groups 查询所有分组。
 func (s *ConfigService) Groups() ([]string, error) {
 	return s.repo.Groups()

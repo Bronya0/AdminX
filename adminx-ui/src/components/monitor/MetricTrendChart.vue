@@ -10,11 +10,12 @@
     <a-empty v-if="!hasData" description="暂无历史数据" />
     <div
       v-else
+      ref="stageRef"
       class="chart-stage"
       @mouseleave="hoverIndex = null"
       @mousemove="handleMouseMove"
     >
-      <svg class="chart-svg" :style="{ height: `${height}px` }" :viewBox="`0 0 ${svgWidth} ${height}`" preserveAspectRatio="none">
+      <svg class="chart-svg" :style="{ height: `${height}px` }" :viewBox="`0 0 ${svgWidth} ${height}`">
       <g>
         <line
           v-for="tick in yTicks"
@@ -105,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 interface ChartSeries {
   name: string
@@ -128,7 +129,10 @@ const props = withDefaults(defineProps<{
   maxValue: undefined,
 })
 
-const svgWidth = 720
+// viewBox 宽度必须跟容器实际宽度一致：固定 720 再靠 preserveAspectRatio 拉伸，
+// 文字/圆点会被横向压扁或拉宽。宽度由 chart-stage 实测，图按 1:1 渲染。
+const svgWidth = ref(720)
+const stageRef = ref<HTMLDivElement | null>(null)
 const padding = {
   top: 16,
   right: 20,
@@ -136,7 +140,7 @@ const padding = {
   left: 44,
 }
 
-const chartWidth = computed(() => svgWidth - padding.left - padding.right)
+const chartWidth = computed(() => svgWidth.value - padding.left - padding.right)
 const chartHeight = computed(() => props.height - padding.top - padding.bottom)
 const hoverIndex = ref<number | null>(null)
 
@@ -151,6 +155,31 @@ const resolvedMaxValue = computed(() => {
 
 const hasData = computed(() => props.labels.length > 0
   && props.series.some(item => item.values.some(value => typeof value === 'number')))
+
+let stageObserver: ResizeObserver | null = null
+
+const syncSvgWidth = () => {
+  const width = stageRef.value?.clientWidth ?? 0
+  if (width > 0) svgWidth.value = Math.round(width)
+}
+
+// chart-stage 只在有数据时渲染，所以有数据了再挂观察器；
+// 窗口缩放、侧边栏收缩导致的宽度变化都要跟随
+watch(hasData, async (visible) => {
+  stageObserver?.disconnect()
+  stageObserver = null
+  if (!visible) return
+  await nextTick()
+  syncSvgWidth()
+  if (!stageRef.value || typeof ResizeObserver === 'undefined') return
+  stageObserver = new ResizeObserver(syncSvgWidth)
+  stageObserver.observe(stageRef.value)
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  stageObserver?.disconnect()
+  stageObserver = null
+})
 
 const yTicks = computed(() => {
   const step = resolvedMaxValue.value / 4
@@ -210,9 +239,9 @@ const tooltipStyle = computed(() => {
   if (!hasHover.value) return {}
 
   const x = toX(hoverIndex.value!)
-  const left = Math.min(Math.max(x + 12, padding.left), svgWidth - 180)
+  const left = Math.min(Math.max(x + 12, padding.left), svgWidth.value - 180)
   return {
-    left: `${(left / svgWidth) * 100}%`,
+    left: `${(left / svgWidth.value) * 100}%`,
     top: `${padding.top}px`,
   }
 })
@@ -259,9 +288,9 @@ const handleMouseMove = (event: MouseEvent) => {
 
   const target = event.currentTarget as HTMLDivElement
   const rect = target.getBoundingClientRect()
-  const ratio = svgWidth / rect.width
+  const ratio = svgWidth.value / rect.width
   const x = (event.clientX - rect.left) * ratio
-  const clampedX = Math.min(Math.max(x, padding.left), svgWidth - padding.right)
+  const clampedX = Math.min(Math.max(x, padding.left), svgWidth.value - padding.right)
 
   if (props.labels.length === 1) {
     hoverIndex.value = 0

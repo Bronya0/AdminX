@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -111,14 +112,56 @@ func loadAuthUser(c *gin.Context, db *gorm.DB, claims *jwt.Claims) (*model.User,
 	return &user, 0, ""
 }
 
+// activityDebounce last_activity 写库的最小间隔。
+const activityDebounce = 60 * time.Second
+
+// activityWrote 进程内记录「上次已发起写库」的时间：并发请求读到同一份旧
+// last_activity 时会各自通过库内防抖、各起一个 goroutine UPDATE 同一行，
+// 这里按 user_id 去重，60s 内只放一个过去。
+var (
+	activityMu    sync.Mutex
+	activityWrote = make(map[string]time.Time)
+	// activitySwept 上次真正清扫 activityWrote 的时间（见 claimActivityWrite 的节流）。
+	activitySwept time.Time
+)
+
+// activitySweepInterval 清扫 map 的最小间隔。活跃用户接近 1 万且条目都很新时，
+// 过期项清不掉，逐请求全表遍历会退化成每请求一次 O(n) 持锁扫描，因此加节流。
+const activitySweepInterval = 10 * time.Second
+
+// claimActivityWrite 抢占该用户本轮的写库资格（进程内 60s 去重）。
+func claimActivityWrite(userID string, now time.Time) bool {
+	activityMu.Lock()
+	defer activityMu.Unlock()
+	if last, ok := activityWrote[userID]; ok && now.Sub(last) < activityDebounce {
+		return false
+	}
+	// 防 map 无限增长：条目过多时清掉已过期的。清扫结果是“清不掉”时也不能每请求都重扫，
+	// 所以最多每 activitySweepInterval 真正遍历一次（定期清扫仍然成立，map 不会无限增长）。
+	if len(activityWrote) > 10000 && now.Sub(activitySwept) >= activitySweepInterval {
+		activitySwept = now
+		for id, at := range activityWrote {
+			if now.Sub(at) >= activityDebounce {
+				delete(activityWrote, id)
+			}
+		}
+	}
+	activityWrote[userID] = now
+	return true
+}
+
 // updateActivity 更新用户最后活动时间（60s 防抖）。
 func updateActivity(c *gin.Context, db *gorm.DB, userID string, lastActivity *time.Time) {
 	now := time.Now()
-	if lastActivity != nil && now.Sub(*lastActivity) < 60*time.Second {
+	if lastActivity != nil && now.Sub(*lastActivity) < activityDebounce {
 		return // 60s 内不重复写
 	}
 	// 解析 UUID 校验合法性，避免脏数据
 	if _, err := uuid.Parse(userID); err != nil {
+		return
+	}
+	// 库内值可能是旧的（上次更新还没落盘），再用进程内记录挡一次并发重复写
+	if !claimActivityWrite(userID, now) {
 		return
 	}
 	// 异步更新，不阻塞请求；使用独立 context（请求 context 在返回后即取消）

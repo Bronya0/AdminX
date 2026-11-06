@@ -73,10 +73,15 @@ func (r *ClusterRepo) DeleteNode(id string) error {
 
 // ── ServiceComponent ──
 
-func (r *ClusterRepo) ListComponents(offset, limit int) ([]model.ServiceComponent, int64, error) {
+// ListComponents 组件列表（支持 search 过滤：name / app_label 模糊匹配）。
+func (r *ClusterRepo) ListComponents(offset, limit int, search string) ([]model.ServiceComponent, int64, error) {
 	var items []model.ServiceComponent
 	var count int64
 	q := r.db.Model(&model.ServiceComponent{})
+	if search != "" {
+		like := "%" + EscapeLike(search) + "%"
+		q = q.Where("name LIKE ? ESCAPE '\\' OR app_label LIKE ? ESCAPE '\\'", like, like)
+	}
 	if err := q.Count(&count).Error; err != nil {
 		return nil, 0, err
 	}

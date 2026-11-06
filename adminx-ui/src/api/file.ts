@@ -2,6 +2,12 @@ import { request } from '@/utils/request'
 import { downloadBlob } from '@/utils/download'
 import type { FileRecord, PaginatedResponse } from '@/types'
 
+// 全局默认超时 30s（utils/request.ts）对整包上传/下载的大文件不够用：
+// 后端上限 100MB，30s 传完需要 >3.3MB/s，超时后拦截器提示“网络错误”，用户会误以为断网。
+// 按每 MB 给 20s、最少 60s 折算（100MB → 2000s），既有上限也不会永久挂起。
+const transferTimeout = (size?: number): number =>
+  Math.max(60000, Math.ceil((size || 0) / 1024 / 1024) * 20000)
+
 // 文件中心 API
 export const fileApi = {
   list: (params?: { page?: number; size?: number }): Promise<PaginatedResponse<FileRecord>> =>
@@ -13,6 +19,8 @@ export const fileApi = {
     form.append('file', file)
     return request.post('/files/upload/', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // 按实际体积换算超时（入参就是 File，能拿到 size）
+      timeout: transferTimeout(file.size),
     })
   },
 
@@ -22,6 +30,8 @@ export const fileApi = {
   download: async (record: FileRecord): Promise<void> => {
     const blob = await request.get<Blob>(`/files/records/${record.id}/download/`, {
       responseType: 'blob',
+      // 下载大文件同样会超过 30s 默认值
+      timeout: transferTimeout(record.size),
     }) as unknown as Blob
     if (blob?.type?.includes('json')) {
       try {

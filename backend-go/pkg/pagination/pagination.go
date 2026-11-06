@@ -1,6 +1,6 @@
 // Package pagination 实现分页逻辑。
 //
-// 参数: ?page=1&size=10（size 上限 200）。
+// 参数: ?page=1&size=10（size 上限 200，page 上限 10000）。
 // 返回结构由 pkg/response.PaginatedData 定义。
 package pagination
 
@@ -18,6 +18,10 @@ const (
 	DefaultPage = 1
 	DefaultSize = 10
 	MaxSize     = 200
+	// MaxPage 页码硬上限：超大 page 会算出天文数字的 OFFSET，PG 必须扫到该偏移
+	// （近似全表扫描），SQLite 模式连接池固定 1 时还会独占唯一连接。
+	// 超限只归一化到上限值，不报错，避免破坏现有调用方。
+	MaxPage = 10000
 )
 
 // Params 从 query string 解析分页参数。
@@ -34,6 +38,9 @@ func Parse(c *gin.Context) Params {
 	}
 	if v := c.Query("page"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > MaxPage {
+				n = MaxPage
+			}
 			p.Page = n
 		}
 	}

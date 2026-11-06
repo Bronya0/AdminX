@@ -21,11 +21,23 @@ import (
 
 var _ = time.Second // 保留 time 引用（executeShell 超时用到）
 
+const (
+	// maxConcurrentRuns 手动触发（run_once）同时执行的任务数上限。
+	maxConcurrentRuns = 4
+	// runningStaleAfter 超过这个时长的 running 日志视为陈旧（进程被 KILL/崩溃留下的），
+	// 不再挡住手动执行：否则一条残留日志会让该任务永远无法手动触发。
+	runningStaleAfter = time.Hour
+)
+
 // JobService 定时任务业务逻辑。
 type JobService struct {
 	db   *gorm.DB
 	repo *repository.JobRepo
 	log  *slog.Logger
+
+	// runSem 手动执行的并发闸门（带缓冲 channel 当信号量，做法同通知外发的 dispatchSem）：
+	// 任务能长跑，没有闸门时连续点“执行”会按请求次数线性堆 goroutine + shell 子进程。
+	runSem chan struct{}
 
 	// onJobsChanged 任务增删改后的回调（main.go 注入）：
 	// 标记 reload_pending（跨进程通知调度器）+ 触发本进程内调度器立即重载。
@@ -33,7 +45,12 @@ type JobService struct {
 }
 
 func NewJobService(db *gorm.DB, repo *repository.JobRepo, logger *slog.Logger) *JobService {
-	return &JobService{db: db, repo: repo, log: logger}
+	return &JobService{
+		db:     db,
+		repo:   repo,
+		log:    logger,
+		runSem: make(chan struct{}, maxConcurrentRuns),
+	}
 }
 
 // SetOnJobsChanged 注入任务变更回调（幂等，可重复调用覆盖）。
@@ -196,6 +213,10 @@ func (s *JobService) Delete(id string) error {
 
 // RunOnce 手动触发一次任务执行：先建 running log，异步执行，立即返回 logID。
 // 调用方按返回的 logID 轮询 logs 表拿执行结果（避免 HTTP 长时间阻塞）。
+//
+// 两道闸门（调度器路径不经过这里，它自带 gocron 任务级锁）：
+//  1. 同一任务禁止重入：已有 running 日志说明上一次还没跑完，同步类任务两份并发会互相踩数据；
+//  2. 全局并发上限 maxConcurrentRuns：抢不到名额直接返回 429，不静默丢弃也不无限堆 goroutine。
 func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 	job, err := s.repo.FindByID(id)
 	if err != nil {
@@ -204,6 +225,21 @@ func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 		}
 		return "", apperr.ErrInternal
 	}
+	// 重入检查必须在写新 running 日志之前，否则自己刚写的日志会把自己挡掉。
+	running, err := s.repo.HasRunningLog(job.ID, runningStaleAfter)
+	if err != nil {
+		return "", apperr.ErrInternal
+	}
+	if running {
+		return "", apperr.New(409, "该任务正在执行中")
+	}
+	// 名额非阻塞获取：满了直接报错让调用方稍后重试（不排队，也就不占连接）。
+	select {
+	case s.runSem <- struct{}{}:
+	default:
+		return "", apperr.New(429, "当前执行任务过多，请稍后重试")
+	}
+
 	now := time.Now()
 	logEntry := &model.JobLog{
 		JobID:     job.ID,
@@ -211,10 +247,13 @@ func (s *JobService) RunOnce(ctx context.Context, id string) (string, error) {
 		StartedAt: &now,
 	}
 	if err := s.repo.CreateLog(logEntry); err != nil {
+		<-s.runSem // 还没起 goroutine，名额要在这里还
 		return "", apperr.ErrInternal
 	}
 	logID := logEntry.ID
 	go func() {
+		// panic 也要还名额（executeJob 内部已 recover，这里是双保险）
+		defer func() { <-s.runSem }()
 		result, execErr := s.executeJob(context.Background(), job)
 		finished := time.Now()
 		logEntry.FinishedAt = &finished
@@ -376,12 +415,42 @@ func (s *JobService) executeShell(ctx context.Context, job *model.ScheduleJob) (
 		defer cancel()
 	}
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
-	out, err := cmd.CombinedOutput()
+	// 输出用带上限的 buffer 收集：CombinedOutput 会把子进程的全部输出读进内存，
+	// 长跑任务（tail/cat 大文件、刷屏日志）可能把内存打爆；这里只保留前
+	// maxShellOutputBytes，其余照样读走丢弃——不 drain 会让子进程因管道写满卡到超时。
+	out := &cappedBuffer{limit: maxShellOutputBytes}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	err = cmd.Run()
 	if err != nil {
-		return string(out), fmt.Errorf("命令退出: %w", err)
+		return out.String(), fmt.Errorf("命令退出: %w", err)
 	}
-	return string(out), nil
+	return out.String(), nil
 }
+
+// maxShellOutputBytes shell 任务输出保留上限（结果日志只留前 500 字，这里留足余量）。
+const maxShellOutputBytes = 8 * 1024
+
+// cappedBuffer 只保留前 limit 字节的 io.Writer，超出部分直接丢弃但不中断写入。
+// 不使用锁：os/exec 对「Stdout 与 Stderr 是同一个可比较 writer」只在单个 goroutine 里调用 Write。
+type cappedBuffer struct {
+	buf   []byte
+	limit int
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if remain := b.limit - len(b.buf); remain > 0 {
+		if len(p) > remain {
+			b.buf = append(b.buf, p[:remain]...)
+		} else {
+			b.buf = append(b.buf, p...)
+		}
+	}
+	// 始终返回全部字节数：丢掉的输出也要算作「已消费」，否则 exec 会当成写失败。
+	return len(p), nil
+}
+
+func (b *cappedBuffer) String() string { return string(b.buf) }
 
 // splitCommand 按空格分词，支持单/双引号包裹含空格的参数（shlex 最小子集）。
 // 引号必须成对，否则报错。

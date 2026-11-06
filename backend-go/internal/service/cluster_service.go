@@ -168,8 +168,9 @@ func (s *ClusterService) DeleteNode(id string) error {
 
 // ── 业务组件注册/心跳 ──
 
-func (s *ClusterService) ListComponents(offset, limit int) ([]model.ServiceComponent, int64, error) {
-	return s.repo.ListComponents(offset, limit)
+// ListComponents 组件列表（search 为空时行为与不带过滤一致）。
+func (s *ClusterService) ListComponents(offset, limit int, search string) ([]model.ServiceComponent, int64, error) {
+	return s.repo.ListComponents(offset, limit, search)
 }
 
 // GetComponent 按 ID 查询业务组件。

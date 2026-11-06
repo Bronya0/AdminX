@@ -121,26 +121,36 @@ const rules = computed(() => ({
 
 // 获取验证码（返回是否成功：加载失败时登录页要给出明确提示，
 // 否则用户只看到一个空的验证码输入框）
-const fetchCaptcha = async (): Promise<boolean> => {
-  try {
-    const res = await captchaApi.getCaptcha()
-    // 后端未返回图片（版本不匹配等）按失败处理：不校验的话页面只会空白，
-    // 看不出是接口出错还是渲染问题
-    if (!res.image) {
-      console.error('验证码接口未返回图片（后端版本可能不匹配）', res)
+// 连点守卫：验证码接口会被反复触发（点图片刷新、登录失败后自动重取），复用在途请求，
+// 否则先发的慢回包会用旧 captchaId 覆盖新图 → 用户照着新图输入必然报“验证码错误”
+let captchaPending: Promise<boolean> | null = null
+const fetchCaptcha = (): Promise<boolean> => {
+  if (captchaPending) return captchaPending
+  captchaPending = (async (): Promise<boolean> => {
+    try {
+      const res = await captchaApi.getCaptcha()
+      // 后端未返回图片（版本不匹配等）按失败处理：不校验的话页面只会空白，
+      // 看不出是接口出错还是渲染问题
+      if (!res.image) {
+        console.error('验证码接口未返回图片（后端版本可能不匹配）', res)
+        return false
+      }
+      captchaId.value = res.captchaId
+      captchaImage.value = res.image
+      return true
+    } catch (e) {
+      console.error('获取验证码失败', e)
       return false
     }
-    captchaId.value = res.captchaId
-    captchaImage.value = res.image
-    return true
-  } catch (e) {
-    console.error('获取验证码失败', e)
-    return false
-  }
+  })().finally(() => { captchaPending = null })
+  return captchaPending
 }
 
 // 提交登录
 const handleSubmit = async () => {
+  // 在输入框按回车走原生 form submit，绕过按钮的 loading 禁用；第二次提交会复用
+  // 已被消费的一次性验证码，必然失败并闪一次“验证码错误”。必须在置 loading 之前拦住。
+  if (loading.value) return
   loading.value = true
   loginError.value = ''
   try {

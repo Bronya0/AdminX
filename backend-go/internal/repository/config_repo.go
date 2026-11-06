@@ -57,6 +57,17 @@ func (r *ConfigRepo) FindByGroup(group string) ([]model.Config, error) {
 	return cfgs, err
 }
 
+// FindByKeys 按 key 批量查询（含停用项），供字典导入取导入前后的旧值/新值快照。
+// 必须走 IN 查询而不是整表 List：配置表本身没有上限，为比对几个 key 把整表读进内存不值当。
+func (r *ConfigRepo) FindByKeys(keys []string) ([]model.Config, error) {
+	cfgs := make([]model.Config, 0, len(keys))
+	if len(keys) == 0 {
+		return cfgs, nil
+	}
+	err := r.db.Where("key IN ?", keys).Find(&cfgs).Error
+	return cfgs, err
+}
+
 // FindPlain 查询全部非加密配置（含停用项），按 key 排序，供导出使用。
 func (r *ConfigRepo) FindPlain() ([]model.Config, error) {
 	var cfgs []model.Config

@@ -275,21 +275,28 @@ const loadRealtime = async () => {
   Object.assign(netstat, netstatRes)
 }
 
+// 请求序号守卫：快速切换时间范围时，先发出的慢回包不能覆盖新范围的数据，
+// 也不能提前把 historyLoading 关掉
+let historyReqSeq = 0
+
 const loadHistory = async (force = false) => {
   if (!force && Date.now() - lastHistoryLoadedAt.value < HISTORY_REFRESH_MS) {
     return
   }
 
+  const seq = ++historyReqSeq
   historyLoading.value = true
   try {
-    resourceHistory.value = await monitorApi.getSystemResourceHistory({ range: historyRange.value })
+    const history = await monitorApi.getSystemResourceHistory({ range: historyRange.value })
+    if (seq !== historyReqSeq) return
+    resourceHistory.value = history
     lastHistoryLoadedAt.value = Date.now()
   } catch {
     // 接口失败时也更新时间戳，避免 5s 自动刷新每轮都重试失败请求（错误退避）。
     // 全局 axios 拦截器已展示错误提示，这里不再重复弹窗。
-    lastHistoryLoadedAt.value = Date.now()
+    if (seq === historyReqSeq) lastHistoryLoadedAt.value = Date.now()
   } finally {
-    historyLoading.value = false
+    if (seq === historyReqSeq) historyLoading.value = false
   }
 }
 

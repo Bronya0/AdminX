@@ -209,6 +209,8 @@ func (s *MonitorService) History(rangeStr, intervalStr string) (*History, error)
 	if err != nil {
 		return nil, err
 	}
+	// 点数超上限时放大 interval：仍等距覆盖全窗口（不能截断，前端按索引等距画图）
+	interval, step = clampHistoryPoints(interval, step, window)
 
 	now := time.Now()
 	from := now.Add(-window)
@@ -365,6 +367,34 @@ func parseHistoryInterval(intervalStr string, window time.Duration) (string, tim
 	default:
 		return "1h", time.Hour, nil
 	}
+}
+
+// maxHistoryPoints 单次历史查询返回的点数上限（7d + 1m = 10080 点，远超图表可读范围）。
+const maxHistoryPoints = 2000
+
+// clampHistoryPoints 请求的 interval 让点数超过上限时，放大到仍能覆盖全窗口的最小合法
+// interval（合法集合与 parseHistoryInterval 一致：1m/5m/15m/1h）。
+func clampHistoryPoints(intervalStr string, step, window time.Duration) (string, time.Duration) {
+	if historyPointCount(step, window) <= maxHistoryPoints {
+		return intervalStr, step
+	}
+	for _, cand := range []struct {
+		name string
+		d    time.Duration
+	}{{"5m", 5 * time.Minute}, {"15m", 15 * time.Minute}, {"1h", time.Hour}} {
+		if cand.d > step && historyPointCount(cand.d, window) <= maxHistoryPoints {
+			return cand.name, cand.d
+		}
+	}
+	return "1h", time.Hour
+}
+
+// historyPointCount 某步长在窗口内会输出多少个桶（与 History 的分桶口径一致）。
+func historyPointCount(step, window time.Duration) int64 {
+	if step <= 0 {
+		return 0
+	}
+	return int64(window/step) + 1
 }
 
 // diskInfos 分区列表（跳过读取失败的分区，按挂载点去重并排序）。

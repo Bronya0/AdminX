@@ -171,32 +171,41 @@ func (h *ConfigHandler) Import(c *gin.Context) {
 		response.Fail(c, 400, "读取请求体失败")
 		return
 	}
-	before, _, err := h.svc.List(0, -1, "", "")
-	if err != nil {
-		response.Error(c, h.logger, err)
-		return
+	// 审计快照只取本次导入涉及的 key：之前用 List(0, -1) 把整张 configs 表读进内存，
+	// 导入文件限了 1000 条，被读的表却没有上限。
+	// key 的规范化与 service 侧一致（TrimSpace），否则旧值比对会漏掉带空白的 key。
+	var imported service.ConfigFile
+	_ = json.Unmarshal(raw, &imported) // 完整格式校验由 ImportFile 统一负责
+	keys := make([]string, 0, len(imported.Items))
+	for _, item := range imported.Items {
+		if key := strings.TrimSpace(item.Key); key != "" {
+			keys = append(keys, key)
+		}
+	}
+	// 超限的文件交给 ImportFile 返回「单次最多导入 N 条」的 400：这里若先去查快照，
+	// keys 会展开成十几万个 IN 占位符（2MB body 够塞），PG/SQLite 直接报参数上限 → 500。
+	// 跳过查询，审计走 snapshot_unavailable 兜底，用户看到的错误提示与原来完全一致。
+	var oldByKey map[string]service.ConfigDTO
+	if len(keys) <= service.MaxConfigImportItems {
+		oldByKey, err = h.svc.FindByKeys(keys)
+		if err != nil {
+			response.Error(c, h.logger, err)
+			return
+		}
 	}
 	result, err := h.svc.ImportFile(c.Request.Context(), raw)
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
 	}
-	var imported service.ConfigFile
-	_ = json.Unmarshal(raw, &imported) // ImportFile 已完整校验格式。
-	oldByKey := make(map[string]service.ConfigDTO, len(before))
-	for _, item := range before {
-		oldByKey[item.Key] = item
-	}
-	after, _, readErr := h.svc.List(0, -1, "", "")
+	// 走到这里说明 ImportFile 已校过条数上限，下面这次查询的 keys 必然在上限内。
+	newByKey, readErr := h.svc.FindByKeys(keys)
 	if readErr != nil {
 		h.logger.Error("配置导入后审计快照读取失败", "error", readErr)
+		newByKey = nil
 	}
-	newByKey := make(map[string]service.ConfigDTO)
-	if after != nil {
-		for _, item := range after {
-			newByKey[item.Key] = item
-		}
-	}
+	// 审计逐条攒起来，最后一次性批量写入：一次导入最多 1000 条，逐条 INSERT 会拖成 1000 次往返。
+	records := make([]service.AuditRecord, 0, len(imported.Items))
 	for _, item := range imported.Items {
 		key := strings.TrimSpace(item.Key)
 		var old interface{}
@@ -214,7 +223,12 @@ func (h *ConfigHandler) Import(c *gin.Context) {
 		if readErr != nil || !exists {
 			updated = gin.H{"snapshot_unavailable": true, "key": key}
 		}
-		auditOperation(c, h.audit, action, "Config", objectID, key, "导入配置", old, updated)
+		records = append(records, buildAuditRecord(c, action, "Config", objectID, key, "导入配置", old, updated))
+	}
+	if h.audit != nil {
+		if err := h.audit.RecordMany(records); err != nil {
+			h.logger.Error("配置导入审计批量写入失败", "count", len(records), "error", err)
+		}
 	}
 	response.OK(c, result)
 }

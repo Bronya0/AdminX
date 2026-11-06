@@ -20,7 +20,6 @@ import (
 
 	"adminx/pkg/response"
 
-	"adminx/internal/model"
 	"adminx/internal/rbacrule"
 )
 
@@ -91,45 +90,33 @@ func checkPermission(db *gorm.DB, userID, method, requestPath string) (bool, err
 }
 
 // loadUserRules 从库加载用户的 allowed_paths 规则原文。
+//
+// 一条 JOIN 直接取规则原文（此前是“先取菜单 ID、再取整行菜单”两次查询，
+// 每次都把菜单整行读回内存）。菜单是权限单元：同一菜单被多个角色关联时
+// 只算一份（DISTINCT），规则集合与顺序无关，不影响匹配结果。
+// 菜单 path 为空时其 allowed_paths 不参与授权，这个条件必须保留在 WHERE 里。
 func loadUserRules(db *gorm.DB, userID string) ([]string, error) {
-	// 1. 取用户角色关联的活跃菜单 ID
-	// 菜单是权限单元，必须按 ID 取规则：path 只是前端路由地址、没有唯一约束，
-	// 用 path 反查会把同 path 菜单的 allowed_paths 一并授予。
-	var menuIDs []struct {
-		ID int64
+	var rows []struct {
+		AllowedPaths []byte
 	}
-	err := db.Model(&model.Menu{}).
-		Distinct("menus.id").
-		Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
-		Joins("JOIN user_roles ON user_roles.role_id = role_menus.role_id").
-		Joins("JOIN roles ON roles.id = role_menus.role_id").
-		Where("user_roles.user_id = ? AND menus.is_active = ? AND roles.is_active = ? AND menus.path != ''", userID, true, true).
-		Find(&menuIDs).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(menuIDs) == 0 {
-		return []string{}, nil
-	}
-
-	ids := make([]int64, 0, len(menuIDs))
-	for _, m := range menuIDs {
-		ids = append(ids, m.ID)
-	}
-
-	// 2. 查这些菜单的 allowed_paths（非空）
-	var menus []model.Menu
-	err = db.Where("is_active = ? AND id IN ? AND allowed_paths IS NOT NULL AND allowed_paths != '[]' AND allowed_paths != ''",
-		true, ids).Find(&menus).Error
+	err := db.Raw(`SELECT DISTINCT menus.allowed_paths AS allowed_paths
+		FROM menus
+		JOIN role_menus ON role_menus.menu_id = menus.id
+		JOIN user_roles ON user_roles.role_id = role_menus.role_id
+		JOIN roles ON roles.id = role_menus.role_id
+		WHERE user_roles.user_id = ? AND menus.is_active = ? AND roles.is_active = ?
+			AND menus.path != ''
+			AND menus.allowed_paths IS NOT NULL AND menus.allowed_paths != '[]'`,
+		userID, true, true).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. 收集规则原文（匹配由调用方逐条做）
+	// 收集规则原文（匹配由调用方逐条做）；空数组/非法 JSON 直接跳过（与旧实现一致）。
 	rules := make([]string, 0)
-	for _, menu := range menus {
+	for _, row := range rows {
 		var rs []string
-		if err := json.Unmarshal(menu.AllowedPaths, &rs); err != nil {
+		if err := json.Unmarshal(row.AllowedPaths, &rs); err != nil {
 			continue
 		}
 		rules = append(rules, rs...)

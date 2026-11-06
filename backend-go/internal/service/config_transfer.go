@@ -27,6 +27,10 @@ const (
 	maxConfigImportItems = 1000
 )
 
+// MaxConfigImportItems 把同一个上限导出给 handler：取审计快照前必须先按它判断，
+// 否则超限文件的 key 会全部展开成 IN 占位符，撞库参数上限后把本该是 400 的报错变成 500。
+const MaxConfigImportItems = maxConfigImportItems
+
 // ConfigFile 字典配置导入导出文件。
 type ConfigFile struct {
 	Kind       string           `json:"kind"`

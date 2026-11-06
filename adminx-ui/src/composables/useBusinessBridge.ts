@@ -102,7 +102,13 @@ export function useBusinessBridge(peers: () => BusinessPeer[], hooks: BridgeHook
       return
     }
     if (data?.type !== 'adminx:request' || data.version !== 1 || typeof data.id !== 'string' || data.id.length > 100 || typeof data.method !== 'string') return
-    if (pending.has(data.id) || pending.size >= 20) return
+    // 同一 id 已在途：静默跳过（此时回错误会打乱那个正常请求的结果）
+    if (pending.has(data.id)) return
+    if (pending.size >= 20) {
+      // 名额已满也必须回一条错误：不回响应的话业务页的 Promise 永远不 settle，界面永久转圈
+      send(peer, { type: 'adminx:response', id: data.id, error: '平台繁忙，请稍后重试' })
+      return
+    }
     pending.add(data.id)
     try {
       if (!store.token) throw new Error('会话已结束')

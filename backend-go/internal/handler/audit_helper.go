@@ -24,6 +24,13 @@ func auditOperation(c *gin.Context, svc *service.AuditService, action, modelName
 	if svc == nil {
 		return
 	}
+	if err := svc.RecordOne(buildAuditRecord(c, action, modelName, objectID, objectRepr, operation, oldObj, newObj)); err != nil {
+		slog.Default().Error("操作审计写入失败", "action", action, "model", modelName, "object_id", objectID, "error", err)
+	}
+}
+
+// buildAuditRecord 构造一条审计记录（不落库）：批量场景先攒成切片再一次性写入。
+func buildAuditRecord(c *gin.Context, action, modelName, objectID, objectRepr, operation string, oldObj, newObj interface{}) service.AuditRecord {
 	oldJSON, newJSON := marshalAudit(oldObj), marshalAudit(newObj)
 	parts := []string{c.Request.Method + " " + c.FullPath()}
 	if operation != "" {
@@ -32,7 +39,6 @@ func auditOperation(c *gin.Context, svc *service.AuditService, action, modelName
 	if diff := diffSummary(oldJSON, newJSON); diff != "" {
 		parts = append(parts, diff)
 	}
-	summary := strings.Join(parts, " | ")
 	operator := c.GetString("username")
 	if operator == "" {
 		operator = c.GetString("user_id")
@@ -40,8 +46,16 @@ func auditOperation(c *gin.Context, svc *service.AuditService, action, modelName
 			operator = "system"
 		}
 	}
-	if err := svc.Record(action, modelName, objectID, objectRepr, operator, c.ClientIP(), oldJSON, newJSON, summary); err != nil {
-		slog.Default().Error("操作审计写入失败", "action", action, "model", modelName, "object_id", objectID, "error", err)
+	return service.AuditRecord{
+		Action:     action,
+		ModelName:  modelName,
+		ObjectID:   objectID,
+		ObjectRepr: objectRepr,
+		Operator:   operator,
+		OperatorIP: c.ClientIP(),
+		OldValues:  oldJSON,
+		NewValues:  newJSON,
+		Diff:       strings.Join(parts, " | "),
 	}
 }
 

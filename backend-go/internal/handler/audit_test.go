@@ -165,6 +165,44 @@ func TestConfigImportAuditsOnlyAffectedObjects(t *testing.T) {
 	}
 }
 
+// 超限导入必须停在原来的 400「单次最多导入 N 条」：handler 若在 ImportFile 之前就按 keys 查审计快照，
+// 十几万个 IN 占位符会撞库参数上限，把 400 变成 500；同时整批一条都不能写。
+func TestConfigImportOverLimitKeepsOriginal400(t *testing.T) {
+	db := auditTestDB(t)
+	svc := service.NewConfigService(db, repository.NewConfigRepo(db), nil, nil)
+	h := NewConfigHandler(svc, service.NewAuditService(repository.NewAuditRepo(db)), slog.Default())
+	r := auditTestRouter()
+	r.POST("/config/import/", h.Import)
+
+	items := make([]string, 0, service.MaxConfigImportItems+1)
+	for i := 0; i <= service.MaxConfigImportItems; i++ {
+		items = append(items, fmt.Sprintf(`{"key":"bulk.key_%d","value":"v","value_type":"string","group":"default"}`, i))
+	}
+	body := `{"kind":"adminx.config","version":1,"items":[` + strings.Join(items, ",") + `]}`
+	req := httptest.NewRequest("POST", "/config/import/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var env struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("单次最多导入 %d 条配置", service.MaxConfigImportItems)
+	if env.Code != 400 || env.Msg != want {
+		t.Fatalf("want 400 %q, got %s", want, w.Body.String())
+	}
+	var configs int64
+	if err := db.Model(&model.Config{}).Count(&configs).Error; err != nil {
+		t.Fatal(err)
+	}
+	if audits := len(auditLogs(t, db)); configs != 0 || audits != 0 {
+		t.Fatalf("over-limit import wrote data: configs=%d audits=%d", configs, audits)
+	}
+}
+
 func TestComponentCommandAndUnregisterAudits(t *testing.T) {
 	db := auditTestDB(t)
 	svc := service.NewClusterService(db, repository.NewClusterRepo(db))

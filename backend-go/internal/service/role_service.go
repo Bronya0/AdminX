@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -26,9 +27,25 @@ func (s *RoleService) List(offset, limit int, f repository.RoleListFilter) ([]mo
 	return s.roleRepo.List(offset, limit, f)
 }
 
+// maxRoleRefs 单次请求可携带的角色引用（ID 或名称）数量上限。
+// 角色列表会被拆成 ids/names 直接进 Where ... IN ?：不设上限时几万个元素会拼出
+// 超长 SQL（PG 参数上限 65535，超了直接 500），并带来 O(n) 的全量分配。
+const maxRoleRefs = 200
+
+// checkRoleRefs 校验角色引用数组长度（各接受 roles 数组的 service 入口共用这一处）。
+func checkRoleRefs(roleRefs []string) error {
+	if len(roleRefs) > maxRoleRefs {
+		return apperr.New(400, fmt.Sprintf("角色数量不能超过 %d 个", maxRoleRefs))
+	}
+	return nil
+}
+
 // AccessibleMenus 查询一组角色（接受角色 ID 或名称混传）可访问的活跃菜单。
 // 供用户管理页的 home_page 过滤等场景使用。
 func (s *RoleService) AccessibleMenus(roleRefs []string) ([]model.Menu, error) {
+	if err := checkRoleRefs(roleRefs); err != nil {
+		return nil, err
+	}
 	if len(roleRefs) == 0 {
 		return []model.Menu{}, nil
 	}

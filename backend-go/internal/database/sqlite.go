@@ -131,6 +131,10 @@ func SQLiteStatements() []string {
 			started_at DATETIME,
 			finished_at DATETIME
 		)`,
+		// job_logs 只增不减：列表按 started_at 排序、按 job_id 过滤，没索引就每次全表扫。
+		// 索引名与模型 index tag 在 postgres 下 AutoMigrate 生成的保持一致。
+		`CREATE INDEX IF NOT EXISTS idx_job_logs_job_id ON job_logs (job_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_job_logs_started_at ON job_logs (started_at)`,
 		`CREATE TABLE IF NOT EXISTS audit_logs (
 			id TEXT PRIMARY KEY,
 			action TEXT NOT NULL,
@@ -250,6 +254,9 @@ func SQLiteStatements() []string {
 			disk_write_m_bps REAL NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
+		// monitor_samples 只增不减：历史查询顺手按 created_at 清理 7 天前的行，没索引就每次全表扫。
+		// 索引名与模型 index tag 在 postgres 下 AutoMigrate 生成的保持一致。
+		`CREATE INDEX IF NOT EXISTS idx_monitor_samples_created_at ON monitor_samples (created_at)`,
 		`CREATE TABLE IF NOT EXISTS captcha_codes (
 			id TEXT PRIMARY KEY,
 			answer TEXT NOT NULL,

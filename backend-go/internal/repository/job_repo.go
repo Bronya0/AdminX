@@ -64,6 +64,20 @@ func (r *JobRepo) UpdateLog(l *model.JobLog) error {
 	return r.db.Save(l).Error
 }
 
+// HasRunningLog 该任务在窗口内是否已有 running 状态的日志（手动执行防重入用）。
+// 窗口外的 running 是进程崩溃/被 KILL 留下的陈迹，不忽略就会永久挡住该任务的手动执行。
+func (r *JobRepo) HasRunningLog(jobID string, within time.Duration) (bool, error) {
+	var count int64
+	q := r.db.Model(&model.JobLog{}).Where("job_id = ? AND status = ?", jobID, "running")
+	if within > 0 {
+		q = q.Where("started_at >= ?", time.Now().Add(-within))
+	}
+	if err := q.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *JobRepo) ListLogs(offset, limit int, jobID, status string) ([]model.JobLog, int64, error) {
 	var logs []model.JobLog
 	var count int64

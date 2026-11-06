@@ -25,20 +25,27 @@ import (
 	"adminx/internal/repository"
 )
 
+// maxDispatchBatches 同时进行的外发批次上限（每次通知一个批次）。
+const maxDispatchBatches = 8
+
 // NotificationService 通知中心。
 type NotificationService struct {
 	db         *gorm.DB
 	repo       *repository.NotificationRepo
 	log        *slog.Logger
 	httpClient *http.Client
+	// dispatchSem 用带缓冲 channel 当信号量：通知外发是尽力而为，
+	// 堆积时丢掉批次并记 warn，而不是无限起 goroutine 把内存/连接打满。
+	dispatchSem chan struct{}
 }
 
 func NewNotificationService(db *gorm.DB, repo *repository.NotificationRepo, logger *slog.Logger) *NotificationService {
 	return &NotificationService{
-		db:         db,
-		repo:       repo,
-		log:        logger,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		db:          db,
+		repo:        repo,
+		log:         logger,
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
+		dispatchSem: make(chan struct{}, maxDispatchBatches),
 	}
 }
 
@@ -70,7 +77,18 @@ func (s *NotificationService) Create(ctx context.Context, in NotificationCreateI
 	}
 
 	// 异步触发 webhook（信号驱动，独立 goroutine 内已 recover）
-	go s.dispatchWebhooks(context.Background(), n)
+	// 名额非阻塞获取：拿不到就放弃本次外发（通知本身已入库，外发本来就是尽力而为）。
+	select {
+	case s.dispatchSem <- struct{}{}:
+		go func() {
+			defer func() { <-s.dispatchSem }()
+			s.dispatchWebhooks(context.Background(), n)
+		}()
+	default:
+		if s.log != nil {
+			s.log.Warn("webhook 外发并发已满，跳过本次通知", "notification_id", n.ID)
+		}
+	}
 	return n, nil
 }
 

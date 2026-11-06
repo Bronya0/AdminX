@@ -284,17 +284,44 @@ async function loadStats() {
 
 let timer: number | null = null
 
-onMounted(() => {
-  updateClock()
-  loadStats()
+// 定时器统一由 start/stop 管理，避免 visibilitychange 与 onMounted 重复创建 interval
+function startTimer() {
+  if (timer !== null) return
   timer = window.setInterval(() => {
     updateClock()
     loadStats()
   }, 30000)
+}
+
+function stopTimer() {
+  if (timer !== null) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+// 标签页切到后台就没必要每 30s 拉一次聚合数据、重算时钟：隐藏时停表，
+// 重新可见时立刻补一次再继续（loadStats 自带 inflight 去重，不会重复请求）
+const onVisibilityChange = () => {
+  if (document.hidden) {
+    stopTimer()
+    return
+  }
+  updateClock()
+  loadStats()
+  startTimer()
+}
+
+onMounted(() => {
+  updateClock()
+  loadStats()
+  if (!document.hidden) startTimer()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  stopTimer()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 

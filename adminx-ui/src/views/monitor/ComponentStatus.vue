@@ -50,10 +50,10 @@
           </template>
 
           <TableToolbar>
-            <a-tag color="success">在线 {{ bizOnline }}</a-tag>
-            <a-tag color="error">离线 {{ bizOffline }}</a-tag>
+            <a-tag color="success">本页在线 {{ bizOnline }}</a-tag>
+            <a-tag color="error">本页离线 {{ bizOffline }}</a-tag>
             <a-tag v-if="pendingCommandCount > 0" color="warning">
-              待指令 {{ pendingCommandCount }}
+              本页待指令 {{ pendingCommandCount }}
             </a-tag>
             <template #right>
               <a-input-search
@@ -61,7 +61,7 @@
                 placeholder="搜索组件名/标识"
                 allow-clear
                 style="width: 200px"
-                @search="loadBiz"
+                @search="handleBizSearch"
               />
               <a-button size="small" @click="loadBiz" :loading="bizLoading">
                 <template #icon><ReloadOutlined /></template>
@@ -218,6 +218,8 @@ const bizSearch = ref('')
 const bizComponents = ref<ServiceComponent[]>([])
 const bizPagination = reactive({ current: 1, pageSize: 20, total: 0, showSizeChanger: true })
 
+// 列表是服务端分页（每页 20），这三个数只统计当前页，展示文案必须写明「本页」，
+// 否则用户会把单页数字当成全局总数（翻页数字变化会被当成错误）
 const bizOnline = computed(() => bizComponents.value.filter(c => c.status === 'online').length)
 const bizOffline = computed(() => bizComponents.value.filter(c => c.status !== 'online').length)
 // 后端只给原始字段（uninstall_pending / upgrade_version + upgrade_url），
@@ -261,6 +263,12 @@ const loadBiz = async () => {
   } finally {
     bizLoading.value = false
   }
+}
+
+// 搜索必须回到第 1 页：停在第 3 页搜一个只命中 1 条的关键字会得到空表
+const handleBizSearch = () => {
+  bizPagination.current = 1
+  loadBiz()
 }
 
 const handleTableChange = (pag: any) => {
@@ -340,6 +348,10 @@ const handleDelete = (record: ServiceComponent) => {
     onOk: async () => {
       await componentApi.delete(record.id)
       message.success('已删除')
+      // 服务端分页：删掉本页最后一行后必须回退一页，否则停在当前页得到空表
+      if (bizComponents.value.length === 1 && bizPagination.current > 1) {
+        bizPagination.current -= 1
+      }
       loadBiz()
     },
   })

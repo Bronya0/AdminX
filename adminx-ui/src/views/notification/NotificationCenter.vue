@@ -232,6 +232,10 @@ const handleMarkRead = async (item: Notification) => {
   unreadCount.value = Math.max(0, unreadCount.value - 1)
   try {
     await notificationApi.markRead(item.id)
+    // 「只看未读」模式下已读行不该留在列表里：重拉一次；其它模式不额外请求
+    if (unreadOnly.value) {
+      try { await fetchData() } catch { /* 拉取失败保留乐观状态，手动刷新即可 */ }
+    }
   } catch {
     item.is_read = false
     unreadCount.value += 1
@@ -246,12 +250,12 @@ const handleMarkAllRead = async () => {
   listData.value.forEach(item => { item.is_read = true })
   try {
     await notificationApi.markAllRead()
-    // 同步更新头部 badge（重新查询后端确保一致性）
-    try {
-      const cnt = await notificationApi.unreadCount()
-      unreadCount.value = cnt.count
-    } catch { /* ignore */ }
     message.success('已全部标记已读')
+    // 重拉列表：只做乐观更新会让「只看未读」筛选下残留一堆已读行。
+    // fetchData 同时会刷新未读数，无需再单独查一次
+    try {
+      await fetchData()
+    } catch { /* 拉取失败不影响已读结果，手动刷新即可 */ }
   } catch {
     listData.value.forEach((item, i) => { item.is_read = prevRead[i] ?? false })
     unreadCount.value = prevUnread

@@ -71,16 +71,21 @@ const columns = [
   { title: '操作', key: 'action', width: 140 },
 ]
 
+// 请求序号守卫：快速翻页时先发出的慢回包不能把新页数据盖掉（表格与分页高亮错位）
+let dataReqSeq = 0
+
 const fetchData = async () => {
+  const seq = ++dataReqSeq
   loading.value = true
   try {
     const res = await fileApi.list({ page: pagination.current, size: pagination.pageSize })
+    if (seq !== dataReqSeq) return
     records.value = res.results || []
     pagination.total = res.count || 0
   } catch {
     /* 错误提示已由请求拦截器统一处理 */
   } finally {
-    loading.value = false
+    if (seq === dataReqSeq) loading.value = false
   }
 }
 
@@ -125,6 +130,10 @@ const handleDelete = async (record: FileRecord) => {
   try {
     await fileApi.remove(record.id)
     message.success('已删除')
+    // 删掉当前页最后一行时，按原页码再查会返回空列表（表格空着却显示「共 N 条」）：页码回退一页
+    if (records.value.length === 1 && pagination.current > 1) {
+      pagination.current -= 1
+    }
     await fetchData()
   } catch {
     /* 拦截器已提示 */

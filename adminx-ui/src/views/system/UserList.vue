@@ -418,6 +418,8 @@ const formState = reactive({
 // 没选角色前首页不可挑：避免先选一个越界首页、再选角色又被清掉的来回
 const canPickHomePage = computed(() => editingSuperuser.value || formState.roles.length > 0)
 
+// 新增/编辑时 Object.assign 都会换掉 roles 数组引用（watch 按引用比较，必然是新的），
+// 所以这里是首页菜单选项的唯一加载入口，handleAdd/handleEdit 里不要再显式调一次
 watch(() => formState.roles, (val) => {
   loadMenuOptions(val)
 })
@@ -474,7 +476,11 @@ const newPassword = ref('')
 const currentUser = ref<User | null>(null)
 
 // 加载数据
+// 请求序号守卫：快速翻页时先发出的慢回包不能把新页数据盖掉（表格与分页高亮错位）
+let dataReqSeq = 0
+
 const loadData = async () => {
+  const seq = ++dataReqSeq
   loading.value = true
   try {
     const res = await userApi.getUsers({
@@ -487,10 +493,11 @@ const loadData = async () => {
       last_login_after: searchForm.loginRange?.[0]?.toISOString(),
       last_login_before: searchForm.loginRange?.[1]?.toISOString(),
     })
+    if (seq !== dataReqSeq) return
     tableData.value = res.results
     pagination.total = res.count
   } finally {
-    loading.value = false
+    if (seq === dataReqSeq) loading.value = false
   }
 }
 
@@ -549,8 +556,6 @@ const handleAdd = () => {
   modalVisible.value = true
   // 清除上次的校验错误状态（红色提示），避免打开弹窗时残留
   formRef.value?.clearValidate?.()
-  // 角色未变时 watch 不会触发，这里显式加载一次首页菜单选项
-  loadMenuOptions(formState.roles)
 }
 
 // 编辑
@@ -571,8 +576,6 @@ const handleEdit = (record: User) => {
   modalVisible.value = true
   // 清除上次的校验错误状态
   formRef.value?.clearValidate?.()
-  // 角色未变时 watch 不会触发，这里显式加载一次首页菜单选项
-  loadMenuOptions(formState.roles)
 }
 
 // 删除：收进下拉后失去 popconfirm，改用 Modal 确认
@@ -586,6 +589,10 @@ const handleDelete = (record: User) => {
     onOk: async () => {
       await userApi.deleteUser(record.id)
       message.success('删除成功')
+      // 删掉当前页最后一行时，按原页码再查会返回空列表（表格空着却显示「共 N 条」）：页码回退一页
+      if (tableData.value.length === 1 && pagination.current > 1) {
+        pagination.current -= 1
+      }
       loadData()
     },
   })
@@ -637,6 +644,9 @@ const handleModalOk = async () => {
     } else {
       await userApi.createUser(formState)
       message.success('创建成功')
+      // 新用户按排序不落在当前页时表格毫无变化，用户会以为没保存成功而重复提交：
+      // 只在新增成功后回到第 1 页（编辑/删除保持原页码）
+      pagination.current = 1
     }
 
     modalVisible.value = false

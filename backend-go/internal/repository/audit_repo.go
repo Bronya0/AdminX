@@ -22,6 +22,14 @@ func (r *AuditRepo) Create(log *model.AuditLog) error {
 	return r.db.Create(log).Error
 }
 
+// CreateBatch 批量写入审计日志（分批 INSERT，避免逐条往返）。
+func (r *AuditRepo) CreateBatch(logs []*model.AuditLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	return r.db.CreateInBatches(logs, 100).Error
+}
+
 // FindByID 查询单条审计日志。
 func (r *AuditRepo) FindByID(id string) (*model.AuditLog, error) {
 	var log model.AuditLog

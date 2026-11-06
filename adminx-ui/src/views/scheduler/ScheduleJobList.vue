@@ -176,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import {
   SearchOutlined, ReloadOutlined, PlusOutlined,
   EditOutlined, DeleteOutlined, PlayCircleOutlined,
@@ -333,18 +333,58 @@ const fetchSchedulerStatus = async () => {
 }
 
 // ── 展开日志 ──
+// 每个任务一份请求序号：慢回包、以及收起后才回来的包一律丢弃，不写回 logMap
+const logReqSeq = new Map<string, number>()
+// 拉单个任务的日志写回 logMap（展开与「执行」后刷新共用同一段拉取逻辑）
+const loadLogs = async (jobId: string) => {
+  const seq = (logReqSeq.get(jobId) || 0) + 1
+  logReqSeq.set(jobId, seq)
+  // 只接受最新一次请求的回包，且该行仍处于展开状态
+  const isStale = () => seq !== logReqSeq.get(jobId) || !expandedRows.value.includes(jobId)
+  try {
+    const res = await scheduleJobApi.getLogs({ page: 1, size: 10, job_id: jobId })
+    if (isStale()) return
+    logMap.value[jobId] = res.results
+  } catch {
+    if (isStale()) return
+    logMap.value[jobId] = []
+  }
+}
+
+// run_once 是异步提交，日志由调度器稍后写库：已展开的行必须就地刷新日志表，
+// 否则用户得先收起再展开才看得到新日志。即刻拉一次，再延时补拉两次。
+// 定时器按 jobId 去重：连续点「执行」只留一条补拉链路，不会挂出 N 个定时器打 N 次 /logs
+const logRefreshTimers = new Map<string, number>()
+const clearLogRefreshTimer = (jobId: string) => {
+  const t = logRefreshTimers.get(jobId)
+  if (t !== undefined) { clearTimeout(t); logRefreshTimers.delete(jobId) }
+}
+const refreshExpandedLogs = (jobId: string, retries = 2) => {
+  if (!expandedRows.value.includes(jobId)) return
+  clearLogRefreshTimer(jobId)
+  loadLogs(jobId)
+  if (retries <= 0) return
+  const t = window.setTimeout(() => {
+    // 定时器已被新链路替换/取消就不继续
+    if (logRefreshTimers.get(jobId) !== t) return
+    logRefreshTimers.delete(jobId)
+    // 期间用户收起了该行就不再写回缓存
+    if (expandedRows.value.includes(jobId)) refreshExpandedLogs(jobId, retries - 1)
+  }, 2000)
+  logRefreshTimers.set(jobId, t)
+}
+
 const handleExpand = async (expanded: boolean, record: ScheduleJob) => {
   // expandedRows 是受控展开键：必须与视图同步维护，否则展开态与视图错位
   // （展开不 push 会闪开又收起，收起不移除会留下打不开的幽灵 key）
   if (expanded) {
     if (!expandedRows.value.includes(record.id)) expandedRows.value.push(record.id)
-    try {
-      const res = await scheduleJobApi.getLogs({ page: 1, size: 10, job_id: record.id })
-      logMap.value[record.id] = res.results
-    } catch { logMap.value[record.id] = [] }
+    await loadLogs(record.id)
   } else {
     expandedRows.value = expandedRows.value.filter((id) => id !== record.id)
-    // 收起时清理缓存，避免下次展开瞬间渲染旧数据造成闪烁
+    // 收起时清理缓存并作废在途请求（序号+1），避免下次展开瞬间渲染旧数据造成闪烁
+    clearLogRefreshTimer(record.id)
+    logReqSeq.set(record.id, (logReqSeq.get(record.id) || 0) + 1)
     delete logMap.value[record.id]
   }
 }
@@ -429,6 +469,10 @@ const handleDelete = async (job: ScheduleJob) => {
   try {
     await scheduleJobApi.remove(job.id)
     message.success('已删除')
+    // 删掉当前页最后一行时，按原页码再查会返回空列表（表格空着却显示「共 N 条」）：页码回退一页
+    if (tableData.value.length === 1 && pagination.value.current > 1) {
+      pagination.value.current -= 1
+    }
     fetchData()
   } catch { /* interceptor handles error */ }
 }
@@ -436,11 +480,14 @@ const handleDelete = async (job: ScheduleJob) => {
 const handleRunOnce = async (job: ScheduleJob) => {
   runLoadingMap[job.id] = true
   try {
-    const res = await scheduleJobApi.runOnce(job.id)
-    const result = (res?.result || '').substring(0, 100)
-    message.success(`执行完成: ${result || '无输出'}`)
+    // run_once 是异步提交，响应里只有 { log_id }，没有 result：
+    // 提示「执行完成: 无输出」会让人以为任务已跑完，实际可能还在跑或稍后失败
+    await scheduleJobApi.runOnce(job.id)
+    message.success('已提交执行，可在日志中查看结果')
     await fetchData()
     await fetchSchedulerStatus()
+    // 该行若处于展开状态，日志表也要跟着刷新（不额外触发全表 fetchData）
+    refreshExpandedLogs(job.id)
   } catch {
     await fetchData()
   } finally {
@@ -495,6 +542,11 @@ const formatDuration = (start: string, end: string) => {
 }
 
 onMounted(() => { fetchData(); fetchSchedulerStatus() })
+
+onUnmounted(() => {
+  logRefreshTimers.forEach((t) => clearTimeout(t))
+  logRefreshTimers.clear()
+})
 </script>
 
 <style scoped>

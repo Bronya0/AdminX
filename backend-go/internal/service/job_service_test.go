@@ -2,10 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
 
+	apperr "adminx/pkg/errors"
+
+	"adminx/internal/model"
 	"adminx/internal/repository"
 )
 
@@ -290,5 +294,84 @@ func TestJobService_ListLogs(t *testing.T) {
 	}
 	if logs == nil {
 		t.Error("logs 不应为 nil")
+	}
+}
+
+// 同一任务已有 running 日志时手动执行必须返回 409：手动路径没有调度器的任务级锁，
+// 两份并发执行会互相踩数据（脚本刷 run_once 就能触发）。
+func TestJobService_RunOnce_RejectsWhenRunning(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewJobService(db, repository.NewJobRepo(db), slog.Default())
+
+	job, _ := svc.Create(JobCreateInput{
+		Name:          "busy-job",
+		Handler:       "jobs.SampleTask",
+		TriggerType:   "interval",
+		TriggerConfig: `{"minutes":5}`,
+	})
+	now := time.Now()
+	if err := svc.repo.CreateLog(&model.JobLog{JobID: job.ID, Status: "running", StartedAt: &now}); err != nil {
+		t.Fatalf("写 running 日志失败: %v", err)
+	}
+
+	_, err := svc.RunOnce(context.Background(), job.ID)
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) || appErr.Code != 409 {
+		t.Fatalf("已有 running 日志应返回 409，实际 err=%v", err)
+	}
+}
+
+// 陈旧 running 日志（进程被 KILL 留下的）不能永久挡住手动执行。
+func TestJobService_RunOnce_StaleRunningLogIgnored(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewJobService(db, repository.NewJobRepo(db), slog.Default())
+
+	job, _ := svc.Create(JobCreateInput{
+		Name:          "stale-job",
+		Handler:       "jobs.SampleTask",
+		TriggerType:   "interval",
+		TriggerConfig: `{"minutes":5}`,
+	})
+	old := time.Now().Add(-2 * time.Hour)
+	if err := svc.repo.CreateLog(&model.JobLog{JobID: job.ID, Status: "running", StartedAt: &old}); err != nil {
+		t.Fatalf("写 running 日志失败: %v", err)
+	}
+
+	logID, err := svc.RunOnce(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("陈旧 running 日志不应挡住手动执行: %v", err)
+	}
+	if logID == "" {
+		t.Fatal("应返回 logID")
+	}
+	if !waitLogStatus(t, svc, job.ID, "success", 5*time.Second) {
+		t.Fatal("手动执行应成功落库")
+	}
+}
+
+// 并发名额耗尽时立即返回 429，不静默丢弃、也不无限堆 goroutine。
+func TestJobService_RunOnce_ConcurrencyLimit(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewJobService(db, repository.NewJobRepo(db), slog.Default())
+
+	job, _ := svc.Create(JobCreateInput{
+		Name:          "limited-job",
+		Handler:       "jobs.SampleTask",
+		TriggerType:   "interval",
+		TriggerConfig: `{"minutes":5}`,
+	})
+	for i := 0; i < maxConcurrentRuns; i++ {
+		svc.runSem <- struct{}{}
+	}
+	defer func() {
+		for i := 0; i < maxConcurrentRuns; i++ {
+			<-svc.runSem
+		}
+	}()
+
+	_, err := svc.RunOnce(context.Background(), job.ID)
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) || appErr.Code != 429 {
+		t.Fatalf("名额已满应返回 429，实际 err=%v", err)
 	}
 }

@@ -60,6 +60,10 @@ type CreateInput struct {
 // Create 创建用户（含密码哈希 + 角色关联）。
 // 建用户与绑角色包在同一事务内：AssignRoles 失败时整体回滚，避免留下无角色的半份用户。
 func (s *UserService) Create(in CreateInput) (*model.User, error) {
+	// 角色数量硬上限：roles 会被拆成 ids/names 直接进 Where ... IN ?（见 checkRoleRefs）
+	if err := checkRoleRefs(in.Roles); err != nil {
+		return nil, err
+	}
 	// 检查用户名唯一（含软删除账号：username 唯一索引不区分软删除，
 	// 只查未删除记录会在 INSERT 时撞索引、接口报 500）
 	if _, err := s.userRepo.FindAnyByUsername(in.Username); err == nil {
@@ -143,6 +147,9 @@ type UpdateInput struct {
 
 // Update 更新用户。
 func (s *UserService) Update(id string, in UpdateInput) (*model.User, error) {
+	if err := checkRoleRefs(in.Roles); err != nil {
+		return nil, err
+	}
 	user, err := s.userRepo.FindByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -238,6 +245,10 @@ const superAdminRoleName = "super_admin"
 //   - 请求的角色列表包含 super_admin：拒绝；
 //   - 目标用户当前持有 super_admin（任何角色变更都可能撤掉它）：拒绝。
 func (s *UserService) CheckRoleAssignment(roleRefs []string, targetUserID string, callerIsSuperuser bool) error {
+	// 长度校验必须在超管放行之前：超管请求同样会把 roles 扔进 Where ... IN ?（见 checkRoleRefs）
+	if err := checkRoleRefs(roleRefs); err != nil {
+		return err
+	}
 	if callerIsSuperuser {
 		return nil
 	}

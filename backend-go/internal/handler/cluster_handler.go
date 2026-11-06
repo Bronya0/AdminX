@@ -113,7 +113,7 @@ func (h *ClusterHandler) DeleteNode(c *gin.Context) {
 
 func (h *ClusterHandler) ListComponents(c *gin.Context) {
 	p := pagination.Parse(c)
-	items, count, err := h.svc.ListComponents(p.Offset(), p.Size)
+	items, count, err := h.svc.ListComponents(p.Offset(), p.Size, c.Query("search"))
 	if err != nil {
 		response.Error(c, h.logger, err)
 		return
